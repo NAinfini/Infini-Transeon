@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: infini-transeon-windows-x64.zip
+            platform: windows
+          - os: macos-latest
+            artifact: infini-transeon-macos-universal.zip
+            platform: macos
+          - os: ubuntu-latest
+            artifact: infini-transeon-linux-x64.tar.gz
+            platform: linux
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install Linux system deps
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 libxkbcommon0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 \
+            libxcb-xkb1 libdbus-1-3 libopengl0 libglib2.0-0
+
+      - name: Install project
+        run: |
+          uv sync --extra packaging
+          uv pip install -e .
+
+      - name: Run PyInstaller
+        run: uv run pyinstaller --noconfirm --clean --windowed --name Infini-Transeon src/infini_transeon/__main__.py
+
+      - name: Package Windows
+        if: matrix.platform == 'windows'
+        run: |
+          Compress-Archive -Path dist/Infini-Transeon/* -DestinationPath ${{ matrix.artifact }}
+
+      - name: Package macOS
+        if: matrix.platform == 'macos'
+        run: |
+          cd dist && zip -r ../${{ matrix.artifact }} Infini-Transeon.app
+
+      - name: Package Linux
+        if: matrix.platform == 'linux'
+        run: |
+          cd dist && tar -czf ../${{ matrix.artifact }} Infini-Transeon
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**/*
+          generate_release_notes: true
+
+  publish-updates:
+    needs: build
+    if: ${{ !contains(github.ref, '-rc') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install tufup
+        run: uv pip install --system tufup
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Sign and publish with tufup
+        env:
+          TUFUP_KEYS: ${{ secrets.TUFUP_KEYS }}
+        run: |
+          echo "Tufup publish step placeholder. Populate once signing keys are provisioned."
+          # Example (enable when TUFUP_KEYS secret is available):
+          # tufup targets add-bundle --version "${GITHUB_REF_NAME#v}" release-assets
+          # tufup publish

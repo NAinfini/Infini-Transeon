@@ -1,0 +1,187 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "infini-transeon"
+version = "0.1.0"
+description = "Cross-platform screen-translation overlay (OCR + LLM / local NMT) for Windows, macOS, Linux."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "NAinfini" }]
+requires-python = ">=3.12"
+keywords = ["ocr", "translation", "overlay", "screen-translator", "llm"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: X11 Applications :: Qt",
+  "Environment :: MacOS X",
+  "Environment :: Win32 (MS Windows)",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Text Processing :: Linguistic",
+]
+
+dependencies = [
+  # UI
+  "pyside6>=6.8",
+  # Capture / imaging
+  "mss>=10",
+  "pillow>=11",
+  "numpy>=2",
+  "imagehash>=4.3",
+  # Config / infra
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "loguru>=0.7",
+  "platformdirs>=4",
+  "keyring>=25",
+  "pyyaml>=6",
+  # OCR
+  # RapidOCR 3.x is the OCR engine: PP-OCRv5 server weights as ONNX via
+  # onnxruntime. No PaddlePaddle dependency, no MKLDNN / PIR crash path.
+  # First run downloads ~200 MB of PP-OCRv5 weights into the rapidocr cache.
+  "rapidocr>=3.0",
+  "symspellpy>=6.7",
+  # Online translation providers
+  "openai>=1.50",
+  "anthropic>=0.40",
+  "google-genai>=1.0",
+  "deep-translator>=1.11",
+  # Local translation (MADLAD-400 via CTranslate2, pre-converted int8/int8_float16)
+  "ctranslate2>=4.5",
+  "sentencepiece>=0.2",
+  "huggingface-hub>=0.26",
+  # Translation memory and HTTP
+  "diskcache>=5.6",
+  "httpx>=0.28",
+  "tenacity>=9",
+  # Auto-update
+  "tufup>=0.9",
+  # Global hotkeys
+  "pynput>=1.7",
+  # Platform-specific
+  "pywin32>=306 ; sys_platform == 'win32'",
+  "pyobjc-framework-Quartz>=10 ; sys_platform == 'darwin'",
+  "pyobjc-framework-ApplicationServices>=10 ; sys_platform == 'darwin'",
+  "python-xlib>=0.33 ; sys_platform == 'linux'",
+]
+
+[project.optional-dependencies]
+gpu-cuda = [
+  # CTranslate2's CUDA build needs cuBLAS/cuDNN DLLs at runtime. Shipping
+  # the NVIDIA redistributable wheels avoids forcing every user to install
+  # a full CUDA toolkit — the DLLs land in site-packages and CT2 finds
+  # them via the standard DLL search path on Windows and LD_LIBRARY_PATH
+  # setup on Linux.
+  "ctranslate2[cuda]",
+  "nvidia-cublas-cu12",
+  "nvidia-cudnn-cu12",
+  # GPU-enabled ONNX Runtime for RapidOCR det/rec. Without this extra,
+  # onnxruntime resolves to the CPU-only wheel and PP-OCRv5 server rec
+  # dominates every tick (~3-4s/frame on CPU).
+  "onnxruntime-gpu>=1.20",
+]
+dev = [
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "pytest>=8",
+  "pytest-qt>=4.4",
+  "pytest-cov>=5",
+  "respx>=0.22",
+  "types-pyyaml",
+]
+packaging = ["pyinstaller>=6.11"]
+
+[project.scripts]
+infini-transeon = "infini_transeon.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/NAinfini/Infini-Transeon"
+Repository = "https://github.com/NAinfini/Infini-Transeon"
+Issues = "https://github.com/NAinfini/Infini-Transeon/issues"
+
+# ---- platform-specific deps ----
+
+[tool.uv]
+dev-dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/infini_transeon"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/infini_transeon", "README.md", "LICENSE", "docs/ARCHITECTURE.md"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+# Platform markers handled via environment_markers in dependencies when needed.
+# Listed separately here for clarity:
+#   pywin32            ; sys_platform == "win32"
+#   pyobjc-framework-Quartz ; sys_platform == "darwin"
+#   python-xlib        ; sys_platform == "linux"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "C4", "SIM", "PL", "RUF"]
+ignore = ["E501", "PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+mypy_path = "src"
+packages = ["infini_transeon"]
+plugins = ["pydantic.mypy"]
+exclude = ["build/", "dist/"]
+
+[[tool.mypy.overrides]]
+module = [
+  "mss.*",
+  "rapidocr.*",
+  "ctranslate2.*",
+  "sentencepiece.*",
+  "imagehash.*",
+  "symspellpy.*",
+  "deep_translator.*",
+  "pynput.*",
+  "tufup.*",
+  "xlib.*",
+  "Quartz.*",
+  "win32gui",
+  "win32con",
+  "win32api",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["infini_transeon"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+  "\\.\\.\\.",
+]

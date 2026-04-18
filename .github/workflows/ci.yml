@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-type-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12"]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install Linux system deps for Qt
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 libxkbcommon0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 \
+            libxcb-xkb1 libdbus-1-3 libopengl0 libglib2.0-0 xvfb
+
+      - name: Install deps (no heavy extras)
+        run: uv sync --no-dev --extra dev --no-install-project
+        env:
+          UV_CONCURRENT_DOWNLOADS: "8"
+
+      - name: Install project
+        run: uv pip install -e .
+
+      - name: Ruff
+        run: uv run ruff check src tests
+
+      - name: Mypy
+        run: uv run mypy src
+
+      - name: Pytest (Linux under xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a uv run pytest -q
+
+      - name: Pytest
+        if: runner.os != 'Linux'
+        run: uv run pytest -q
