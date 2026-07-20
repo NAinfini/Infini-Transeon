@@ -22,6 +22,11 @@ constexpr std::size_t wire_header_bytes = 56U;
 constexpr std::size_t handshake_request_payload_bytes = 40U;
 constexpr std::size_t handshake_response_payload_bytes = 4U;
 constexpr std::size_t maximum_bootstrap_bytes = 512U;
+constexpr std::uint32_t maximum_message_bytes = 8'388'608U;
+constexpr std::uint32_t control_request_kind = 2U;
+constexpr std::uint32_t control_response_kind = 3U;
+constexpr std::uint32_t shutdown_request_kind = 17U;
+constexpr std::uint32_t shutdown_acknowledgement_kind = 18U;
 constexpr std::uint64_t filetime_to_datetime_ticks = 504'911'232'000'000'000ULL;
 
 struct HandleCloser final
@@ -56,6 +61,16 @@ std::uint32_t read_u32(const std::span<const std::byte> bytes, const std::size_t
     for (std::size_t index = 0; index < sizeof(value); ++index)
     {
         value |= std::to_integer<std::uint32_t>(bytes[offset + index]) << (index * 8U);
+    }
+    return value;
+}
+
+std::uint64_t read_u64(const std::span<const std::byte> bytes, const std::size_t offset) noexcept
+{
+    std::uint64_t value{};
+    for (std::size_t index = 0; index < sizeof(value); ++index)
+    {
+        value |= std::to_integer<std::uint64_t>(bytes[offset + index]) << (index * 8U);
     }
     return value;
 }
@@ -245,6 +260,78 @@ bool authenticate_and_respond(HANDLE pipe, BootstrapConfig& config) noexcept
     write_u32(response, 60U, GetCurrentProcessId());
     return write_exact(pipe, response) && FlushFileBuffers(pipe) != FALSE;
 }
+
+bool write_empty_response(
+    HANDLE pipe,
+    const std::span<const std::byte> request,
+    const std::uint32_t response_kind) noexcept
+{
+    std::array<std::byte, sizeof(std::uint32_t) + wire_header_bytes> response{};
+    write_u32(response, 0U, wire_header_bytes);
+    write_u32(response, 4U, wire_magic);
+    write_u32(response, 8U, protocol_version);
+    write_u32(response, 12U, response_kind);
+    std::ranges::copy(request.subspan(12U, 40U), response.begin() + 16U);
+    write_u32(response, 56U, 0U);
+    return write_exact(pipe, response) && FlushFileBuffers(pipe) != FALSE;
+}
+
+ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noexcept
+{
+    while (true)
+    {
+        std::array<std::byte, sizeof(std::uint32_t)> prefix{};
+        if (!read_exact(pipe, prefix))
+        {
+            return ServerExitCode::success;
+        }
+        const std::uint32_t body_length = read_u32(prefix, 0U);
+        if (body_length < wire_header_bytes || body_length > maximum_message_bytes)
+        {
+            return ServerExitCode::protocol_failed;
+        }
+
+        std::vector<std::byte> body(body_length);
+        if (!read_exact(pipe, body))
+        {
+            SecureZeroMemory(body.data(), body.size());
+            return ServerExitCode::protocol_failed;
+        }
+        const auto body_span = std::span<const std::byte>(body);
+        const std::uint32_t payload_length = read_u32(body_span, 52U);
+        const std::uint32_t request_kind = read_u32(body_span, 8U);
+        const bool valid_header = read_u32(body_span, 0U) == wire_magic &&
+            read_u32(body_span, 4U) == protocol_version &&
+            std::ranges::any_of(body_span.subspan(12U, 16U), [](const std::byte value)
+            {
+                return value != std::byte{};
+            }) &&
+            std::ranges::equal(body_span.subspan(28U, 16U), config.runtime_epoch) &&
+            read_u64(body_span, 44U) > utc_ticks() &&
+            payload_length == body_length - wire_header_bytes;
+        const bool supported = (request_kind == control_request_kind ||
+            request_kind == shutdown_request_kind) && payload_length == 0U;
+        if (!valid_header || !supported)
+        {
+            SecureZeroMemory(body.data(), body.size());
+            return ServerExitCode::protocol_failed;
+        }
+
+        const std::uint32_t response_kind = request_kind == control_request_kind
+            ? control_response_kind
+            : shutdown_acknowledgement_kind;
+        const bool sent = write_empty_response(pipe, body_span, response_kind);
+        SecureZeroMemory(body.data(), body.size());
+        if (!sent)
+        {
+            return ServerExitCode::protocol_failed;
+        }
+        if (request_kind == shutdown_request_kind)
+        {
+            return ServerExitCode::success;
+        }
+    }
+}
 }
 
 ServerExitCode run_server(HANDLE bootstrap_read_handle) noexcept
@@ -282,12 +369,8 @@ ServerExitCode run_server(HANDLE bootstrap_read_handle) noexcept
         return ServerExitCode::authentication_failed;
     }
 
-    std::byte ignored{};
-    DWORD transferred{};
-    while (ReadFile(pipe.get(), &ignored, 1U, &transferred, nullptr) && transferred != 0U)
-    {
-    }
+    const ServerExitCode message_result = process_messages(pipe.get(), config);
     DisconnectNamedPipe(pipe.get());
-    return ServerExitCode::success;
+    return message_result;
 }
 }

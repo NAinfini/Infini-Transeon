@@ -160,6 +160,35 @@ public sealed class RuntimeProtocolTests
         Assert.Equal("current-logon-user", pipe.GetProperty("acl").GetString());
     }
 
+    [Fact]
+    public void JsonProtocolPinsPostHandshakeFlowControlAndShutdown()
+    {
+        string root = FindRepositoryRoot();
+        string protocolPath = Path.Combine(
+            root,
+            "src",
+            "InfiniTranseon.EngineHost",
+            "ipc",
+            "runtime-protocol.json");
+        using JsonDocument protocol = JsonDocument.Parse(File.ReadAllText(protocolPath));
+        JsonElement postHandshake = protocol.RootElement.GetProperty("postHandshake");
+        JsonElement backpressure = protocol.RootElement.GetProperty("backpressure");
+
+        Assert.Equal("ControlRequest", postHandshake.GetProperty("heartbeatRequest").GetString());
+        Assert.Equal("ControlResponse", postHandshake.GetProperty("heartbeatResponse").GetString());
+        Assert.Equal("ShutdownRequest", postHandshake.GetProperty("shutdownRequest").GetString());
+        Assert.Equal("ShutdownAcknowledgement",
+            postHandshake.GetProperty("shutdownResponse").GetString());
+        Assert.Equal(RuntimeProtocol.MaxInFlightBytes,
+            backpressure.GetProperty("sharedMaxBytes").GetInt64());
+        Assert.Equal(
+            ["CloudOcrCropRequest", "Thumbnail"],
+            backpressure.GetProperty("dataLaneKinds").EnumerateArray()
+                .Select(item => item.GetString()).OfType<string>().ToArray());
+        Assert.Equal("caller-configured-finite-window",
+            protocol.RootElement.GetProperty("restartPolicy").GetString());
+    }
+
     private static RuntimeEnvelopeHeader ValidHeader() => new(
         RuntimeProtocol.CurrentVersion,
         RuntimeMessageKind.HandshakeRequest,

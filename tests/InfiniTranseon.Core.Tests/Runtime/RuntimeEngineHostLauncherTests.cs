@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Runtime;
 
 namespace InfiniTranseon.Core.Tests.Runtime;
@@ -25,6 +27,68 @@ public sealed class RuntimeEngineHostLauncherTests
         }
 
         Assert.True(await WaitForExitAsync(processId, TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task ExchangesControlHeartbeatWithoutChangingTheRuntimeEpoch()
+    {
+        await using RuntimeEngineHostSession session =
+            await RuntimeEngineHostLauncher.LaunchAsync(
+                FindEngineHostExecutable(),
+                TimeSpan.FromSeconds(10),
+                TestContext.Current.CancellationToken);
+
+        Guid epoch = session.RuntimeEpoch;
+        await session.PingAsync(
+            TimeSpan.FromSeconds(2),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(epoch, session.RuntimeEpoch);
+        Assert.False(session.HasExited);
+    }
+
+    [Fact]
+    public async Task ShutdownWaitsForAcknowledgementAndEngineHostExit()
+    {
+        await using RuntimeEngineHostSession session =
+            await RuntimeEngineHostLauncher.LaunchAsync(
+                FindEngineHostExecutable(),
+                TimeSpan.FromSeconds(10),
+                TestContext.Current.CancellationToken);
+
+        await session.ShutdownAsync(
+            TimeSpan.FromSeconds(2),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(await WaitForExitAsync(session.ProcessId, TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task UnsupportedPostHandshakeMessageTerminatesWithProtocolFailure()
+    {
+        RuntimeEngineHostSession session = await RuntimeEngineHostLauncher.LaunchAsync(
+            FindEngineHostExecutable(),
+            TimeSpan.FromSeconds(10),
+            TestContext.Current.CancellationToken);
+        using Process process = Process.GetProcessById(session.ProcessId);
+        using var unsupported = new RuntimeFrame(
+            new RuntimeEnvelopeHeader(
+                RuntimeProtocol.CurrentVersion,
+                RuntimeMessageKind.TargetSnapshot,
+                Guid.NewGuid(),
+                session.RuntimeEpoch,
+                0,
+                DateTimeOffset.UtcNow.AddSeconds(2)),
+            []);
+
+        await RuntimeFrameCodec.WriteAsync(
+            session.Connection.Stream,
+            unsupported,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(process.WaitForExit(5_000));
+        Assert.Equal(68, session.ExitCode);
+        await session.DisposeAsync();
     }
 
     private static string FindEngineHostExecutable()

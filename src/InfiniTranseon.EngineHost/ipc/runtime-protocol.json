@@ -38,6 +38,27 @@
       "oneTimeNonce"
     ]
   },
+  "postHandshake": {
+    "ownership": "one serialized request-response owner per connection",
+    "heartbeatRequest": "ControlRequest",
+    "heartbeatResponse": "ControlResponse",
+    "shutdownRequest": "ShutdownRequest",
+    "shutdownResponse": "ShutdownAcknowledgement",
+    "unsupportedMessageBehavior": "explicit protocol failure and connection termination"
+  },
+  "backpressure": {
+    "controlMaxItems": 64,
+    "dataMaxItems": 8,
+    "controlMaxBytes": 1048576,
+    "dataMaxBytes": 33554432,
+    "sharedMaxBytes": 33554432,
+    "dataLaneKinds": [
+      "CloudOcrCropRequest",
+      "Thumbnail"
+    ],
+    "rejection": "immediate explicit failure without waiting or silent dropping"
+  },
+  "restartPolicy": "caller-configured-finite-window",
   "wireEnvelope": {
     "lengthPrefixBytes": 4,
     "headerBytes": 56,

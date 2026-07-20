@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using InfiniTranseon.Contracts.Runtime;
 using Microsoft.Win32.SafeHandles;
 
 namespace InfiniTranseon.Core.Runtime;
@@ -11,6 +12,10 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
 {
     private readonly SafeProcessHandle _processHandle;
     private readonly SafeFileHandle _jobHandle;
+    private readonly SemaphoreSlim _requestGate = new(1, 1);
+    private readonly RuntimeIpcAdmission _admission = new(RuntimeIpcBackpressureOptions.Default);
+    private int _shutdownRequested;
+    private int _disposeStarted;
     private int _disposed;
 
     internal RuntimeEngineHostSession(
@@ -35,6 +40,11 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
 
     public bool HasExited
     {
+        get => ExitCode.HasValue;
+    }
+
+    public int? ExitCode
+    {
         get
         {
             if (!RuntimeProcessNative.GetExitCodeProcess(_processHandle, out uint exitCode))
@@ -42,7 +52,9 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             }
 
-            return exitCode != RuntimeProcessNative.StillActive;
+            return exitCode == RuntimeProcessNative.StillActive
+                ? null
+                : unchecked((int)exitCode);
         }
     }
 
@@ -58,24 +70,138 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
         }
     }
 
+    public ValueTask PingAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
+        RoundTripAsync(
+            RuntimeMessageKind.ControlRequest,
+            RuntimeMessageKind.ControlResponse,
+            timeout,
+            cancellationToken);
+
+    public async ValueTask ShutdownAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        if (Interlocked.Exchange(ref _shutdownRequested, 1) != 0)
+        {
+            return;
+        }
+
+        await RoundTripAsync(
+            RuntimeMessageKind.ShutdownRequest,
+            RuntimeMessageKind.ShutdownAcknowledgement,
+            timeout,
+            cancellationToken,
+            allowAfterShutdownRequested: true).ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
         {
             return;
         }
 
         try
         {
-            await Connection.DisposeAsync().ConfigureAwait(false);
+            if (!HasExited && Volatile.Read(ref _shutdownRequested) == 0)
+            {
+                await ShutdownAsync(TimeSpan.FromSeconds(2), CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
         }
         finally
         {
-            _jobHandle.Dispose();
-            _ = RuntimeProcessNative.WaitForSingleObject(_processHandle, 5_000U);
-            _processHandle.Dispose();
+            try
+            {
+                await Connection.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _jobHandle.Dispose();
+                _ = RuntimeProcessNative.WaitForSingleObject(_processHandle, 5_000U);
+                _processHandle.Dispose();
+                _requestGate.Dispose();
+                Volatile.Write(ref _disposed, 1);
+            }
         }
     }
+
+    private async ValueTask RoundTripAsync(
+        RuntimeMessageKind requestKind,
+        RuntimeMessageKind responseKind,
+        TimeSpan timeout,
+        CancellationToken cancellationToken,
+        bool allowAfterShutdownRequested = false)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        ObjectDisposedException.ThrowIf(
+            !allowAfterShutdownRequested && Volatile.Read(ref _disposeStarted) != 0,
+            this);
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        }
+        if (!allowAfterShutdownRequested && Volatile.Read(ref _shutdownRequested) != 0)
+        {
+            throw new InvalidOperationException("EngineHost shutdown has already been requested.");
+        }
+
+        int frameBytes = RuntimeProtocol.WireHeaderBytes;
+        RuntimeMessageLane lane = RuntimeMessageLaneClassifier.Classify(requestKind);
+        if (!_admission.TryAcquire(lane, frameBytes, out RuntimeIpcLease? admissionLease))
+        {
+            throw new RuntimeIpcBackpressureException(lane);
+        }
+
+        using (admissionLease)
+        using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            timeoutSource.CancelAfter(timeout);
+            await _requestGate.WaitAsync(timeoutSource.Token).ConfigureAwait(false);
+            try
+            {
+                DateTimeOffset deadline = DateTimeOffset.UtcNow.Add(timeout);
+                using RuntimeFrame request = RuntimeFrame.TakeOwnership(
+                    new RuntimeEnvelopeHeader(
+                        RuntimeProtocol.CurrentVersion,
+                        requestKind,
+                        Guid.NewGuid(),
+                        RuntimeEpoch,
+                        0,
+                        deadline),
+                    []);
+                await RuntimeFrameCodec.WriteAsync(
+                    Connection.Stream,
+                    request,
+                    timeoutSource.Token).ConfigureAwait(false);
+                using RuntimeFrame response = await RuntimeFrameCodec.ReadAsync(
+                    Connection.Stream,
+                    DateTimeOffset.UtcNow,
+                    timeoutSource.Token).ConfigureAwait(false);
+                bool valid = response.Header.MessageKind == responseKind &&
+                    response.Header.RequestId == request.Header.RequestId &&
+                    response.Header.RuntimeEpoch == RuntimeEpoch &&
+                    response.Payload.IsEmpty;
+                if (!valid)
+                {
+                    throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+                }
+            }
+            finally
+            {
+                _requestGate.Release();
+            }
+        }
+    }
+}
+
+public sealed class RuntimeIpcBackpressureException : Exception
+{
+    public RuntimeIpcBackpressureException(RuntimeMessageLane lane)
+        : base($"Runtime IPC {lane} lane has reached its configured limit.")
+    {
+        Lane = lane;
+    }
+
+    public RuntimeMessageLane Lane { get; }
 }
 
 public static class RuntimeEngineHostLauncher
