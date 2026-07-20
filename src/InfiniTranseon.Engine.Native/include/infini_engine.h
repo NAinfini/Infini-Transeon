@@ -31,6 +31,57 @@ typedef enum IT_Result
     IT_RESULT_INTERNAL_ERROR = 5
 } IT_Result;
 
+typedef struct IT_Guid
+{
+    uint8_t bytes[16];
+} IT_Guid;
+
+typedef enum IT_RuntimeMessageKind
+{
+    IT_RUNTIME_MESSAGE_HANDSHAKE_REQUEST = 0,
+    IT_RUNTIME_MESSAGE_HANDSHAKE_RESPONSE = 1,
+    IT_RUNTIME_MESSAGE_CONTROL_REQUEST = 2,
+    IT_RUNTIME_MESSAGE_CONTROL_RESPONSE = 3,
+    IT_RUNTIME_MESSAGE_TARGET_SNAPSHOT = 4,
+    IT_RUNTIME_MESSAGE_TARGET_LIFECYCLE = 5,
+    IT_RUNTIME_MESSAGE_OCR_RESULT = 6,
+    IT_RUNTIME_MESSAGE_CLOUD_OCR_CROP_REQUEST = 7,
+    IT_RUNTIME_MESSAGE_TRANSLATION_OUTPUT = 8,
+    IT_RUNTIME_MESSAGE_TRANSLATION_STREAM_SNAPSHOT = 9,
+    IT_RUNTIME_MESSAGE_OVERLAY_DESIRED_STATE = 10,
+    IT_RUNTIME_MESSAGE_POLICY_REVISION = 11,
+    IT_RUNTIME_MESSAGE_POLICY_ACKNOWLEDGEMENT = 12,
+    IT_RUNTIME_MESSAGE_DEGRADATION_SNAPSHOT = 13,
+    IT_RUNTIME_MESSAGE_DIAGNOSTIC_EVENT = 14,
+    IT_RUNTIME_MESSAGE_THUMBNAIL = 15,
+    IT_RUNTIME_MESSAGE_RECONNECT_SNAPSHOT = 16,
+    IT_RUNTIME_MESSAGE_SHUTDOWN_REQUEST = 17,
+    IT_RUNTIME_MESSAGE_SHUTDOWN_ACKNOWLEDGEMENT = 18
+} IT_RuntimeMessageKind;
+
+typedef struct IT_ByteViewV1
+{
+    const uint8_t* data;
+    uint64_t byte_count;
+} IT_ByteViewV1;
+
+typedef struct IT_RuntimeEnvelopeV1
+{
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t protocol_version;
+    IT_RuntimeMessageKind message_kind;
+    IT_Guid request_id;
+    IT_Guid runtime_epoch;
+    uint64_t deadline_utc_ticks;
+    IT_ByteViewV1 payload;
+} IT_RuntimeEnvelopeV1;
+
+/* The payload is borrowed and valid only for the duration of the callback. */
+typedef void (IT_CALL* IT_RuntimeMessageCallback)(
+    const IT_RuntimeEnvelopeV1* envelope,
+    void* user_context);
+
 typedef void* (IT_CALL* IT_AllocateFn)(size_t byte_count, void* user_context);
 typedef void (IT_CALL* IT_FreeFn)(void* allocation, void* user_context);
 

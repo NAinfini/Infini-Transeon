@@ -2,4 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures\probe-golden-fixtures.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

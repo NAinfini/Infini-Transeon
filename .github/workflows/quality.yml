@@ -1,0 +1,38 @@
+name: quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-supply-chain:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore tools and dependencies
+        run: |
+          dotnet tool restore
+          dotnet restore InfiniTranseon.sln
+      - name: Managed tests
+        run: dotnet test tests/InfiniTranseon.Core.Tests/InfiniTranseon.Core.Tests.csproj -c Release --no-restore
+      - name: Native tests
+        shell: pwsh
+        run: |
+          cmake --preset windows-x64
+          cmake --build --preset windows-x64-release
+          ctest --test-dir artifacts/cmake/windows-x64 -C Release --output-on-failure
+      - name: Generate CycloneDX SBOM
+        run: dotnet tool run dotnet-CycloneDX InfiniTranseon.sln -o artifacts/sbom -fn bom.json -F Json -dpr
+      - name: Reject unknown or incompatible licenses
+        shell: pwsh
+        run: ./scripts/verify-sbom-licenses.ps1 -BomPath artifacts/sbom/bom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infini-transeon-sbom
+          path: artifacts/sbom/bom.json

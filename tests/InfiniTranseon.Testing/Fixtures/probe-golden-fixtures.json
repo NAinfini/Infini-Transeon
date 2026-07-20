@@ -1,0 +1,26 @@
+{
+  "capture": {
+    "targetId": "11111111-1111-1111-1111-111111111111",
+    "displayName": "Fixture Game",
+    "kind": "Window",
+    "pixelWidth": 1920,
+    "pixelHeight": 1080,
+    "dpi": 144,
+    "capturable": true
+  },
+  "ocr": {
+    "regionId": "22222222-2222-2222-2222-222222222222",
+    "text": "Hello",
+    "latencyMs": 12
+  },
+  "translation": {
+    "providerId": "fixture",
+    "text": "你好",
+    "latencyMs": 20
+  },
+  "overlay": {
+    "pixelWidth": 2,
+    "pixelHeight": 2,
+    "rgbaBase64": "/////wAAAP8A/wD/AP8A/w=="
+  }
+}

@@ -38,6 +38,26 @@
       "oneTimeNonce"
     ]
   },
+  "handshakeResponse": {
+    "payloadBytes": 172,
+    "fields": [
+      "authenticatedServerProcessId",
+      "RuntimeCapabilitiesV1"
+    ],
+    "capabilities": "RuntimeCapabilitiesV1",
+    "capabilitiesValidation": "protocol version and every fixed v1 safety ceiling must match before admission"
+  },
+  "flowContracts": {
+    "ownership": "sender-owns-until-write-completes; receiver-copies-or-takes-explicit-lease",
+    "allocation": "validate length and shared budget before allocation; binary buffers are receiver-freed after processing",
+    "callbackThreads": "dedicated-serialized-owner-per-lane",
+    "cancellation": "execution-token-and-request-id",
+    "backpressure": "bounded-control-and-data-lanes-with-explicit-rejection",
+    "ordering": "runtime epoch then source/channel/stage token then strictly increasing cumulative sequence",
+    "streaming": "complete-cumulative-snapshot",
+    "policyAcknowledgement": "strictly-increasing-sent-revisions-only",
+    "reconnect": "full-state-no-text-replay"
+  },
   "postHandshake": {
     "ownership": "one serialized request-response owner per connection",
     "heartbeatRequest": "ControlRequest",

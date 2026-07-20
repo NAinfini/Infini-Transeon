@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infini-transeon.invalid/schema/model-catalog-v1.json",
+  "title": "Infini-Transeon signed model catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogSequence", "publishedAtUtc", "models", "signatures"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "catalogSequence": { "type": "integer", "minimum": 1 },
+    "publishedAtUtc": { "type": "string", "format": "date-time" },
+    "models": { "type": "array", "items": { "$ref": "#/$defs/model" } },
+    "signatures": { "type": "array", "minItems": 1, "maxItems": 2, "items": { "$ref": "#/$defs/signature" } }
+  },
+  "$defs": {
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modelId", "version", "licenseSpdx", "runtime", "opset", "architectures",
+        "downloadOrigins", "files"
+      ],
+      "properties": {
+        "modelId": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "licenseSpdx": { "type": "string", "minLength": 1 },
+        "runtime": { "type": "string", "minLength": 1 },
+        "opset": { "type": "integer", "minimum": 1 },
+        "architectures": { "type": "array", "minItems": 1, "items": { "enum": ["win-x64"] }, "uniqueItems": true },
+        "downloadOrigins": { "type": "array", "minItems": 1, "items": { "type": "string", "format": "uri", "pattern": "^https://" }, "uniqueItems": true },
+        "files": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/modelFile" } }
+      }
+    },
+    "modelFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "byteSize", "sha256"],
+      "properties": {
+        "relativePath": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:|/|.*(?:^|/)\\.\\.(?:/|$)).+$" },
+        "byteSize": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "algorithm", "signature"],
+      "properties": {
+        "keyId": { "type": "string", "minLength": 1 },
+        "algorithm": { "enum": ["Ed25519"] },
+        "signature": { "type": "string", "contentEncoding": "base64" }
+      }
+    }
+  },
+  "$comment": "Sign canonical JSON with signatures omitted. Persist the highest accepted catalogSequence. Model catalog trust roots are separate from release trust roots and support current/next key rotation."
+}

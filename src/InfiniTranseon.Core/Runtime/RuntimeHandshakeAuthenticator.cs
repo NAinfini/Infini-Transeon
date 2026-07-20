@@ -5,12 +5,15 @@ using InfiniTranseon.Contracts.Runtime;
 namespace InfiniTranseon.Core.Runtime;
 
 public sealed record RuntimeHandshakeResult(int AuthenticatedClientProcessId, Guid RuntimeEpoch);
+public sealed record RuntimeHandshakeAcceptance(
+    int AuthenticatedPeerProcessId,
+    RuntimeCapabilities Capabilities);
 
 public static class RuntimeHandshakeFrames
 {
     private const int ProcessIdBytes = sizeof(int);
     private const int PayloadBytes = (2 * ProcessIdBytes) + RuntimeProtocol.BootstrapNonceBytes;
-    private const int ResponsePayloadBytes = ProcessIdBytes;
+    private const int ResponsePayloadBytes = 172;
 
     public static RuntimeFrame CreateRequest(
         int localProcessId,
@@ -70,6 +73,7 @@ public static class RuntimeHandshakeFrames
     public static RuntimeFrame CreateAcceptedResponse(
         RuntimeEnvelopeHeader requestHeader,
         int localProcessId,
+        RuntimeCapabilities capabilities,
         DateTimeOffset deadlineUtc)
     {
         ArgumentNullException.ThrowIfNull(requestHeader);
@@ -82,9 +86,11 @@ public static class RuntimeHandshakeFrames
         {
             throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPeerProcessId);
         }
+        ArgumentNullException.ThrowIfNull(capabilities);
 
         byte[] payload = new byte[ResponsePayloadBytes];
         BinaryPrimitives.WriteInt32LittleEndian(payload, localProcessId);
+        RuntimeCapabilitiesWireCodec.Write(payload.AsSpan(ProcessIdBytes), capabilities);
         var header = new RuntimeEnvelopeHeader(
             RuntimeProtocol.CurrentVersion,
             RuntimeMessageKind.HandshakeResponse,
@@ -95,7 +101,7 @@ public static class RuntimeHandshakeFrames
         return RuntimeFrame.TakeOwnership(header, payload);
     }
 
-    public static int ValidateAcceptedResponse(
+    public static RuntimeHandshakeAcceptance ValidateAcceptedResponse(
         RuntimeFrame response,
         RuntimeEnvelopeHeader requestHeader,
         int expectedPeerProcessId,
@@ -116,13 +122,114 @@ public static class RuntimeHandshakeFrames
             throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
         }
 
-        return peerProcessId;
+        RuntimeCapabilities capabilities = RuntimeCapabilitiesWireCodec.Read(
+            response.Payload.Span[ProcessIdBytes..]);
+        return new RuntimeHandshakeAcceptance(peerProcessId, capabilities);
     }
 
     internal sealed record RuntimeHandshakePayload(
         int ClaimedClientProcessId,
         int ExpectedPeerProcessId,
         byte[] Nonce);
+}
+
+internal static class RuntimeCapabilitiesWireCodec
+{
+    internal const int ByteCount = 168;
+
+    public static void Write(Span<byte> destination, RuntimeCapabilities value)
+    {
+        if (destination.Length != ByteCount) throw new ArgumentException("Invalid capabilities buffer.", nameof(destination));
+        int offset = 0;
+        WriteInt32(destination, ref offset, value.ProtocolVersion);
+        WriteInt32(destination, ref offset, value.MaxCaptureSources);
+        WriteInt32(destination, ref offset, value.MaxTargets);
+        WriteInt32(destination, ref offset, value.MaxCaptureDimension);
+        WriteInt64(destination, ref offset, value.MaxCapturePixelsPerSource);
+        WriteInt32(destination, ref offset, value.MaxRegionsPerTarget);
+        WriteInt32(destination, ref offset, value.MaxActiveTracksPerTarget);
+        WriteInt32(destination, ref offset, value.MaxOcrBoxesPerResult);
+        WriteInt32(destination, ref offset, value.MaxSourceChars);
+        WriteInt32(destination, ref offset, value.MaxOverlayCharsPerTarget);
+        WriteInt32(destination, ref offset, value.MaxTranslationChannelsPerRegion);
+        WriteInt32(destination, ref offset, value.MaxOutstandingWgcFramesPerSource);
+        WriteInt32(destination, ref offset, value.MaxOwnedFrameTexturesPerSource);
+        WriteInt32(destination, ref offset, value.MaxReadbackCropsPerSource);
+        WriteInt64(destination, ref offset, value.MaxReadbackPixelsPerSourceRing);
+        WriteInt64(destination, ref offset, value.MaxGlobalOcrCropBytesInFlight);
+        WriteInt32(destination, ref offset, value.MaxMappedReadbacksPerAdapter);
+        WriteInt32(destination, ref offset, value.MaxMappedReadbackHoldMilliseconds);
+        WriteInt64(destination, ref offset, value.MaxDetectionPyramidBytesPerSource);
+        WriteInt64(destination, ref offset, value.MaxOverlaySurfaceBytesPerTarget);
+        WriteInt32(destination, ref offset, value.MaxOcrSessions);
+        WriteInt64(destination, ref offset, value.MaxOcrTensorWorkspaceBytes);
+        WriteInt64(destination, ref offset, value.MaxEngineCommittedBytes);
+        WriteInt64(destination, ref offset, value.MaxGpuBytesPerAdapterCeiling);
+        WriteInt32(destination, ref offset, value.MaxGpuBudgetPercentage);
+        WriteInt32(destination, ref offset, value.MaxIpcMessageBytes);
+        WriteInt64(destination, ref offset, value.MaxIpcInFlightBytes);
+        WriteInt64(destination, ref offset, value.MaxRecentTranslationBytes);
+        WriteInt64(destination, ref offset, value.MaxTranslationCacheBytes);
+        WriteInt64(destination, ref offset, value.MaxDatabasePageCacheBytes);
+    }
+
+    public static RuntimeCapabilities Read(ReadOnlySpan<byte> source)
+    {
+        if (source.Length != ByteCount)
+        {
+            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPayloadLength);
+        }
+
+        int offset = 0;
+        var value = new RuntimeCapabilities(
+            ReadInt32(source, ref offset), ReadInt32(source, ref offset), ReadInt32(source, ref offset),
+            ReadInt32(source, ref offset), ReadInt64(source, ref offset), ReadInt32(source, ref offset),
+            ReadInt32(source, ref offset), ReadInt32(source, ref offset), ReadInt32(source, ref offset),
+            ReadInt32(source, ref offset), ReadInt32(source, ref offset), ReadInt32(source, ref offset),
+            ReadInt32(source, ref offset), ReadInt32(source, ref offset), ReadInt64(source, ref offset),
+            ReadInt64(source, ref offset), ReadInt32(source, ref offset), ReadInt32(source, ref offset),
+            ReadInt64(source, ref offset), ReadInt64(source, ref offset), ReadInt32(source, ref offset),
+            ReadInt64(source, ref offset), ReadInt64(source, ref offset), ReadInt64(source, ref offset),
+            ReadInt32(source, ref offset), ReadInt32(source, ref offset), ReadInt64(source, ref offset),
+            ReadInt64(source, ref offset), ReadInt64(source, ref offset), ReadInt64(source, ref offset));
+        Validate(value);
+        return value;
+    }
+
+    private static void WriteInt32(Span<byte> destination, ref int offset, int value)
+    {
+        BinaryPrimitives.WriteInt32LittleEndian(destination[offset..], value);
+        offset += sizeof(int);
+    }
+
+    private static void WriteInt64(Span<byte> destination, ref int offset, long value)
+    {
+        BinaryPrimitives.WriteInt64LittleEndian(destination[offset..], value);
+        offset += sizeof(long);
+    }
+
+    private static int ReadInt32(ReadOnlySpan<byte> source, ref int offset)
+    {
+        int value = BinaryPrimitives.ReadInt32LittleEndian(source[offset..]);
+        offset += sizeof(int);
+        return value;
+    }
+
+    private static long ReadInt64(ReadOnlySpan<byte> source, ref int offset)
+    {
+        long value = BinaryPrimitives.ReadInt64LittleEndian(source[offset..]);
+        offset += sizeof(long);
+        return value;
+    }
+
+    private static void Validate(RuntimeCapabilities value)
+    {
+        if (value.ProtocolVersion != RuntimeProtocol.CurrentVersion ||
+            value != RuntimeCapabilities.VersionOne)
+        {
+            throw new RuntimeProtocolException(RuntimeProtocolError.VersionMismatch);
+        }
+    }
 }
 
 public sealed class RuntimeHandshakeAuthenticator : IDisposable

@@ -19,4 +19,5 @@ if(BUILD_TESTING)
         NAME infini_capture_spike_help
         COMMAND InfiniTranseon.CaptureSpike --help
     )
+    infini_configure_test_runtime(infini_capture_spike_help)
 endif()

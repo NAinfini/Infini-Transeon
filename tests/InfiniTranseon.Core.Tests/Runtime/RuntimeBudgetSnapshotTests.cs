@@ -5,6 +5,12 @@ namespace InfiniTranseon.Core.Tests.Runtime;
 public sealed class RuntimeBudgetSnapshotTests
 {
     [Fact]
+    public void EmptyRuntimeEpochIsRejected()
+    {
+        Assert.Throws<ArgumentException>(() => new RuntimeBudgetSnapshot(1, Guid.Empty, []));
+    }
+
+    [Fact]
     public void AvailableIsDerivedFromLimitCommittedAndReserved()
     {
         var pool = new RuntimeBudgetPool("ipc-bytes", 100, 40, 10);

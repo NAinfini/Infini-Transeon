@@ -14,6 +14,14 @@ public sealed class RuntimeProtocolTests
     }
 
     [Fact]
+    public void MessageKindWireNumbersAreContiguousAndStable()
+    {
+        Assert.Equal(
+            Enumerable.Range(0, 19),
+            Enum.GetValues<RuntimeMessageKind>().Select(value => (int)value));
+    }
+
+    [Fact]
     public void ValidEnvelopeHeaderIsAccepted()
     {
         var header = new RuntimeEnvelopeHeader(
@@ -189,6 +197,27 @@ public sealed class RuntimeProtocolTests
             protocol.RootElement.GetProperty("restartPolicy").GetString());
     }
 
+    [Fact]
+    public void JsonProtocolDefinesCapabilitiesOwnershipCancellationAndReconnectSemantics()
+    {
+        using JsonDocument protocol = LoadProtocol();
+        JsonElement handshake = protocol.RootElement.GetProperty("handshakeResponse");
+        JsonElement contracts = protocol.RootElement.GetProperty("flowContracts");
+
+        Assert.Equal(172, handshake.GetProperty("payloadBytes").GetInt32());
+        Assert.Equal("RuntimeCapabilitiesV1", handshake.GetProperty("capabilities").GetString());
+        Assert.Equal("sender-owns-until-write-completes; receiver-copies-or-takes-explicit-lease",
+            contracts.GetProperty("ownership").GetString());
+        Assert.Equal("execution-token-and-request-id",
+            contracts.GetProperty("cancellation").GetString());
+        Assert.Equal("complete-cumulative-snapshot",
+            contracts.GetProperty("streaming").GetString());
+        Assert.Equal("full-state-no-text-replay",
+            contracts.GetProperty("reconnect").GetString());
+        Assert.Equal("dedicated-serialized-owner-per-lane",
+            contracts.GetProperty("callbackThreads").GetString());
+    }
+
     private static RuntimeEnvelopeHeader ValidHeader() => new(
         RuntimeProtocol.CurrentVersion,
         RuntimeMessageKind.HandshakeRequest,
@@ -196,6 +225,13 @@ public sealed class RuntimeProtocolTests
         Guid.NewGuid(),
         0,
         DateTimeOffset.UtcNow.AddMinutes(1));
+
+    private static JsonDocument LoadProtocol() => JsonDocument.Parse(File.ReadAllText(Path.Combine(
+        FindRepositoryRoot(),
+        "src",
+        "InfiniTranseon.EngineHost",
+        "ipc",
+        "runtime-protocol.json")));
 
     private static string FindRepositoryRoot()
     {

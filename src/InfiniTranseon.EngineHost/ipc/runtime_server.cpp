@@ -1,6 +1,7 @@
 #include "infini_runtime_server.h"
 
 #include "infini_runtime_protocol.h"
+#include <infini_engine.h>
 
 #include <sddl.h>
 
@@ -20,7 +21,7 @@ namespace
 {
 constexpr std::size_t wire_header_bytes = 56U;
 constexpr std::size_t handshake_request_payload_bytes = 40U;
-constexpr std::size_t handshake_response_payload_bytes = 4U;
+constexpr std::size_t handshake_response_payload_bytes = 172U;
 constexpr std::size_t maximum_bootstrap_bytes = 512U;
 constexpr std::uint32_t maximum_message_bytes = 8'388'608U;
 constexpr std::uint32_t control_request_kind = 2U;
@@ -82,6 +83,71 @@ void write_u32(const std::span<std::byte> bytes, const std::size_t offset,
     {
         bytes[offset + index] = static_cast<std::byte>((value >> (index * 8U)) & 0xffU);
     }
+}
+
+void write_u64(const std::span<std::byte> bytes, const std::size_t offset,
+    const std::uint64_t value) noexcept
+{
+    for (std::size_t index = 0; index < sizeof(value); ++index)
+    {
+        bytes[offset + index] = static_cast<std::byte>((value >> (index * 8U)) & 0xffULL);
+    }
+}
+
+bool write_capabilities(
+    const std::span<std::byte> bytes,
+    std::size_t offset) noexcept
+{
+    IT_RuntimeCapabilitiesV1 capabilities{};
+    capabilities.struct_size = sizeof(capabilities);
+    capabilities.abi_version = IT_ENGINE_ABI_VERSION;
+    if (IT_EngineGetCapabilities(&capabilities) != IT_RESULT_OK)
+    {
+        return false;
+    }
+
+    const auto u32 = [&](const std::uint32_t value) noexcept
+    {
+        write_u32(bytes, offset, value);
+        offset += sizeof(value);
+    };
+    const auto u64 = [&](const std::uint64_t value) noexcept
+    {
+        write_u64(bytes, offset, value);
+        offset += sizeof(value);
+    };
+
+    u32(protocol_version);
+    u32(capabilities.max_capture_sources);
+    u32(capabilities.max_targets);
+    u32(capabilities.max_capture_dimension);
+    u64(capabilities.max_capture_pixels_per_source);
+    u32(capabilities.max_regions_per_target);
+    u32(capabilities.max_active_tracks_per_target);
+    u32(capabilities.max_ocr_boxes_per_result);
+    u32(capabilities.max_source_chars);
+    u32(capabilities.max_overlay_chars_per_target);
+    u32(capabilities.max_translation_channels_per_region);
+    u32(capabilities.max_outstanding_wgc_frames_per_source);
+    u32(capabilities.max_owned_frame_textures_per_source);
+    u32(capabilities.max_readback_crops_per_source);
+    u64(capabilities.max_readback_pixels_per_source_ring);
+    u64(capabilities.max_global_ocr_crop_bytes_in_flight);
+    u32(capabilities.max_mapped_readbacks_per_adapter);
+    u32(capabilities.max_mapped_readback_hold_milliseconds);
+    u64(capabilities.max_detection_pyramid_bytes_per_source);
+    u64(capabilities.max_overlay_surface_bytes_per_target);
+    u32(capabilities.max_ocr_sessions);
+    u64(capabilities.max_ocr_tensor_workspace_bytes);
+    u64(capabilities.max_engine_committed_bytes);
+    u64(capabilities.max_gpu_bytes_per_adapter_ceiling);
+    u32(capabilities.max_gpu_budget_percentage);
+    u32(capabilities.max_ipc_message_bytes);
+    u64(capabilities.max_ipc_in_flight_bytes);
+    u64(5'242'880ULL);
+    u64(536'870'912ULL);
+    u64(67'108'864ULL);
+    return true;
 }
 
 bool read_exact(HANDLE handle, const std::span<std::byte> destination) noexcept
@@ -258,6 +324,10 @@ bool authenticate_and_respond(HANDLE pipe, BootstrapConfig& config) noexcept
     std::ranges::copy(request_span.subspan(44U, 8U), response.begin() + 48U);
     write_u32(response, 56U, handshake_response_payload_bytes);
     write_u32(response, 60U, GetCurrentProcessId());
+    if (!write_capabilities(response, 64U))
+    {
+        return false;
+    }
     return write_exact(pipe, response) && FlushFileBuffers(pipe) != FALSE;
 }
 

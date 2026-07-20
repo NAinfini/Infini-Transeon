@@ -40,6 +40,7 @@ public sealed class RuntimeNamedPipeClientTests
 
         Assert.Equal(Environment.ProcessId, connection.AuthenticatedServerProcessId);
         Assert.Equal(epoch, connection.RuntimeEpoch);
+        Assert.Equal(RuntimeCapabilities.VersionOne, connection.Capabilities);
         Assert.True(connection.Stream.IsConnected);
     }
 
@@ -93,6 +94,7 @@ public sealed class RuntimeNamedPipeClientTests
         using RuntimeFrame response = RuntimeHandshakeFrames.CreateAcceptedResponse(
             request.Header,
             Environment.ProcessId,
+            RuntimeCapabilities.VersionOne,
             DateTimeOffset.UtcNow.AddSeconds(5));
         await RuntimeFrameCodec.WriteAsync(server, response, TestContext.Current.CancellationToken);
     }

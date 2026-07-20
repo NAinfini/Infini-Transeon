@@ -30,11 +30,13 @@ public sealed class RuntimeNamedPipeConnection : IAsyncDisposable
     internal RuntimeNamedPipeConnection(
         NamedPipeClientStream stream,
         int authenticatedServerProcessId,
-        Guid runtimeEpoch)
+        Guid runtimeEpoch,
+        RuntimeCapabilities capabilities)
     {
         Stream = stream;
         AuthenticatedServerProcessId = authenticatedServerProcessId;
         RuntimeEpoch = runtimeEpoch;
+        Capabilities = capabilities;
     }
 
     public NamedPipeClientStream Stream { get; }
@@ -42,6 +44,8 @@ public sealed class RuntimeNamedPipeConnection : IAsyncDisposable
     public int AuthenticatedServerProcessId { get; }
 
     public Guid RuntimeEpoch { get; }
+
+    public RuntimeCapabilities Capabilities { get; }
 
     public ValueTask DisposeAsync() => Stream.DisposeAsync();
 }
@@ -106,13 +110,17 @@ public static class RuntimeNamedPipeClient
                 pipe,
                 DateTimeOffset.UtcNow,
                 timeoutSource.Token).ConfigureAwait(false);
-            RuntimeHandshakeFrames.ValidateAcceptedResponse(
+            RuntimeHandshakeAcceptance acceptance = RuntimeHandshakeFrames.ValidateAcceptedResponse(
                 response,
                 request.Header,
                 expectedServerProcessId,
                 DateTimeOffset.UtcNow);
 
-            return new RuntimeNamedPipeConnection(pipe, actualServerProcessId, runtimeEpoch);
+            return new RuntimeNamedPipeConnection(
+                pipe,
+                actualServerProcessId,
+                runtimeEpoch,
+                acceptance.Capabilities);
         }
         catch
         {

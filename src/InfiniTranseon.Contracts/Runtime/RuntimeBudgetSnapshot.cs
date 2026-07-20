@@ -32,6 +32,10 @@ public sealed record RuntimeBudgetSnapshot
     public RuntimeBudgetSnapshot(int protocolVersion, Guid runtimeEpoch, IEnumerable<RuntimeBudgetPool> pools)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(protocolVersion, 1);
+        if (runtimeEpoch == Guid.Empty)
+        {
+            throw new ArgumentException("Runtime epoch cannot be empty.", nameof(runtimeEpoch));
+        }
         ArgumentNullException.ThrowIfNull(pools);
 
         RuntimeBudgetPool[] ownedPools = pools.ToArray();

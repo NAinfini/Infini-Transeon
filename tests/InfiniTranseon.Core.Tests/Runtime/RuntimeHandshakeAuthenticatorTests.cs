@@ -100,4 +100,31 @@ public sealed class RuntimeHandshakeAuthenticatorTests
 
         Assert.All(frame.Payload.ToArray(), value => Assert.Equal(0, value));
     }
+
+    [Fact]
+    public void AcceptedResponseRoundTripsAllCapabilities()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Guid epoch = Guid.NewGuid();
+        using RuntimeFrame request = RuntimeHandshakeFrames.CreateRequest(
+            100,
+            200,
+            epoch,
+            new byte[RuntimeProtocol.BootstrapNonceBytes],
+            now.AddSeconds(5));
+        using RuntimeFrame response = RuntimeHandshakeFrames.CreateAcceptedResponse(
+            request.Header,
+            200,
+            RuntimeCapabilities.VersionOne,
+            now.AddSeconds(5));
+
+        RuntimeHandshakeAcceptance accepted = RuntimeHandshakeFrames.ValidateAcceptedResponse(
+            response,
+            request.Header,
+            200,
+            now);
+
+        Assert.Equal(200, accepted.AuthenticatedPeerProcessId);
+        Assert.Equal(RuntimeCapabilities.VersionOne, accepted.Capabilities);
+    }
 }

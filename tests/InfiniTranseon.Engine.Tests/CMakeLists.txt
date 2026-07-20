@@ -19,6 +19,7 @@ if(MSVC)
 endif()
 
 add_test(NAME infini_engine_abi_contract_tests COMMAND infini_engine_abi_contract_tests)
+infini_configure_test_runtime(infini_engine_abi_contract_tests)
 
 add_executable(infini_engine_runtime_protocol_tests
     runtime_protocol_tests.cpp
@@ -37,3 +38,4 @@ if(MSVC)
 endif()
 
 add_test(NAME infini_engine_runtime_protocol_tests COMMAND infini_engine_runtime_protocol_tests)
+infini_configure_test_runtime(infini_engine_runtime_protocol_tests)
