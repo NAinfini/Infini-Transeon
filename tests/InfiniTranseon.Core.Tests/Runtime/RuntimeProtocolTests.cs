@@ -1,0 +1,141 @@
+using System.Text.Json;
+using InfiniTranseon.Contracts.Runtime;
+
+namespace InfiniTranseon.Core.Tests.Runtime;
+
+public sealed class RuntimeProtocolTests
+{
+    [Fact]
+    public void CurrentProtocolUsesTheCapabilitiesMessageCeiling()
+    {
+        Assert.Equal(1, RuntimeProtocol.CurrentVersion);
+        Assert.Equal(RuntimeProtocol.MaxMessageBytes, RuntimeCapabilities.VersionOne.MaxIpcMessageBytes);
+    }
+
+    [Fact]
+    public void ValidEnvelopeHeaderIsAccepted()
+    {
+        var header = new RuntimeEnvelopeHeader(
+            RuntimeProtocol.CurrentVersion,
+            RuntimeMessageKind.TargetSnapshot,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            1024,
+            DateTimeOffset.UtcNow.AddSeconds(5));
+
+        RuntimeProtocolValidator.Validate(header, DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public void MismatchedProtocolVersionIsRejected()
+    {
+        RuntimeEnvelopeHeader header = ValidHeader() with { ProtocolVersion = 2 };
+
+        RuntimeProtocolException error = Assert.Throws<RuntimeProtocolException>(
+            () => RuntimeProtocolValidator.Validate(header, DateTimeOffset.UtcNow));
+
+        Assert.Equal(RuntimeProtocolError.VersionMismatch, error.Error);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(8_388_609)]
+    public void InvalidPayloadLengthIsRejected(int payloadLength)
+    {
+        RuntimeEnvelopeHeader header = ValidHeader() with { PayloadLength = payloadLength };
+
+        RuntimeProtocolException error = Assert.Throws<RuntimeProtocolException>(
+            () => RuntimeProtocolValidator.Validate(header, DateTimeOffset.UtcNow));
+
+        Assert.Equal(RuntimeProtocolError.InvalidPayloadLength, error.Error);
+    }
+
+    [Fact]
+    public void EmptyRequestOrRuntimeIdentityIsRejected()
+    {
+        RuntimeEnvelopeHeader emptyRequest = ValidHeader() with { RequestId = Guid.Empty };
+        RuntimeEnvelopeHeader emptyEpoch = ValidHeader() with { RuntimeEpoch = Guid.Empty };
+
+        Assert.Equal(
+            RuntimeProtocolError.InvalidRequestId,
+            Assert.Throws<RuntimeProtocolException>(
+                () => RuntimeProtocolValidator.Validate(emptyRequest, DateTimeOffset.UtcNow)).Error);
+        Assert.Equal(
+            RuntimeProtocolError.InvalidRuntimeEpoch,
+            Assert.Throws<RuntimeProtocolException>(
+                () => RuntimeProtocolValidator.Validate(emptyEpoch, DateTimeOffset.UtcNow)).Error);
+    }
+
+    [Fact]
+    public void ExpiredMessageIsRejected()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        RuntimeEnvelopeHeader header = ValidHeader() with { DeadlineUtc = now.AddMilliseconds(-1) };
+
+        RuntimeProtocolException error = Assert.Throws<RuntimeProtocolException>(
+            () => RuntimeProtocolValidator.Validate(header, now));
+
+        Assert.Equal(RuntimeProtocolError.DeadlineExpired, error.Error);
+    }
+
+    [Theory]
+    [InlineData(0, 32)]
+    [InlineData(42, 31)]
+    [InlineData(42, 33)]
+    public void HandshakeRequiresPidAndExactlyThirtyTwoNonceBytes(int processId, int nonceLength)
+    {
+        var handshake = new RuntimeHandshakeRequest(
+            RuntimeProtocol.CurrentVersion,
+            Guid.NewGuid(),
+            processId,
+            new byte[nonceLength]);
+
+        Assert.Throws<RuntimeProtocolException>(() => RuntimeProtocolValidator.Validate(handshake));
+    }
+
+    [Fact]
+    public void JsonProtocolListsEveryRequiredBidirectionalFlow()
+    {
+        string root = FindRepositoryRoot();
+        string protocolPath = Path.Combine(
+            root,
+            "src",
+            "InfiniTranseon.EngineHost",
+            "ipc",
+            "runtime-protocol.json");
+        using JsonDocument protocol = JsonDocument.Parse(File.ReadAllText(protocolPath));
+        string[] messageKinds = protocol.RootElement.GetProperty("messageKinds")
+            .EnumerateArray()
+            .Select(item => item.GetString())
+            .OfType<string>()
+            .ToArray();
+
+        string[] requiredKinds = Enum.GetNames<RuntimeMessageKind>();
+        Assert.Empty(requiredKinds.Except(messageKinds, StringComparer.Ordinal));
+        Assert.Empty(messageKinds.Except(requiredKinds, StringComparer.Ordinal));
+    }
+
+    private static RuntimeEnvelopeHeader ValidHeader() => new(
+        RuntimeProtocol.CurrentVersion,
+        RuntimeMessageKind.HandshakeRequest,
+        Guid.NewGuid(),
+        Guid.NewGuid(),
+        0,
+        DateTimeOffset.UtcNow.AddMinutes(1));
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "InfiniTranseon.sln")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the Infini-Transeon repository root.");
+    }
+}

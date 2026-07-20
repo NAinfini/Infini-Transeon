@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Infini-Transeon Runtime Protocol v1",
+  "protocolVersion": 1,
+  "encoding": "UTF-8",
+  "framing": "unsigned little-endian 32-bit length prefix",
+  "maxMessageBytes": 8388608,
+  "maxInFlightBytes": 33554432,
+  "messageKinds": [
+    "HandshakeRequest",
+    "HandshakeResponse",
+    "ControlRequest",
+    "ControlResponse",
+    "TargetSnapshot",
+    "TargetLifecycle",
+    "OcrResult",
+    "CloudOcrCropRequest",
+    "TranslationOutput",
+    "TranslationStreamSnapshot",
+    "OverlayDesiredState",
+    "PolicyRevision",
+    "PolicyAcknowledgement",
+    "DegradationSnapshot",
+    "DiagnosticEvent",
+    "Thumbnail",
+    "ReconnectSnapshot",
+    "ShutdownRequest",
+    "ShutdownAcknowledgement"
+  ],
+  "ordering": "request-scoped sequence and runtime epoch",
+  "reconnect": "full state snapshot; never replay text or provider completions"
+}

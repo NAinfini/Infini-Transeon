@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
+  </ItemGroup>
+</Project>

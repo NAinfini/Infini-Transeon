@@ -1,6 +1,7 @@
 .vs/
 .superpowers/
 artifacts/
+.packages/
 bin/
 obj/
 build/

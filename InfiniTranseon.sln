@@ -1,0 +1,37 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.0.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InfiniTranseon.Contracts", "src\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj", "{1E1E60BC-86EC-4F62-82F0-7B7A97D18D70}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InfiniTranseon.Core", "src\InfiniTranseon.Core\InfiniTranseon.Core.csproj", "{9F62AE8C-FF6F-4AFE-9410-9DA7F0BAAF1C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InfiniTranseon.Testing", "tests\InfiniTranseon.Testing\InfiniTranseon.Testing.csproj", "{D42125B8-B3F2-4C24-8897-FE328A045D53}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InfiniTranseon.Core.Tests", "tests\InfiniTranseon.Core.Tests\InfiniTranseon.Core.Tests.csproj", "{706EFF28-8D99-461B-A5A4-F3E23E27C7A9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1E1E60BC-86EC-4F62-82F0-7B7A97D18D70}.Debug|x64.ActiveCfg = Debug|x64
+		{1E1E60BC-86EC-4F62-82F0-7B7A97D18D70}.Debug|x64.Build.0 = Debug|x64
+		{1E1E60BC-86EC-4F62-82F0-7B7A97D18D70}.Release|x64.ActiveCfg = Release|x64
+		{1E1E60BC-86EC-4F62-82F0-7B7A97D18D70}.Release|x64.Build.0 = Release|x64
+		{9F62AE8C-FF6F-4AFE-9410-9DA7F0BAAF1C}.Debug|x64.ActiveCfg = Debug|x64
+		{9F62AE8C-FF6F-4AFE-9410-9DA7F0BAAF1C}.Debug|x64.Build.0 = Debug|x64
+		{9F62AE8C-FF6F-4AFE-9410-9DA7F0BAAF1C}.Release|x64.ActiveCfg = Release|x64
+		{9F62AE8C-FF6F-4AFE-9410-9DA7F0BAAF1C}.Release|x64.Build.0 = Release|x64
+		{D42125B8-B3F2-4C24-8897-FE328A045D53}.Debug|x64.ActiveCfg = Debug|x64
+		{D42125B8-B3F2-4C24-8897-FE328A045D53}.Debug|x64.Build.0 = Debug|x64
+		{D42125B8-B3F2-4C24-8897-FE328A045D53}.Release|x64.ActiveCfg = Release|x64
+		{D42125B8-B3F2-4C24-8897-FE328A045D53}.Release|x64.Build.0 = Release|x64
+		{706EFF28-8D99-461B-A5A4-F3E23E27C7A9}.Debug|x64.ActiveCfg = Debug|x64
+		{706EFF28-8D99-461B-A5A4-F3E23E27C7A9}.Debug|x64.Build.0 = Debug|x64
+		{706EFF28-8D99-461B-A5A4-F3E23E27C7A9}.Release|x64.ActiveCfg = Release|x64
+		{706EFF28-8D99-461B-A5A4-F3E23E27C7A9}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal
