@@ -6,6 +6,38 @@
   "framing": "signed little-endian 32-bit body-length prefix validated as positive before allocation",
   "maxMessageBytes": 8388608,
   "maxInFlightBytes": 33554432,
+  "bootstrapTransport": {
+    "framing": "unsigned little-endian 32-bit payload-length prefix with a 512-byte hard ceiling",
+    "secretDelivery": "inherited-anonymous-pipe-read-handle",
+    "explicitHandleListOnly": true,
+    "secretExcludedFrom": [
+      "command-line",
+      "environment",
+      "logs",
+      "persistent-files"
+    ],
+    "fields": [
+      "magic",
+      "protocolVersion",
+      "expectedClientProcessId",
+      "runtimeEpoch",
+      "nonce",
+      "pipeName"
+    ]
+  },
+  "namedPipeSecurity": {
+    "localMachineOnly": true,
+    "firstInstance": true,
+    "rejectRemoteClients": true,
+    "acl": "current-logon-user",
+    "handshakeBinds": [
+      "actualClientProcessId",
+      "claimedClientProcessId",
+      "expectedServerProcessId",
+      "runtimeEpoch",
+      "oneTimeNonce"
+    ]
+  },
   "wireEnvelope": {
     "lengthPrefixBytes": 4,
     "headerBytes": 56,

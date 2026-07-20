@@ -134,6 +134,32 @@ public sealed class RuntimeProtocolTests
         Assert.Equal("utc-ticks", wire.GetProperty("deadlineEncoding").GetString());
     }
 
+    [Fact]
+    public void JsonProtocolPinsSecureBootstrapAndPipeCreation()
+    {
+        string root = FindRepositoryRoot();
+        string protocolPath = Path.Combine(
+            root,
+            "src",
+            "InfiniTranseon.EngineHost",
+            "ipc",
+            "runtime-protocol.json");
+        using JsonDocument protocol = JsonDocument.Parse(File.ReadAllText(protocolPath));
+        JsonElement bootstrap = protocol.RootElement.GetProperty("bootstrapTransport");
+        JsonElement pipe = protocol.RootElement.GetProperty("namedPipeSecurity");
+
+        Assert.Equal("inherited-anonymous-pipe-read-handle",
+            bootstrap.GetProperty("secretDelivery").GetString());
+        Assert.True(bootstrap.GetProperty("explicitHandleListOnly").GetBoolean());
+        Assert.Equal(
+            ["command-line", "environment", "logs", "persistent-files"],
+            bootstrap.GetProperty("secretExcludedFrom").EnumerateArray()
+                .Select(item => item.GetString()).OfType<string>().ToArray());
+        Assert.True(pipe.GetProperty("firstInstance").GetBoolean());
+        Assert.True(pipe.GetProperty("rejectRemoteClients").GetBoolean());
+        Assert.Equal("current-logon-user", pipe.GetProperty("acl").GetString());
+    }
+
     private static RuntimeEnvelopeHeader ValidHeader() => new(
         RuntimeProtocol.CurrentVersion,
         RuntimeMessageKind.HandshakeRequest,
