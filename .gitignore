@@ -1,0 +1,9 @@
+.vs/
+.superpowers/
+artifacts/
+bin/
+obj/
+build/
+out/
+TestResults/
+CMakeUserPresets.json
