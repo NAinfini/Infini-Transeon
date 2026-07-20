@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Runtime;
 
 namespace InfiniTranseon.Core.Tests.Runtime;
 
@@ -84,13 +85,12 @@ public sealed class RuntimeProtocolTests
     [InlineData(42, 33)]
     public void HandshakeRequiresPidAndExactlyThirtyTwoNonceBytes(int processId, int nonceLength)
     {
-        var handshake = new RuntimeHandshakeRequest(
-            RuntimeProtocol.CurrentVersion,
+        Assert.Throws<RuntimeProtocolException>(() => RuntimeHandshakeFrames.CreateRequest(
+            localProcessId: 42,
+            expectedPeerProcessId: processId,
             Guid.NewGuid(),
-            processId,
-            new byte[nonceLength]);
-
-        Assert.Throws<RuntimeProtocolException>(() => RuntimeProtocolValidator.Validate(handshake));
+            new byte[nonceLength],
+            DateTimeOffset.UtcNow.AddSeconds(5)));
     }
 
     [Fact]
@@ -113,6 +113,25 @@ public sealed class RuntimeProtocolTests
         string[] requiredKinds = Enum.GetNames<RuntimeMessageKind>();
         Assert.Empty(requiredKinds.Except(messageKinds, StringComparer.Ordinal));
         Assert.Empty(messageKinds.Except(requiredKinds, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void JsonProtocolMatchesTheBinaryWireEnvelope()
+    {
+        string root = FindRepositoryRoot();
+        string protocolPath = Path.Combine(
+            root,
+            "src",
+            "InfiniTranseon.EngineHost",
+            "ipc",
+            "runtime-protocol.json");
+        using JsonDocument protocol = JsonDocument.Parse(File.ReadAllText(protocolPath));
+        JsonElement wire = protocol.RootElement.GetProperty("wireEnvelope");
+
+        Assert.Equal(RuntimeProtocol.FramePrefixBytes, wire.GetProperty("lengthPrefixBytes").GetInt32());
+        Assert.Equal(RuntimeProtocol.WireHeaderBytes, wire.GetProperty("headerBytes").GetInt32());
+        Assert.Equal("little-endian", wire.GetProperty("byteOrder").GetString());
+        Assert.Equal("utc-ticks", wire.GetProperty("deadlineEncoding").GetString());
     }
 
     private static RuntimeEnvelopeHeader ValidHeader() => new(

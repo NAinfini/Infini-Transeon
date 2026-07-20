@@ -6,6 +6,10 @@ public static class RuntimeProtocol
     public const int MaxMessageBytes = 8_388_608;
     public const long MaxInFlightBytes = 33_554_432;
     public const int BootstrapNonceBytes = 32;
+    public const int FramePrefixBytes = sizeof(int);
+    public const int WireHeaderBytes = 56;
+    public const int MaxPayloadBytes = MaxMessageBytes - WireHeaderBytes;
+    public const uint WireMagic = 0x50525449;
 }
 
 public enum RuntimeMessageKind
@@ -39,31 +43,6 @@ public sealed record RuntimeEnvelopeHeader(
     int PayloadLength,
     DateTimeOffset DeadlineUtc);
 
-public sealed class RuntimeHandshakeRequest
-{
-    private readonly byte[] _bootstrapNonce;
-
-    public RuntimeHandshakeRequest(
-        int protocolVersion,
-        Guid runtimeEpoch,
-        int expectedPeerProcessId,
-        ReadOnlySpan<byte> bootstrapNonce)
-    {
-        ProtocolVersion = protocolVersion;
-        RuntimeEpoch = runtimeEpoch;
-        ExpectedPeerProcessId = expectedPeerProcessId;
-        _bootstrapNonce = bootstrapNonce.ToArray();
-    }
-
-    public int ProtocolVersion { get; }
-
-    public Guid RuntimeEpoch { get; }
-
-    public int ExpectedPeerProcessId { get; }
-
-    public ReadOnlyMemory<byte> BootstrapNonce => _bootstrapNonce;
-}
-
 public enum RuntimeProtocolError
 {
     VersionMismatch,
@@ -74,12 +53,25 @@ public enum RuntimeProtocolError
     DeadlineExpired,
     InvalidPeerProcessId,
     InvalidBootstrapNonce,
+    InvalidFrameLength,
+    FrameTruncated,
+    InvalidMagic,
+    InvalidDeadline,
+    UnexpectedMessageKind,
+    AuthenticationFailed,
+    HandshakeAlreadyAttempted,
 }
 
 public sealed class RuntimeProtocolException : Exception
 {
     public RuntimeProtocolException(RuntimeProtocolError error)
         : base($"Runtime protocol validation failed: {error}.")
+    {
+        Error = error;
+    }
+
+    public RuntimeProtocolException(RuntimeProtocolError error, Exception innerException)
+        : base($"Runtime protocol validation failed: {error}.", innerException)
     {
         Error = error;
     }
@@ -111,7 +103,7 @@ public static class RuntimeProtocolValidator
             throw new RuntimeProtocolException(RuntimeProtocolError.InvalidRuntimeEpoch);
         }
 
-        if (header.PayloadLength is < 0 or > RuntimeProtocol.MaxMessageBytes)
+        if (header.PayloadLength is < 0 or > RuntimeProtocol.MaxPayloadBytes)
         {
             throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPayloadLength);
         }
@@ -119,27 +111,6 @@ public static class RuntimeProtocolValidator
         if (header.DeadlineUtc <= utcNow)
         {
             throw new RuntimeProtocolException(RuntimeProtocolError.DeadlineExpired);
-        }
-    }
-
-    public static void Validate(RuntimeHandshakeRequest handshake)
-    {
-        ArgumentNullException.ThrowIfNull(handshake);
-
-        ValidateVersion(handshake.ProtocolVersion);
-        if (handshake.RuntimeEpoch == Guid.Empty)
-        {
-            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidRuntimeEpoch);
-        }
-
-        if (handshake.ExpectedPeerProcessId <= 0)
-        {
-            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPeerProcessId);
-        }
-
-        if (handshake.BootstrapNonce.Length != RuntimeProtocol.BootstrapNonceBytes)
-        {
-            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidBootstrapNonce);
         }
     }
 
