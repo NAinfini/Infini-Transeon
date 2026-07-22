@@ -98,18 +98,36 @@ public sealed class RuntimeFlowContractTests
     {
         TargetInstanceId target = new(Guid.NewGuid());
         Guid slot = Guid.NewGuid();
+        Guid region = Guid.NewGuid();
+        var style = new OverlayRegionStyleSnapshot(
+            OverlayBackgroundTreatment.Translucent,
+            OverlayTextAlignment.Left,
+            "#CC000000",
+            "#FFFFFFFF",
+            0.8,
+            12,
+            8,
+            24,
+            12,
+            4);
         var state = new OverlayDesiredState(
             Guid.NewGuid(),
             target,
             overlayRevision: 2,
-            [new OverlaySlotSnapshot(slot, 0, OverlaySlotState.Success, "你好", "primary")]);
+            [new OverlayRegionSnapshot(region, new OverlayPixelRect(10, 20, 300, 100), style,
+                [new OverlaySlotSnapshot(slot, 0, OverlaySlotState.Success, "你好", "primary")])]);
 
-        Assert.Equal(slot, state.OrderedSlots[0].SlotId);
+        Assert.Equal(slot, state.Regions[0].OrderedSlots[0].SlotId);
         Assert.Throws<ArgumentException>(() => new OverlayDesiredState(
             state.RuntimeEpoch,
             target,
             3,
-            [state.OrderedSlots[0], state.OrderedSlots[0]]));
+            [state.Regions[0], state.Regions[0]]));
+        Assert.Throws<ArgumentException>(() => new OverlayRegionSnapshot(
+            Guid.NewGuid(),
+            new OverlayPixelRect(0, 0, 100, 100),
+            style with { BlurRadius = 65 },
+            []));
     }
 
     private static OcrExecutionToken OcrToken() => new(

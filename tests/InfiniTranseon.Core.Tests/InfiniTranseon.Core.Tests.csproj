@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
     <ProjectReference Include="..\..\src\InfiniTranseon.Core\InfiniTranseon.Core.csproj" />
+    <ProjectReference Include="..\..\src\InfiniTranseon.ModelWorker\InfiniTranseon.ModelWorker.csproj" />
     <ProjectReference Include="..\InfiniTranseon.Testing\InfiniTranseon.Testing.csproj" />
   </ItemGroup>
   <ItemGroup>

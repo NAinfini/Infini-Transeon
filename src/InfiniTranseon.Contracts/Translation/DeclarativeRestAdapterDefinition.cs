@@ -9,10 +9,25 @@ public enum RestHttpMethod
     Post,
 }
 
+public enum RestBodyFormat { JsonUtf8, FormUrlEncodedUtf8 }
+public enum RestResponseFormat { Json, ServerSentEvents }
+
+public sealed record RestResponseLimits(
+    int MaximumHeaderBytes = 32 * 1024,
+    int MaximumCompressedBytes = 2 * 1024 * 1024,
+    int MaximumDecompressedBytes = 4 * 1024 * 1024,
+    int MaximumJsonDepth = 32,
+    int MaximumSseEventBytes = 64 * 1024,
+    int MaximumCumulativeCharacters = 1_000_000,
+    int TimeoutMilliseconds = 30_000,
+    int IdleTimeoutMilliseconds = 15_000);
+
+public sealed record RestStatusMapping(string ErrorCode, bool Retryable);
+
 public sealed record DeclarativeRestAdapterDefinition
 {
     private static readonly Regex Placeholder = new(
-        "\\{\\{(?<name>[a-zA-Z][a-zA-Z0-9:.]*)\\}\\}",
+        "\\{\\{(?<name>[a-zA-Z][a-zA-Z0-9:.-]*)\\}\\}",
         RegexOptions.CultureInvariant);
     private static readonly HashSet<string> AllowedVariables = new(StringComparer.Ordinal)
     {
@@ -23,6 +38,19 @@ public sealed record DeclarativeRestAdapterDefinition
         "gameName",
         "gameDescription",
         "glossary",
+    };
+    private static readonly HashSet<string> ForbiddenHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Host",
+        "Content-Length",
+        "Transfer-Encoding",
+        "Connection",
+        "Keep-Alive",
+        "Proxy-Authenticate",
+        "Proxy-Authorization",
+        "TE",
+        "Trailer",
+        "Upgrade",
     };
 
     public DeclarativeRestAdapterDefinition(
@@ -35,7 +63,12 @@ public sealed record DeclarativeRestAdapterDefinition
         string? bodyTemplate,
         string responseTextJsonPointer,
         string? responseErrorJsonPointer,
-        IEnumerable<string> credentialReferences)
+        IEnumerable<string> credentialReferences,
+        RestBodyFormat bodyFormat = RestBodyFormat.JsonUtf8,
+        RestResponseFormat responseFormat = RestResponseFormat.Json,
+        RestResponseLimits? responseLimits = null,
+        IReadOnlyDictionary<int, RestStatusMapping>? statusMappings = null,
+        string sseDoneMarker = "[DONE]")
     {
         if (schemaVersion != 1) throw new ArgumentOutOfRangeException(nameof(schemaVersion));
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -65,7 +98,8 @@ public sealed record DeclarativeRestAdapterDefinition
         var ownedHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach ((string name, string value) in headers)
         {
-            if (!IsSafeHeader(name) || value.Contains('\r') || value.Contains('\n'))
+            if (!IsSafeHeader(name) || ForbiddenHeaders.Contains(name) ||
+                value.Contains('\r') || value.Contains('\n'))
             {
                 throw new ArgumentException("REST adapter headers contain invalid characters.", nameof(headers));
             }
@@ -73,6 +107,28 @@ public sealed record DeclarativeRestAdapterDefinition
             ownedHeaders.Add(name, value);
         }
         if (bodyTemplate is not null) ValidateTemplate(bodyTemplate, credentialIds);
+        if (method == RestHttpMethod.Get && bodyTemplate is not null)
+            throw new ArgumentException("GET adapters cannot contain a request body.", nameof(bodyTemplate));
+        RestResponseLimits limits = responseLimits ?? new RestResponseLimits();
+        if (limits.MaximumHeaderBytes is < 1024 or > 128 * 1024 ||
+            limits.MaximumCompressedBytes is < 1024 or > 8 * 1024 * 1024 ||
+            limits.MaximumDecompressedBytes is < 1024 or > 16 * 1024 * 1024 ||
+            limits.MaximumJsonDepth is < 1 or > 64 ||
+            limits.MaximumSseEventBytes is < 256 or > 1024 * 1024 ||
+            limits.MaximumCumulativeCharacters is < 1 or > 1_000_000 ||
+            limits.TimeoutMilliseconds is < 100 or > 300_000 ||
+            limits.IdleTimeoutMilliseconds is < 100 or > 60_000)
+            throw new ArgumentOutOfRangeException(nameof(responseLimits));
+        var mappings = new Dictionary<int, RestStatusMapping>();
+        foreach ((int status, RestStatusMapping mapping) in statusMappings ??
+                     new Dictionary<int, RestStatusMapping>())
+        {
+            if (status is < 400 or > 599 || string.IsNullOrWhiteSpace(mapping.ErrorCode) ||
+                mapping.ErrorCode.Length > 128) throw new ArgumentException("REST status mapping is invalid.", nameof(statusMappings));
+            mappings.Add(status, mapping);
+        }
+        if (responseFormat == RestResponseFormat.ServerSentEvents && string.IsNullOrEmpty(sseDoneMarker))
+            throw new ArgumentException("SSE adapters require a done marker.", nameof(sseDoneMarker));
 
         SchemaVersion = schemaVersion;
         Id = id;
@@ -84,6 +140,11 @@ public sealed record DeclarativeRestAdapterDefinition
         ResponseTextJsonPointer = responseTextJsonPointer;
         ResponseErrorJsonPointer = responseErrorJsonPointer;
         CredentialReferences = Array.AsReadOnly(credentialIds);
+        BodyFormat = bodyFormat;
+        ResponseFormat = responseFormat;
+        ResponseLimits = limits;
+        StatusMappings = new ReadOnlyDictionary<int, RestStatusMapping>(mappings);
+        SseDoneMarker = sseDoneMarker;
     }
 
     public int SchemaVersion { get; }
@@ -96,6 +157,11 @@ public sealed record DeclarativeRestAdapterDefinition
     public string ResponseTextJsonPointer { get; }
     public string? ResponseErrorJsonPointer { get; }
     public IReadOnlyList<string> CredentialReferences { get; }
+    public RestBodyFormat BodyFormat { get; }
+    public RestResponseFormat ResponseFormat { get; }
+    public RestResponseLimits ResponseLimits { get; }
+    public IReadOnlyDictionary<int, RestStatusMapping> StatusMappings { get; }
+    public string SseDoneMarker { get; }
 
     private static bool IsSafeHeader(string name) =>
         !string.IsNullOrWhiteSpace(name) && name.All(character =>

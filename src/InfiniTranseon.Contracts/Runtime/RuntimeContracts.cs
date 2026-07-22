@@ -212,7 +212,11 @@ public sealed record StageExecutionToken
     public long StreamSequence { get; }
 }
 
-public sealed record TextLine(string Text, NormalizedRect Bounds, double Confidence);
+public sealed record TextLine(string Text, NormalizedRect Bounds, double Confidence)
+{
+    public int OrientationDegrees { get; init; }
+    public bool IsVertical { get; init; }
+}
 
 public sealed record TextGeneration(
     CaptureTargetId TargetId,
@@ -244,7 +248,10 @@ public sealed record TranslationChannelDefinition(
     IReadOnlyList<RefinementStepDefinition> RefinementSteps,
     ContextPolicy Context,
     CachePolicy Cache,
-    DisplaySlotDefinition DisplaySlot);
+    DisplaySlotDefinition DisplaySlot)
+{
+    public int RetryCount { get; init; } = 1;
+}
 
 public sealed record TranslationOutput(
     TranslationChannelId ChannelId,
@@ -263,4 +270,7 @@ public sealed record TranslationOutput(
     bool StreamCompleted,
     string? FallbackFromProviderId,
     string? TerminalErrorCode,
-    string? SupersededReason);
+    string? SupersededReason)
+{
+    public bool EstimateOnly { get; init; }
+}

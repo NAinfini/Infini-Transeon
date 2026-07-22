@@ -1,0 +1,49 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="7.0.0">
+  <Package
+      Id="InfiniTranseon.Windows"
+      Name="Infini-Transeon"
+      Manufacturer="Infini-Transeon contributors"
+      Version="$(Version)"
+      Language="1033"
+      Scope="perUser"
+      Compressed="yes">
+    <SummaryInformation Description="Infini-Transeon Windows game translation overlay" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="WINDOWSBUILDNUMBER" Secure="yes">
+      <RegistrySearch
+          Id="WindowsBuildNumberSearch"
+          Root="HKLM"
+          Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+          Name="CurrentBuildNumber"
+          Type="raw" />
+    </Property>
+    <Launch
+        Condition="Installed OR (VersionNT64 AND WINDOWSBUILDNUMBER &gt;= 22621)"
+        Message="Infini-Transeon requires a supported 64-bit Windows 11 release (build 22621 or newer)." />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Infini-Transeon">
+        <Component Id="MainApplication" Bitness="always64">
+          <File Id="MainApplicationExe" Source="$(PublishDir)\InfiniTranseon.App.exe" KeyPath="yes">
+            <Shortcut
+                Id="StartMenuShortcut"
+                Directory="ProgramMenuFolder"
+                Name="Infini-Transeon"
+                WorkingDirectory="INSTALLFOLDER"
+                Advertise="no" />
+          </File>
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="Infini-Transeon" Level="1">
+      <ComponentRef Id="MainApplication" />
+      <Files Include="$(PublishDir)\**" Directory="INSTALLFOLDER">
+        <Exclude Files="$(PublishDir)\InfiniTranseon.App.exe" />
+        <Exclude Files="$(PublishDir)\models\**" />
+        <Exclude Files="$(PublishDir)\*.pdb" />
+      </Files>
+    </Feature>
+  </Package>
+</Wix>

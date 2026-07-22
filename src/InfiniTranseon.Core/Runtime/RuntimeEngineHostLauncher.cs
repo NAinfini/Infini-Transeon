@@ -1,19 +1,126 @@
 using System.Buffers.Binary;
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Channels;
 using InfiniTranseon.Contracts.Runtime;
 using Microsoft.Win32.SafeHandles;
 
 namespace InfiniTranseon.Core.Runtime;
 
-public sealed class RuntimeEngineHostSession : IAsyncDisposable
+public sealed class RuntimeEngineEvent : IDisposable
+{
+    private byte[]? _payload;
+    private RuntimeIpcLease? _ipcLease;
+
+    public RuntimeEngineEvent(
+        RuntimeMessageKind messageKind,
+        Guid eventId,
+        Guid runtimeEpoch,
+        DateTimeOffset deadlineUtc,
+        ReadOnlySpan<byte> payload)
+        : this(messageKind, eventId, runtimeEpoch, deadlineUtc, payload.ToArray())
+    {
+    }
+
+    private RuntimeEngineEvent(
+        RuntimeMessageKind messageKind,
+        Guid eventId,
+        Guid runtimeEpoch,
+        DateTimeOffset deadlineUtc,
+        byte[] ownedPayload,
+        RuntimeIpcLease? ipcLease = null)
+    {
+        MessageKind = messageKind;
+        EventId = eventId;
+        RuntimeEpoch = runtimeEpoch;
+        DeadlineUtc = deadlineUtc;
+        _payload = ownedPayload;
+        _ipcLease = ipcLease;
+    }
+
+    public RuntimeMessageKind MessageKind { get; }
+    public Guid EventId { get; }
+    public Guid RuntimeEpoch { get; }
+    public DateTimeOffset DeadlineUtc { get; }
+    public ReadOnlyMemory<byte> Payload => _payload ?? ReadOnlyMemory<byte>.Empty;
+    public bool IsDisposed => _payload is null;
+
+    internal static RuntimeEngineEvent TakeOwnership(
+        RuntimeMessageKind messageKind,
+        Guid eventId,
+        Guid runtimeEpoch,
+        DateTimeOffset deadlineUtc,
+        byte[] ownedPayload,
+        RuntimeIpcLease? ipcLease = null) =>
+        new(messageKind, eventId, runtimeEpoch, deadlineUtc, ownedPayload, ipcLease);
+
+    public void Dispose()
+    {
+        byte[]? payload = Interlocked.Exchange(ref _payload, null);
+        RuntimeIpcLease? lease = Interlocked.Exchange(ref _ipcLease, null);
+        try
+        {
+            if (payload is not null) CryptographicOperations.ZeroMemory(payload);
+        }
+        finally
+        {
+            lease?.Dispose();
+        }
+    }
+}
+
+public interface IRuntimeEngineHostSession : IAsyncDisposable
+{
+    Guid RuntimeEpoch { get; }
+    IAsyncEnumerable<RuntimeEngineEvent> ReadEventsAsync(
+        CancellationToken cancellationToken = default);
+    ValueTask<RuntimeCaptureTargetAcknowledgement> ApplyCaptureTargetAsync(
+        RuntimeCaptureTargetCommand command,
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
+    ValueTask<RuntimeOverlayAcknowledgement> ApplyOverlayAsync(
+        OverlayDesiredState state,
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
+    ValueTask<PolicyAcknowledgement> ApplyPolicyAsync(
+        PolicyRevision revision,
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
+    ValueTask<RuntimeProcessingConfigurationAcknowledgement>
+        ApplyProcessingConfigurationAsync(
+            RuntimeProcessingConfiguration configuration,
+            TimeSpan timeout,
+            CancellationToken cancellationToken);
+    ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
+        OcrResultSnapshot result,
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
+}
+
+public sealed class RuntimeEngineHostSession : IRuntimeEngineHostSession
 {
     private readonly SafeProcessHandle _processHandle;
     private readonly SafeFileHandle _jobHandle;
-    private readonly SemaphoreSlim _requestGate = new(1, 1);
-    private readonly RuntimeIpcAdmission _admission = new(RuntimeIpcBackpressureOptions.Default);
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private readonly RuntimeBudgetLedger _budgetLedger;
+    private readonly RuntimeIpcAdmission _outgoingAdmission;
+    private readonly RuntimeIpcAdmission _incomingAdmission;
+    private readonly ConcurrentDictionary<Guid, PendingRequest> _pending = new();
+    private readonly ConcurrentDictionary<Guid, byte> _expiredRequests = new();
+    private readonly Channel<RuntimeEngineEvent> _events = Channel.CreateBounded<RuntimeEngineEvent>(
+        new BoundedChannelOptions(256)
+        {
+            SingleReader = false,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait,
+        });
+    private readonly CancellationTokenSource _readerStop = new();
+    private readonly Task _readerTask;
+    private Exception? _readerFailure;
+    private long _droppedEvents;
     private int _shutdownRequested;
     private int _disposeStarted;
     private int _disposed;
@@ -30,6 +137,20 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
         Connection = connection;
         _processHandle = processHandle;
         _jobHandle = jobHandle;
+        _budgetLedger = new RuntimeBudgetLedger(
+            runtimeEpoch,
+            [new RuntimeBudgetPoolDefinition(
+                "app.ipc.inflight.bytes",
+                connection.Capabilities.MaxIpcInFlightBytes)]);
+        _outgoingAdmission = new RuntimeIpcAdmission(
+            RuntimeIpcBackpressureOptions.Default,
+            _budgetLedger,
+            "app.ipc.inflight.bytes");
+        _incomingAdmission = new RuntimeIpcAdmission(
+            RuntimeIpcBackpressureOptions.Default,
+            _budgetLedger,
+            "app.ipc.inflight.bytes");
+        _readerTask = ReceiveLoopAsync();
     }
 
     public int ProcessId { get; }
@@ -37,6 +158,14 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
     public Guid RuntimeEpoch { get; }
 
     public RuntimeNamedPipeConnection Connection { get; }
+
+    public long DroppedEventCount => Interlocked.Read(ref _droppedEvents);
+
+    public RuntimeBudgetSnapshot AppBudgetSnapshot => _budgetLedger.Snapshot();
+
+    public IAsyncEnumerable<RuntimeEngineEvent> ReadEventsAsync(
+        CancellationToken cancellationToken = default) =>
+        _events.Reader.ReadAllAsync(cancellationToken);
 
     public bool HasExited
     {
@@ -70,12 +199,165 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
         }
     }
 
-    public ValueTask PingAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
-        RoundTripAsync(
+    public async ValueTask PingAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        byte[] payload = await RequestAsync(
             RuntimeMessageKind.ControlRequest,
             RuntimeMessageKind.ControlResponse,
+            [],
             timeout,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        if (payload.Length != 0)
+            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPayloadLength);
+    }
+
+    public async ValueTask<RuntimeCaptureTargetAcknowledgement> ApplyCaptureTargetAsync(
+        RuntimeCaptureTargetCommand command,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.CaptureTargetCommand,
+            RuntimeMessageKind.CaptureTargetAcknowledgement,
+            RuntimeCaptureTargetPayloadCodec.Encode(command),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        RuntimeCaptureTargetAcknowledgement acknowledgement;
+        try
+        {
+            acknowledgement = RuntimeCaptureTargetAcknowledgementPayloadCodec.Decode(
+                responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(
+                RuntimeProtocolError.InvalidPayloadLength, exception);
+        }
+        if (acknowledgement.CommandRevision != command.CommandRevision ||
+            acknowledgement.TargetId != command.TargetId ||
+            acknowledgement.TargetInstanceId != command.TargetInstanceId)
+            throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+        return acknowledgement;
+    }
+
+    public async ValueTask<RuntimeOverlayAcknowledgement> ApplyOverlayAsync(
+        OverlayDesiredState state,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.RuntimeEpoch != RuntimeEpoch)
+            throw new ArgumentException("Overlay state belongs to a different runtime epoch.", nameof(state));
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.OverlayDesiredState,
+            RuntimeMessageKind.OverlayAcknowledgement,
+            RuntimeOverlayDesiredStatePayloadCodec.Encode(state),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        RuntimeOverlayAcknowledgement acknowledgement;
+        try
+        {
+            acknowledgement = RuntimeOverlayAcknowledgementPayloadCodec.Decode(responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPayloadLength, exception);
+        }
+        if (acknowledgement.TargetInstanceId != state.TargetInstanceId ||
+            acknowledgement.OverlayRevision != state.OverlayRevision)
+            throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+        return acknowledgement;
+    }
+
+    public async ValueTask<PolicyAcknowledgement> ApplyPolicyAsync(
+        PolicyRevision revision,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.PolicyRevision,
+            RuntimeMessageKind.PolicyAcknowledgement,
+            RuntimePolicyRevisionPayloadCodec.Encode(revision),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        PolicyAcknowledgement acknowledgement;
+        try
+        {
+            acknowledgement = RuntimePolicyAcknowledgementPayloadCodec.Decode(responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPayloadLength, exception);
+        }
+        if (acknowledgement.Revision != revision.Revision)
+            throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+        return acknowledgement;
+    }
+
+    public async ValueTask<RuntimeProcessingConfigurationAcknowledgement>
+        ApplyProcessingConfigurationAsync(
+            RuntimeProcessingConfiguration configuration,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.ProcessingConfiguration,
+            RuntimeMessageKind.ProcessingConfigurationAcknowledgement,
+            RuntimeProcessingConfigurationPayloadCodec.Encode(configuration),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        RuntimeProcessingConfigurationAcknowledgement acknowledgement;
+        try
+        {
+            acknowledgement = RuntimeProcessingConfigurationAcknowledgementPayloadCodec.Decode(
+                responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(
+                RuntimeProtocolError.InvalidPayloadLength, exception);
+        }
+        if (acknowledgement.TargetInstanceId != configuration.TargetInstanceId ||
+            acknowledgement.ConfigurationRevision != configuration.ConfigurationRevision)
+            throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+        return acknowledgement;
+    }
+
+    public async ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
+        OcrResultSnapshot result,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result.ExecutionToken.Source.RuntimeEpoch != RuntimeEpoch)
+            throw new ArgumentException(
+                "OCR result belongs to a different runtime epoch.", nameof(result));
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.OcrResult,
+            RuntimeMessageKind.OcrResultAcknowledgement,
+            RuntimeOcrResultPayloadCodec.Encode(result),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        RuntimeOcrResultAcknowledgement acknowledgement;
+        try
+        {
+            acknowledgement = RuntimeOcrResultAcknowledgementPayloadCodec.Decode(
+                responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(
+                RuntimeProtocolError.InvalidPayloadLength, exception);
+        }
+        if (acknowledgement.TargetInstanceId != result.ExecutionToken.Source.TargetInstanceId ||
+            acknowledgement.SourceGeneration != result.ExecutionToken.Source.SourceGeneration ||
+            acknowledgement.ResultSequence != result.ExecutionToken.ResultSequence)
+            throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+        return acknowledgement;
+    }
 
     public async ValueTask ShutdownAsync(TimeSpan timeout, CancellationToken cancellationToken)
     {
@@ -84,12 +366,15 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
             return;
         }
 
-        await RoundTripAsync(
+        byte[] payload = await RequestAsync(
             RuntimeMessageKind.ShutdownRequest,
             RuntimeMessageKind.ShutdownAcknowledgement,
+            [],
             timeout,
             cancellationToken,
             allowAfterShutdownRequested: true).ConfigureAwait(false);
+        if (payload.Length != 0)
+            throw new RuntimeProtocolException(RuntimeProtocolError.InvalidPayloadLength);
     }
 
     public async ValueTask DisposeAsync()
@@ -103,30 +388,51 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
         {
             if (!HasExited && Volatile.Read(ref _shutdownRequested) == 0)
             {
-                await ShutdownAsync(TimeSpan.FromSeconds(2), CancellationToken.None)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await ShutdownAsync(TimeSpan.FromSeconds(2), CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exception) when (
+                    exception is IOException or OperationCanceledException)
+                {
+                    // Disposal is still responsible for closing the pipe and job when the
+                    // runtime disconnects or stops responding during best-effort shutdown.
+                }
             }
         }
         finally
         {
             try
             {
+                _readerStop.Cancel();
                 await Connection.DisposeAsync().ConfigureAwait(false);
             }
             finally
             {
+                try
+                {
+                    await _readerTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (_readerStop.IsCancellationRequested)
+                {
+                }
+                while (_events.Reader.TryRead(out RuntimeEngineEvent? runtimeEvent))
+                    runtimeEvent.Dispose();
                 _jobHandle.Dispose();
                 _ = RuntimeProcessNative.WaitForSingleObject(_processHandle, 5_000U);
                 _processHandle.Dispose();
-                _requestGate.Dispose();
+                _writeGate.Dispose();
+                _readerStop.Dispose();
                 Volatile.Write(ref _disposed, 1);
             }
         }
     }
 
-    private async ValueTask RoundTripAsync(
+    private async ValueTask<byte[]> RequestAsync(
         RuntimeMessageKind requestKind,
         RuntimeMessageKind responseKind,
+        byte[] requestPayload,
         TimeSpan timeout,
         CancellationToken cancellationToken,
         bool allowAfterShutdownRequested = false)
@@ -143,10 +449,15 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
         {
             throw new InvalidOperationException("EngineHost shutdown has already been requested.");
         }
+        if (Volatile.Read(ref _readerFailure) is Exception readerFailure)
+            throw new IOException("EngineHost receive loop is unavailable.", readerFailure);
 
-        int frameBytes = RuntimeProtocol.WireHeaderBytes;
+        if (requestPayload.Length > RuntimeProtocol.MaxPayloadBytes)
+            throw new ArgumentOutOfRangeException(nameof(requestPayload));
+        int frameBytes = checked(RuntimeProtocol.WireHeaderBytes + requestPayload.Length);
         RuntimeMessageLane lane = RuntimeMessageLaneClassifier.Classify(requestKind);
-        if (!_admission.TryAcquire(lane, frameBytes, out RuntimeIpcLease? admissionLease))
+        if (!_outgoingAdmission.TryAcquire(
+                lane, frameBytes, out RuntimeIpcLease? admissionLease))
         {
             throw new RuntimeIpcBackpressureException(lane);
         }
@@ -155,7 +466,10 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
         using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
             timeoutSource.CancelAfter(timeout);
-            await _requestGate.WaitAsync(timeoutSource.Token).ConfigureAwait(false);
+            Guid requestId = Guid.NewGuid();
+            var pending = new PendingRequest(responseKind);
+            if (!_pending.TryAdd(requestId, pending))
+                throw new InvalidOperationException("Runtime request identifier collision.");
             try
             {
                 DateTimeOffset deadline = DateTimeOffset.UtcNow.Add(timeout);
@@ -163,33 +477,162 @@ public sealed class RuntimeEngineHostSession : IAsyncDisposable
                     new RuntimeEnvelopeHeader(
                         RuntimeProtocol.CurrentVersion,
                         requestKind,
-                        Guid.NewGuid(),
+                        requestId,
                         RuntimeEpoch,
-                        0,
+                        requestPayload.Length,
                         deadline),
-                    []);
-                await RuntimeFrameCodec.WriteAsync(
-                    Connection.Stream,
-                    request,
-                    timeoutSource.Token).ConfigureAwait(false);
-                using RuntimeFrame response = await RuntimeFrameCodec.ReadAsync(
-                    Connection.Stream,
-                    DateTimeOffset.UtcNow,
-                    timeoutSource.Token).ConfigureAwait(false);
-                bool valid = response.Header.MessageKind == responseKind &&
-                    response.Header.RequestId == request.Header.RequestId &&
-                    response.Header.RuntimeEpoch == RuntimeEpoch &&
-                    response.Payload.IsEmpty;
-                if (!valid)
+                    requestPayload);
+                await _writeGate.WaitAsync(timeoutSource.Token).ConfigureAwait(false);
+                try
                 {
-                    throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+                    await RuntimeFrameCodec.WriteAsync(
+                        Connection.Stream,
+                        request,
+                        timeoutSource.Token).ConfigureAwait(false);
                 }
+                finally
+                {
+                    _writeGate.Release();
+                }
+                return await pending.Completion.Task.WaitAsync(timeoutSource.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                if (_pending.TryRemove(requestId, out _))
+                {
+                    if (_expiredRequests.Count >= 64) _expiredRequests.Clear();
+                    _expiredRequests.TryAdd(requestId, 0);
+                }
+                throw;
             }
             finally
             {
-                _requestGate.Release();
+                _pending.TryRemove(requestId, out _);
             }
         }
+    }
+
+    private async Task ReceiveLoopAsync()
+    {
+        try
+        {
+            while (!_readerStop.IsCancellationRequested)
+            {
+                using RuntimeFrame frame = await RuntimeFrameCodec.ReadAsync(
+                    Connection.Stream,
+                    DateTimeOffset.UtcNow,
+                    _readerStop.Token).ConfigureAwait(false);
+                if (frame.Header.RuntimeEpoch != RuntimeEpoch)
+                    throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+
+                if (_pending.TryRemove(frame.Header.RequestId, out PendingRequest? pending))
+                {
+                    if (frame.Header.MessageKind != pending.ExpectedKind)
+                    {
+                        pending.Completion.TrySetException(new RuntimeProtocolException(
+                            RuntimeProtocolError.UnexpectedMessageKind));
+                    }
+                    else
+                    {
+                        pending.Completion.TrySetResult(frame.Payload.ToArray());
+                    }
+                    continue;
+                }
+                if (_expiredRequests.TryRemove(frame.Header.RequestId, out _)) continue;
+                if (IsResponseKind(frame.Header.MessageKind))
+                    throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+
+                int eventBytes = checked(
+                    RuntimeProtocol.WireHeaderBytes + frame.Header.PayloadLength);
+                RuntimeMessageLane lane = RuntimeMessageLaneClassifier.Classify(
+                    frame.Header.MessageKind);
+                if (!_incomingAdmission.TryAcquire(
+                        lane, eventBytes, out RuntimeIpcLease? eventLease))
+                {
+                    Interlocked.Increment(ref _droppedEvents);
+                    throw new RuntimeProtocolException(
+                        RuntimeProtocolError.EventQueueCapacityExceeded);
+                }
+                RuntimeEngineEvent runtimeEvent;
+                try
+                {
+                    runtimeEvent = RuntimeEngineEvent.TakeOwnership(
+                        frame.Header.MessageKind,
+                        frame.Header.RequestId,
+                        frame.Header.RuntimeEpoch,
+                        frame.Header.DeadlineUtc,
+                        frame.Payload.ToArray(),
+                        eventLease);
+                }
+                catch
+                {
+                    eventLease!.Dispose();
+                    throw;
+                }
+                try
+                {
+                    EnqueueEventOrThrow(_events.Writer, runtimeEvent);
+                }
+                catch
+                {
+                    Interlocked.Increment(ref _droppedEvents);
+                    throw;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_readerStop.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (Volatile.Read(ref _disposeStarted) != 0)
+            {
+                _events.Writer.TryComplete();
+                return;
+            }
+            Volatile.Write(ref _readerFailure, exception);
+            foreach ((_, PendingRequest pending) in _pending)
+                pending.Completion.TrySetException(exception);
+            _events.Writer.TryComplete(exception);
+            return;
+        }
+        _events.Writer.TryComplete();
+    }
+
+    private static bool IsResponseKind(RuntimeMessageKind kind) => kind is
+        RuntimeMessageKind.HandshakeResponse or
+        RuntimeMessageKind.ControlResponse or
+        RuntimeMessageKind.PolicyAcknowledgement or
+        RuntimeMessageKind.ShutdownAcknowledgement or
+        RuntimeMessageKind.CaptureTargetAcknowledgement or
+        RuntimeMessageKind.OverlayAcknowledgement or
+        RuntimeMessageKind.ProcessingConfigurationAcknowledgement or
+        RuntimeMessageKind.OcrResultAcknowledgement;
+
+    internal static void EnqueueEventOrThrow(
+        ChannelWriter<RuntimeEngineEvent> writer,
+        RuntimeEngineEvent runtimeEvent)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(runtimeEvent);
+        if (writer.TryWrite(runtimeEvent)) return;
+        runtimeEvent.Dispose();
+        throw new RuntimeProtocolException(
+            RuntimeProtocolError.EventQueueCapacityExceeded);
+    }
+
+    private sealed class PendingRequest
+    {
+        public PendingRequest(RuntimeMessageKind expectedKind)
+        {
+            ExpectedKind = expectedKind;
+            Completion = new TaskCompletionSource<byte[]>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public RuntimeMessageKind ExpectedKind { get; }
+        public TaskCompletionSource<byte[]> Completion { get; }
     }
 }
 
@@ -214,6 +657,7 @@ public static class RuntimeEngineHostLauncher
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        WindowsPlatformGuard.EnsureCurrentSystemSupported();
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
         string fullExecutablePath = Path.GetFullPath(executablePath);
         if (!File.Exists(fullExecutablePath) ||

@@ -68,9 +68,9 @@
 
 裁决标准：沙箱内可运行、同精度下吞吐、常驻内存、打包体积。
 
-### 3.3 容量合同缺口（需回写架构规格）
+### 3.3 容量合同
 
-`RuntimeCapabilities v1` 未包含 ModelWorker 的内存上限（`MaxEngineCommittedBytes` 只约束 EngineHost）。3B INT8 常驻约 4 GB，必须作为独立预算项进入容量合同（v1 修订或 v2），否则 admission control 对本地翻译不设防。
+`RuntimeCapabilities v1` 使用独立的 `MaxModelWorkerCommittedBytes = 8 GiB` 上限；`MaxEngineCommittedBytes` 只约束 EngineHost。ModelWorker 沙箱 Job Object 必须使用不高于该值的配置，实际模型仍可按机器预算选择更低上限。
 
 ### 3.4 质量门槛
 
@@ -102,7 +102,7 @@ CI 许可证审计（Task 1/15 已定义）必须覆盖上表全部条目；模�
 
 - [ ] ModelWorker 推理运行时裁决（CTranslate2 vs ONNX 导出），含沙箱内实测（§3.2）
 - [ ] 竖排日文支持结论（§2.2）
-- [ ] ModelWorker 内存上限进入容量合同（§3.3，需回写架构规格）
+- [x] ModelWorker 内存上限进入容量合同（§3.3）
 - [ ] 覆盖层 CJK 回退字体选定与 OFL 合规（§4）
 - [ ] PP-OCRv5 ONNX 转换来源与 opset 固化（§2.1）
 - [ ] 阈值校准完成后回写 Task 16（§5）

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinitranseon.dev/schemas/declarative-rest/v1.json",
+  "title": "InfiniTranseon declarative REST adapter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "displayName", "endpoint", "method", "headers", "response"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{2,127}$" },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "method": { "enum": ["get", "post"] },
+    "headers": {
+      "type": "object",
+      "maxProperties": 32,
+      "additionalProperties": { "type": "string", "maxLength": 8192 }
+    },
+    "body": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["format", "template"],
+      "properties": {
+        "format": { "enum": ["json-utf8", "form-url-encoded-utf8"] },
+        "template": { "type": "string", "maxLength": 1048576 }
+      }
+    },
+    "credentialReferences": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "textJsonPointer"],
+      "properties": {
+        "format": { "enum": ["json", "sse"] },
+        "textJsonPointer": { "type": "string", "pattern": "^/", "maxLength": 512 },
+        "errorJsonPointer": { "type": ["string", "null"], "pattern": "^/", "maxLength": 512 },
+        "sseDoneMarker": { "type": "string", "maxLength": 128 },
+        "maximumHeaderBytes": { "type": "integer", "minimum": 1024, "maximum": 131072 },
+        "maximumCompressedBytes": { "type": "integer", "minimum": 1024, "maximum": 8388608 },
+        "maximumDecompressedBytes": { "type": "integer", "minimum": 1024, "maximum": 16777216 },
+        "maximumJsonDepth": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "maximumSseEventBytes": { "type": "integer", "minimum": 256, "maximum": 1048576 },
+        "maximumCumulativeCharacters": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "timeoutMilliseconds": { "type": "integer", "minimum": 100, "maximum": 300000 },
+        "idleTimeoutMilliseconds": { "type": "integer", "minimum": 100, "maximum": 60000 }
+      }
+    },
+    "statusMappings": {
+      "type": "object",
+      "maxProperties": 32,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["errorCode", "retryable"],
+        "properties": {
+          "errorCode": { "type": "string", "pattern": "^[a-z][A-Za-z0-9._-]{1,127}$" },
+          "retryable": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "description": "Templates allow only documented data variables and credential references. Scripts, file access and executable plugins are forbidden."
+}

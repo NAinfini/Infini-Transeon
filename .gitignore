@@ -4,6 +4,7 @@ artifacts/
 .packages/
 bin/
 obj/
+/*.obj
 build/
 out/
 TestResults/

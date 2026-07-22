@@ -1,0 +1,45 @@
+{
+  "runId": "deterministic-smoke",
+  "machine": "synthetic",
+  "cpu": "synthetic",
+  "gpu": null,
+  "targetCount": 2,
+  "resolution": "3840x2160",
+  "samples": [
+    {
+      "fixtureId": "cjk-clean-001",
+      "scenario": "clean-subtitle",
+      "language": "ja",
+      "expectedText": "勇者😀",
+      "actualText": "勇者😀",
+      "detectionMilliseconds": 12,
+      "recognitionMilliseconds": 28,
+      "localPipelineMilliseconds": 48,
+      "expectedDetected": true,
+      "actualDetected": true,
+      "cpuCommittedBytes": 134217728,
+      "gpuCommittedBytes": 67108864,
+      "providerNetworkMilliseconds": 125,
+      "cacheHit": false,
+      "providerFailed": false,
+      "estimatedCost": 0.0002
+    },
+    {
+      "fixtureId": "latin-blank-001",
+      "scenario": "blank",
+      "language": "en",
+      "expectedText": "",
+      "actualText": "",
+      "detectionMilliseconds": 10,
+      "recognitionMilliseconds": 0,
+      "localPipelineMilliseconds": 12,
+      "expectedDetected": false,
+      "actualDetected": false,
+      "cpuCommittedBytes": 134217728,
+      "gpuCommittedBytes": 67108864,
+      "cacheHit": true,
+      "providerFailed": false,
+      "estimatedCost": 0
+    }
+  ]
+}

@@ -94,6 +94,8 @@ flowchart LR
 
 App 与 ModelWorker 使用单独的版本化命名管道。管道 ACL 绑定 AppContainer/package SID 和当前用户，握手绑定预期 PID、一次性 bootstrap secret 与 `WorkerSessionEpoch`；消息和队列均有硬上限。bootstrap secret 通过 `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` 唯一允许的继承匿名管道 read handle 传入，握手后双方立即关闭；它不得进入命令行、环境、日志或持久文件，其他句柄一律不继承。ModelWorker 重启必须改变 epoch，使所有旧请求和旧流式结果失效。严格离线测试需要从 worker 内实际尝试 DNS 与 TCP，并验证均被阻断。
 
+模型下载只能接收 `ModelCatalogService` 在 Ed25519 验签和 anti-rollback 接受后创建的只读 `VerifiedModelCatalog`；不得把调用者临时构造的目录条目当作已验签授权。下载 HTTP client 在显式用户批准、严格离线检查和目录解析全部通过后才允许构造。worker 管道故障会使当前请求显式失败并销毁旧会话，下一次请求创建新 `WorkerSessionEpoch`；关闭管理器必须等待进行中的请求结束。
+
 ### 3.4 IPC
 
 App 与 EngineHost 使用带版本的受保护命名管道：
@@ -136,6 +138,7 @@ RuntimeCapabilities v1
 ├─ MaxOcrSessions = 4
 ├─ MaxOcrTensorWorkspaceBytes = 268435456
 ├─ MaxEngineCommittedBytes = 2147483648
+├─ MaxModelWorkerCommittedBytes = 8589934592
 ├─ MaxGpuBytesPerAdapter = min(1073741824, 25% DXGI budget)
 ├─ MaxIpcMessageBytes = 8388608
 ├─ MaxIpcInFlightBytes = 33554432
@@ -242,7 +245,7 @@ flowchart LR
 2. 缓存键绑定提供商、模型、语言对、规范化原文、提示版本、术语表版本、档案策略和影响输出的上下文摘要。
 3. 1–4 条通道并行启动，每条通道获得固定 `ImmutableSlotId`。
 4. 每条通道首阶段可以直接使用 NMT 或带游戏名、描述、场景、说话人、术语表和有限最近上下文的 LLM。
-5. 首译后可以执行最多 2 个用户明确配置的 LLM 二次润色步骤。
+5. 首译后可以执行最多 2 个用户明确配置的 LLM 二次润色步骤。每个固定槽携带阶段编号；二次润色必须先满足该区域的最短阅读停留时间，再只对原槽做透明度交叉过渡。全局“减少动态效果”保留阅读停留但将过渡时长置零，流式首译的逐字更新不得触发该动画。
 6. 每次提供商尝试最多 1 次有限重试、最多 2 个备用提供商；失败只改变该槽位，不阻塞其他通道。
 7. Provider adapter 在进程内用连续 `ProviderDeltaSequence` 验证并组装原始 delta；原始 delta 缺口会终止 attempt。对外只发布累计 `TextSnapshot`，其 `StageExecutionToken.StreamSequence` 是可合并的单调 snapshot revision，允许因背压跳号；旧 revision 和非法终态被拒绝。
 8. 不存在自动评审、候选获胜或游戏内逐句选择。

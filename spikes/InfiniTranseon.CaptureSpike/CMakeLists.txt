@@ -3,7 +3,7 @@ add_executable(InfiniTranseon.CaptureSpike
 )
 
 target_compile_features(InfiniTranseon.CaptureSpike PRIVATE cxx_std_20)
-target_link_libraries(InfiniTranseon.CaptureSpike PRIVATE windowsapp)
+target_link_libraries(InfiniTranseon.CaptureSpike PRIVATE windowsapp user32 gdi32 dxgi)
 
 if(MSVC)
     target_compile_options(InfiniTranseon.CaptureSpike PRIVATE
@@ -13,6 +13,8 @@ if(MSVC)
         /sdl
     )
 endif()
+
+infini_copy_asan_runtime(InfiniTranseon.CaptureSpike)
 
 if(BUILD_TESTING)
     add_test(

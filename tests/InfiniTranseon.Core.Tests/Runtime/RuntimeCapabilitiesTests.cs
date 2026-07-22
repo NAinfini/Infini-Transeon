@@ -32,6 +32,7 @@ public sealed class RuntimeCapabilitiesTests
         Assert.Equal(4, capabilities.MaxOcrSessions);
         Assert.Equal(268_435_456L, capabilities.MaxOcrTensorWorkspaceBytes);
         Assert.Equal(2_147_483_648L, capabilities.MaxEngineCommittedBytes);
+        Assert.Equal(8_589_934_592L, capabilities.MaxModelWorkerCommittedBytes);
         Assert.Equal(1_073_741_824L, capabilities.MaxGpuBytesPerAdapterCeiling);
         Assert.Equal(25, capabilities.MaxGpuBudgetPercentage);
         Assert.Equal(8_388_608, capabilities.MaxIpcMessageBytes);

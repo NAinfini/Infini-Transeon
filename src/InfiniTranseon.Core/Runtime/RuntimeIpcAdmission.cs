@@ -12,7 +12,8 @@ public static class RuntimeMessageLaneClassifier
 {
     public static RuntimeMessageLane Classify(RuntimeMessageKind kind) => kind switch
     {
-        RuntimeMessageKind.CloudOcrCropRequest or RuntimeMessageKind.Thumbnail =>
+        RuntimeMessageKind.OcrResult or RuntimeMessageKind.CloudOcrCropRequest or
+            RuntimeMessageKind.Thumbnail =>
             RuntimeMessageLane.Data,
         _ => RuntimeMessageLane.Control,
     };
@@ -58,15 +59,32 @@ public sealed class RuntimeIpcAdmission
 {
     private readonly object _gate = new();
     private readonly RuntimeIpcBackpressureOptions _options;
+    private readonly RuntimeBudgetLedger? _budgetLedger;
+    private readonly string? _budgetPoolName;
     private int _controlItems;
     private int _dataItems;
     private long _controlBytes;
     private long _dataBytes;
 
     public RuntimeIpcAdmission(RuntimeIpcBackpressureOptions options)
+        : this(options, null, null)
+    {
+    }
+
+    public RuntimeIpcAdmission(
+        RuntimeIpcBackpressureOptions options,
+        RuntimeBudgetLedger? budgetLedger,
+        string? budgetPoolName)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if ((budgetLedger is null) != (budgetPoolName is null))
+            throw new ArgumentException(
+                "A runtime budget ledger and pool name must be configured together.");
+        if (budgetPoolName is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(budgetPoolName);
         _options = options;
+        _budgetLedger = budgetLedger;
+        _budgetPoolName = budgetPoolName;
     }
 
     public long TotalReservedBytes
@@ -100,6 +118,15 @@ public sealed class RuntimeIpcAdmission
                 return false;
             }
 
+            RuntimeBudgetReservation? budgetReservation = null;
+            if (_budgetLedger is not null && !_budgetLedger.TryReserve(
+                    _budgetPoolName!, bytes, out budgetReservation, out _))
+            {
+                lease = null;
+                return false;
+            }
+            budgetReservation?.Commit();
+
             if (lane == RuntimeMessageLane.Control)
             {
                 ++_controlItems;
@@ -110,7 +137,8 @@ public sealed class RuntimeIpcAdmission
                 ++_dataItems;
                 _dataBytes += bytes;
             }
-            lease = new RuntimeIpcLease(this, lane, bytes);
+            lease = new RuntimeIpcLease(
+                this, lane, bytes, budgetReservation);
             return true;
         }
     }
@@ -138,17 +166,25 @@ public sealed class RuntimeIpcLease : IDisposable
     private RuntimeIpcAdmission? _owner;
     private readonly RuntimeMessageLane _lane;
     private readonly int _bytes;
+    private readonly RuntimeBudgetReservation? _budgetReservation;
 
-    internal RuntimeIpcLease(RuntimeIpcAdmission owner, RuntimeMessageLane lane, int bytes)
+    internal RuntimeIpcLease(
+        RuntimeIpcAdmission owner,
+        RuntimeMessageLane lane,
+        int bytes,
+        RuntimeBudgetReservation? budgetReservation)
     {
         _owner = owner;
         _lane = lane;
         _bytes = bytes;
+        _budgetReservation = budgetReservation;
     }
 
     public void Dispose()
     {
         RuntimeIpcAdmission? owner = Interlocked.Exchange(ref _owner, null);
-        owner?.Release(_lane, _bytes);
+        if (owner is null) return;
+        owner.Release(_lane, _bytes);
+        _budgetReservation?.Dispose();
     }
 }

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "runtime": {
+    "package": "Microsoft.ML.OnnxRuntime",
+    "version": "1.27.1",
+    "architecture": "x64",
+    "defaultExecutionProvider": "cpu",
+    "optionalExecutionProviders": ["winml"],
+    "minimumOpset": 11,
+    "maximumOpset": 23
+  },
+  "modelsDownloadedOnlyOnUserRequest": true,
+  "bundledModels": []
+}

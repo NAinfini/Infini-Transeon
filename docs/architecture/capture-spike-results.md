@@ -5,8 +5,11 @@
 ## Automated evidence
 
 - The package manifest is tested to declare `uap11:Capability Name="graphicsCaptureWithoutBorder"` exactly once.
-- The capture spike builds against the Windows 11 SDK and exposes package-identity and borderless-consent probes.
+- The capture spike builds with strict MSVC warnings and exposes package-identity, borderless-consent,
+  capture-exclusion, global-hotkey and DXGI adapter/output probes.
 - The borderless-consent command refuses to request access when package identity is absent.
+- The adapter inventory command completed on the development host and reported all DXGI adapters plus
+  attached-output physical coordinates. This is inventory evidence only, not cross-adapter capture evidence.
 - No automated command opens the system consent prompt.
 
 ## Commands
@@ -16,9 +19,15 @@ From the configured x64 Debug build output:
 ```text
 InfiniTranseon.CaptureSpike.exe --package-identity
 InfiniTranseon.CaptureSpike.exe --request-borderless
+InfiniTranseon.CaptureSpike.exe --capture-exclusion
+InfiniTranseon.CaptureSpike.exe --hotkey-probe
+InfiniTranseon.CaptureSpike.exe --adapter-inventory
 ```
 
-The second command may display a Windows system prompt and must only be run as part of an explicit manual test session.
+The borderless command may display a Windows system prompt. The exclusion command verifies the display-affinity
+API and shows a probe window for 15 seconds, but a tester must still confirm that both window and display capture
+omit it. The hotkey command waits up to 30 seconds for `Ctrl+Alt+F10`. These interactive commands must only be run
+as part of an explicit manual test session.
 
 ## Required manual matrix
 

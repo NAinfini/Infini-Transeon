@@ -51,7 +51,13 @@ public sealed record Ed25519TrustRootSet
     public IReadOnlyList<string> RevokedKeyIds { get; }
 }
 
-public sealed class SignedSequenceState
+public interface ISignedSequenceState
+{
+    long HighestAccepted { get; }
+    bool TryAccept(long sequence);
+}
+
+public sealed class SignedSequenceState : ISignedSequenceState
 {
     private long _highestAccepted;
 

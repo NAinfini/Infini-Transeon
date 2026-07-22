@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows",
+  "architecture": "x64",
+  "minimumWindowsBuild": 22621,
+  "entryPoint": "InfiniTranseon.App.exe",
+  "requiredFiles": [
+    "InfiniTranseon.App.exe",
+    "InfiniTranseon.EngineHost.exe",
+    "InfiniTranseon.ModelWorker.exe",
+    "LICENSE",
+    "NOTICE",
+    "THIRD-PARTY-NOTICES.json",
+    "sbom.json"
+  ],
+  "excludedPatterns": [
+    "models/**",
+    "credentials/**",
+    "history/**",
+    "screenshots/**",
+    "*.pdb"
+  ],
+  "userDataLocation": "%LOCALAPPDATA%\\Infini-Transeon",
+  "secretsInPortableDirectory": false,
+  "updatePolicy": {
+    "checkByDefault": true,
+    "automaticDownload": false,
+    "automaticInstall": false,
+    "requireUserApproval": true,
+    "requireSignedManifest": true,
+    "requireArtifactSha256": true
+  }
+}

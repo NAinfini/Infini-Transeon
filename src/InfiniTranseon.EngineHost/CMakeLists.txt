@@ -1,4 +1,5 @@
 add_library(InfiniTranseon.EngineHost.Runtime STATIC
+    ipc/runtime_capture_controller.cpp
     ipc/runtime_protocol.cpp
     ipc/runtime_server.cpp
 )
@@ -7,9 +8,12 @@ target_include_directories(InfiniTranseon.EngineHost.Runtime PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ipc"
 )
 target_compile_features(InfiniTranseon.EngineHost.Runtime PUBLIC cxx_std_20)
-target_link_libraries(InfiniTranseon.EngineHost.Runtime PRIVATE
+target_link_libraries(InfiniTranseon.EngineHost.Runtime PUBLIC
     InfiniTranseon.Engine.Native
+)
+target_link_libraries(InfiniTranseon.EngineHost.Runtime PRIVATE
     advapi32
+    psapi
 )
 
 add_executable(InfiniTranseon.EngineHost main.cpp)
@@ -34,6 +38,8 @@ if(MSVC)
         /sdl
     )
 endif()
+
+infini_copy_asan_runtime(InfiniTranseon.EngineHost)
 
 if(BUILD_TESTING)
     add_test(

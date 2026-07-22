@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BomPath,
-    [string]$ModelCatalogPath
+    [string]$ModelCatalogPath,
+    [string]$NoticesOutputPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,13 +18,21 @@ $allowed = [System.Collections.Generic.HashSet[string]]::new(
     'ISC',
     'Zlib',
     'Unicode-3.0',
-    'MS-PL'
+    'MS-PL',
+    'LicenseRef-Public-Domain-SQLite'
 ) | ForEach-Object { [void]$allowed.Add($_) }
+
+$reviewedLicenseOverrides = @{
+    # SQLite declares a public-domain dedication rather than an SPDX expression.
+    # Pin the exact binary package version so every upgrade requires a fresh review.
+    'SourceGear.sqlite3@3.50.4.5' = 'LicenseRef-Public-Domain-SQLite'
+}
+$notices = [System.Collections.Generic.List[object]]::new()
 
 function Assert-CompatibleLicense {
     param(
         [Parameter(Mandatory = $true)] [string]$Component,
-        [Parameter(Mandatory = $true)] [string[]]$Expressions
+        [Parameter(Mandatory = $true)] [AllowEmptyCollection()] [string[]]$Expressions
     )
 
     if ($Expressions.Count -eq 0) {
@@ -55,7 +64,22 @@ foreach ($component in @($bom.components)) {
             $expressions.Add([string]$entry.license.id)
         }
     }
+    $componentVersion = if ($component.PSObject.Properties.Name -contains 'version') {
+        [string]$component.version
+    } else {
+        ''
+    }
+    $overrideKey = "$([string]$component.name)@$componentVersion"
+    if ($expressions.Count -eq 0 -and $reviewedLicenseOverrides.ContainsKey($overrideKey)) {
+        $expressions.Add([string]$reviewedLicenseOverrides[$overrideKey])
+    }
     Assert-CompatibleLicense -Component ([string]$component.name) -Expressions $expressions.ToArray()
+    $notices.Add([ordered]@{
+        name = [string]$component.name
+        version = $componentVersion
+        licenses = @($expressions.ToArray() | Sort-Object -Unique)
+        packageUrl = if ($component.PSObject.Properties.Name -contains 'purl') { [string]$component.purl } else { $null }
+    })
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ModelCatalogPath) -and
@@ -64,6 +88,22 @@ if (-not [string]::IsNullOrWhiteSpace($ModelCatalogPath) -and
     foreach ($model in @($catalog.models)) {
         Assert-CompatibleLicense -Component ([string]$model.modelId) -Expressions @([string]$model.licenseSpdx)
     }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($NoticesOutputPath)) {
+    $noticeDirectory = Split-Path -Parent $NoticesOutputPath
+    if (-not [string]::IsNullOrWhiteSpace($noticeDirectory)) {
+        New-Item -ItemType Directory -Force -Path $noticeDirectory | Out-Null
+    }
+    $document = [ordered]@{
+        schemaVersion = 1
+        generatedFrom = 'CycloneDX SBOM'
+        components = @($notices | Sort-Object -Property name,version)
+    }
+    [IO.File]::WriteAllText(
+        $NoticesOutputPath,
+        ($document | ConvertTo-Json -Depth 8),
+        [Text.UTF8Encoding]::new($false))
 }
 
 Write-Output 'SBOM and model licenses satisfy the explicit allowlist.'

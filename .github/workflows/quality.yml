@@ -19,14 +19,27 @@ jobs:
         run: |
           dotnet tool restore
           dotnet restore InfiniTranseon.sln
-      - name: Managed tests
-        run: dotnet test tests/InfiniTranseon.Core.Tests/InfiniTranseon.Core.Tests.csproj -c Release --no-restore
-      - name: Native tests
+      - name: Native Debug tests
         shell: pwsh
         run: |
           cmake --preset windows-x64
+          cmake --build --preset windows-x64-debug
+          ctest --test-dir artifacts/cmake/windows-x64 -C Debug --output-on-failure
+      - name: Native Release tests
+        shell: pwsh
+        run: |
           cmake --build --preset windows-x64-release
           ctest --test-dir artifacts/cmake/windows-x64 -C Release --output-on-failure
+      - name: Managed tests
+        run: dotnet test InfiniTranseon.sln -c Release --no-restore
+      - name: Benchmark contract smoke
+        run: dotnet run --project benchmarks/GameOcrBench/GameOcrBench.csproj -c Release --no-build -- benchmarks/GameOcrBench/smoke-samples.json artifacts/game-ocr-bench-smoke.json
+      - name: Native AddressSanitizer tests
+        shell: pwsh
+        run: |
+          cmake --preset windows-x64-asan
+          cmake --build --preset windows-x64-asan
+          ctest --test-dir artifacts/cmake/windows-x64-asan -C RelWithDebInfo --output-on-failure
       - name: Generate CycloneDX SBOM
         run: dotnet tool run dotnet-CycloneDX InfiniTranseon.sln -o artifacts/sbom -fn bom.json -F Json -dpr
       - name: Reject unknown or incompatible licenses
@@ -35,4 +48,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: infini-transeon-sbom
-          path: artifacts/sbom/bom.json
+          path: |
+            artifacts/sbom/bom.json
+            artifacts/game-ocr-bench-smoke.json

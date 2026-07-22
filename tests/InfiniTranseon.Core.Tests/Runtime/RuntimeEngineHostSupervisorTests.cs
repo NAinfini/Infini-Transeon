@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Runtime;
 
 namespace InfiniTranseon.Core.Tests.Runtime;
@@ -70,6 +72,99 @@ public sealed class RuntimeEngineHostSupervisorTests
                 TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task RestartsAfterBackendAlreadyDisposedTheOwnedSession()
+    {
+        await using var supervisor = new RuntimeEngineHostSupervisor(
+            FindEngineHostExecutable(),
+            TimeSpan.FromSeconds(10),
+            new RuntimeEngineHostRestartPolicy(
+                maxAttempts: 1,
+                window: TimeSpan.FromMinutes(1),
+                initialDelay: TimeSpan.Zero,
+                maxDelay: TimeSpan.Zero));
+        RuntimeEngineHostSession first = await supervisor.StartAsync(
+            TestContext.Current.CancellationToken);
+        Guid firstEpoch = first.RuntimeEpoch;
+
+        await first.DisposeAsync();
+        RuntimeEngineHostSession second = await supervisor.RestartAfterRuntimeFailureAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(firstEpoch, second.RuntimeEpoch);
+        Assert.False(second.HasExited);
+    }
+
+    [Fact]
+    public async Task RecoveryCoordinatorReportsFailureAndRebuildsBackendForNewEpoch()
+    {
+        var firstSession = new FakeSession();
+        var secondSession = new FakeSession();
+        var firstRun = new FakeBackendRun(
+            Task.FromException(new InvalidOperationException("pipe failed")));
+        var secondCompletion = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondRun = new FakeBackendRun(secondCompletion.Task);
+        int restarts = 0;
+        var failures = new List<string>();
+        var runs = new Queue<FakeBackendRun>([firstRun, secondRun]);
+        await using var recovery = new RuntimeBackendRecoveryCoordinator(
+            _ => ValueTask.FromResult<IRuntimeEngineHostSession>(firstSession),
+            _ =>
+            {
+                restarts++;
+                return ValueTask.FromResult<IRuntimeEngineHostSession>(secondSession);
+            },
+            _ => runs.Dequeue(),
+            (failure, _) =>
+            {
+                failures.Add(failure.Message);
+                return ValueTask.CompletedTask;
+            });
+
+        recovery.Start();
+        await secondRun.Started.Task.WaitAsync(
+            TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, restarts);
+        Assert.Equal(["pipe failed"], failures);
+        Assert.True(firstRun.Disposed);
+        Assert.True(firstSession.Disposed);
+        Assert.NotEqual(firstSession.RuntimeEpoch, secondSession.RuntimeEpoch);
+    }
+
+    [Fact]
+    public async Task RecoveryCoordinatorReportsInitialLaunchFailureBeforeStopping()
+    {
+        var failures = new List<string>();
+        var recovery = new RuntimeBackendRecoveryCoordinator(
+            _ => ValueTask.FromException<IRuntimeEngineHostSession>(
+                new InvalidOperationException("launch failed")),
+            _ => throw new InvalidOperationException("restart must not run"),
+            _ => throw new InvalidOperationException("backend must not be created"),
+            (failure, _) =>
+            {
+                failures.Add(failure.Message);
+                return ValueTask.CompletedTask;
+            });
+
+        try
+        {
+            recovery.Start();
+            InvalidOperationException failure =
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => recovery.Completion);
+
+            Assert.Equal("launch failed", failure.Message);
+            Assert.Equal(["launch failed"], failures);
+        }
+        finally
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => recovery.DisposeAsync().AsTask());
+        }
+    }
+
     private static void KillAndWait(int processId)
     {
         using Process process = Process.GetProcessById(processId);
@@ -87,20 +182,83 @@ public sealed class RuntimeEngineHostSupervisorTests
         }
 
         Assert.NotNull(directory);
-        string path = Path.Combine(
-            directory.FullName,
-            "artifacts",
-            "cmake",
-            "windows-x64",
-            "src",
-            "InfiniTranseon.EngineHost",
+        string configuration =
 #if DEBUG
-            "Debug",
+            "Debug";
 #else
-            "Release",
+            "Release";
 #endif
-            "InfiniTranseon.EngineHost.exe");
-        Assert.True(File.Exists(path), $"Build EngineHost before this test: {path}");
-        return path;
+        string[] candidates =
+        [
+            Path.Combine(
+                directory.FullName,
+                "artifacts", "cmake", $"ninja-{configuration.ToLowerInvariant()}",
+                "src", "InfiniTranseon.EngineHost", "InfiniTranseon.EngineHost.exe"),
+            Path.Combine(
+                directory.FullName,
+                "artifacts", "cmake", "windows-x64",
+                "src", "InfiniTranseon.EngineHost", configuration,
+                "InfiniTranseon.EngineHost.exe"),
+        ];
+        string? path = candidates.FirstOrDefault(File.Exists);
+        Assert.True(path is not null,
+            $"Build EngineHost before this test: {string.Join(" or ", candidates)}");
+        return path!;
+    }
+
+    private sealed class FakeBackendRun(Task completion) : IRecoverableRuntimeBackend
+    {
+        public TaskCompletionSource Started { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Completion { get; } = completion;
+        public bool Disposed { get; private set; }
+
+        public ValueTask StartAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Started.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FakeSession : IRuntimeEngineHostSession
+    {
+        public Guid RuntimeEpoch { get; } = Guid.NewGuid();
+        public bool Disposed { get; private set; }
+
+        public async IAsyncEnumerable<RuntimeEngineEvent> ReadEventsAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        public ValueTask<RuntimeCaptureTargetAcknowledgement> ApplyCaptureTargetAsync(
+            RuntimeCaptureTargetCommand command, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeOverlayAcknowledgement> ApplyOverlayAsync(
+            OverlayDesiredState state, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<PolicyAcknowledgement> ApplyPolicyAsync(
+            PolicyRevision revision, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeProcessingConfigurationAcknowledgement>
+            ApplyProcessingConfigurationAsync(
+                RuntimeProcessingConfiguration configuration, TimeSpan timeout,
+                CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
+            OcrResultSnapshot result, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
     }
 }

@@ -4,6 +4,10 @@ project(InfiniTranseon LANGUAGES CXX)
 
 include(CTest)
 
+if(MSVC)
+    add_compile_options(/EHsc)
+endif()
+
 option(INFINI_ENABLE_ADDRESS_SANITIZER "Enable AddressSanitizer for native test builds" OFF)
 if(INFINI_ENABLE_ADDRESS_SANITIZER)
     if(NOT MSVC)
@@ -12,16 +16,33 @@ if(INFINI_ENABLE_ADDRESS_SANITIZER)
     add_compile_options(/fsanitize=address /Zi)
     add_link_options(/INCREMENTAL:NO)
 
-    file(READ
-        "${CMAKE_GENERATOR_INSTANCE}/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
-        INFINI_MSVC_TOOLS_VERSION)
-    string(STRIP "${INFINI_MSVC_TOOLS_VERSION}" INFINI_MSVC_TOOLS_VERSION)
-    set(INFINI_ASAN_RUNTIME_DIR
-        "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/MSVC/${INFINI_MSVC_TOOLS_VERSION}/bin/Hostx64/x64")
+    if(DEFINED ENV{VCToolsInstallDir} AND
+       EXISTS "$ENV{VCToolsInstallDir}/bin/Hostx64/x64")
+        file(TO_CMAKE_PATH "$ENV{VCToolsInstallDir}/bin/Hostx64/x64"
+            INFINI_ASAN_RUNTIME_DIR)
+    else()
+        file(READ
+            "${CMAKE_GENERATOR_INSTANCE}/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
+            INFINI_MSVC_TOOLS_VERSION)
+        string(STRIP "${INFINI_MSVC_TOOLS_VERSION}" INFINI_MSVC_TOOLS_VERSION)
+        set(INFINI_ASAN_RUNTIME_DIR
+            "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/MSVC/${INFINI_MSVC_TOOLS_VERSION}/bin/Hostx64/x64")
+    endif()
     if(NOT EXISTS "${INFINI_ASAN_RUNTIME_DIR}/clang_rt.asan_dynamic-x86_64.dll")
         message(FATAL_ERROR "MSVC AddressSanitizer runtime was not found in ${INFINI_ASAN_RUNTIME_DIR}.")
     endif()
 endif()
+
+function(infini_copy_asan_runtime target_name)
+    if(INFINI_ENABLE_ADDRESS_SANITIZER)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${INFINI_ASAN_RUNTIME_DIR}/clang_rt.asan_dynamic-x86_64.dll"
+                "$<TARGET_FILE_DIR:${target_name}>"
+            VERBATIM
+        )
+    endif()
+endfunction()
 
 function(infini_configure_test_runtime test_name)
     if(INFINI_ENABLE_ADDRESS_SANITIZER)

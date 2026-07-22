@@ -34,6 +34,23 @@ public sealed class PackageManifestTests
         Assert.Equal("10.0.22621.0", family.Attribute("MinVersion")?.Value);
     }
 
+    [Fact]
+    public void ReleaseWorkflowStagesPortableManifestBeforeCreatingTheArchive()
+    {
+        string root = FindRepositoryRoot();
+        string workflow = File.ReadAllText(
+            Path.Combine(root, ".github", "workflows", "build-release.yml"));
+        int stageManifest = workflow.IndexOf(
+            "Copy-Item packaging/portable-manifest.json artifacts/release/publish/",
+            StringComparison.Ordinal);
+        int createArchive = workflow.IndexOf(
+            "Compress-Archive -Path artifacts/release/publish/*",
+            StringComparison.Ordinal);
+
+        Assert.True(stageManifest >= 0, "The portable manifest must be staged into the archive root.");
+        Assert.True(createArchive > stageManifest, "The portable archive must be created after its manifest is staged.");
+    }
+
     private static XDocument LoadManifest()
     {
         string root = FindRepositoryRoot();

@@ -1,0 +1,101 @@
+name: build-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: none
+
+jobs:
+  release:
+    runs-on: windows-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Require signing inputs
+        shell: pwsh
+        env:
+          AUTHENTICODE_CERTIFICATE: ${{ secrets.AUTHENTICODE_CERTIFICATE }}
+          AUTHENTICODE_PASSWORD: ${{ secrets.AUTHENTICODE_PASSWORD }}
+          AUTHENTICODE_PUBLISHER: ${{ secrets.AUTHENTICODE_PUBLISHER }}
+          RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.RELEASE_ED25519_PRIVATE_KEY }}
+          RELEASE_ED25519_KEY_ID: ${{ secrets.RELEASE_ED25519_KEY_ID }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:AUTHENTICODE_CERTIFICATE) -or
+              [string]::IsNullOrWhiteSpace($env:AUTHENTICODE_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace($env:AUTHENTICODE_PUBLISHER) -or
+              [string]::IsNullOrWhiteSpace($env:RELEASE_ED25519_PRIVATE_KEY) -or
+              [string]::IsNullOrWhiteSpace($env:RELEASE_ED25519_KEY_ID)) {
+            throw 'Release signing secrets are required; unsigned releases are forbidden.'
+          }
+      - name: Restore
+        shell: pwsh
+        run: |
+          dotnet restore InfiniTranseon.sln
+          dotnet restore src/InfiniTranseon.Engine.Native/dependencies/InfiniTranseon.Engine.Native.Dependencies.csproj
+      - name: Native release tests
+        shell: pwsh
+        run: |
+          cmake --preset windows-x64
+          cmake --build --preset windows-x64-release
+          ctest --test-dir artifacts/cmake/windows-x64 -C Release --output-on-failure
+      - name: Managed release tests
+        run: dotnet test InfiniTranseon.sln -c Release --no-restore
+      - name: Benchmark contract smoke
+        run: dotnet run --project benchmarks/GameOcrBench/GameOcrBench.csproj -c Release --no-build -- benchmarks/GameOcrBench/smoke-samples.json artifacts/game-ocr-bench-smoke.json
+      - name: Require application project
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath 'src/InfiniTranseon.App/InfiniTranseon.App.csproj')) {
+            throw 'The backend release pipeline is ready, but a release cannot be produced before the separately scoped frontend App project exists.'
+          }
+      - name: Publish Windows processes
+        shell: pwsh
+        run: |
+          dotnet publish src/InfiniTranseon.App/InfiniTranseon.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/release/publish
+          dotnet publish src/InfiniTranseon.ModelWorker/InfiniTranseon.ModelWorker.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/release/model-worker
+          Copy-Item artifacts/release/model-worker/InfiniTranseon.ModelWorker.exe artifacts/release/publish/
+          Copy-Item artifacts/cmake/windows-x64/src/InfiniTranseon.EngineHost/Release/InfiniTranseon.EngineHost.exe artifacts/release/publish/
+          Copy-Item LICENSE,NOTICE artifacts/release/publish/
+          Copy-Item packaging/portable-manifest.json artifacts/release/publish/
+      - name: Authenticode sign published binaries
+        shell: pwsh
+        env:
+          AUTHENTICODE_CERTIFICATE: ${{ secrets.AUTHENTICODE_CERTIFICATE }}
+          AUTHENTICODE_PASSWORD: ${{ secrets.AUTHENTICODE_PASSWORD }}
+          AUTHENTICODE_PUBLISHER: ${{ secrets.AUTHENTICODE_PUBLISHER }}
+        run: ./scripts/sign-release-binaries.ps1 -PublishDirectory artifacts/release/publish
+      - name: Generate and verify SBOM
+        shell: pwsh
+        run: |
+          dotnet tool restore
+          dotnet tool run dotnet-CycloneDX InfiniTranseon.sln -o artifacts/release/publish -fn sbom.json -F Json -dpr
+          ./scripts/verify-sbom-licenses.ps1 -BomPath artifacts/release/publish/sbom.json -NoticesOutputPath artifacts/release/publish/THIRD-PARTY-NOTICES.json
+      - name: Build installer and portable ZIP
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 7.0.0
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          wix build packaging/installer.wxs -arch x64 -d Version=$version -d PublishDir=$((Resolve-Path artifacts/release/publish).Path) -o artifacts/release/Infini-Transeon.msi
+          Compress-Archive -Path artifacts/release/publish/* -DestinationPath artifacts/release/Infini-Transeon-portable.zip
+          git archive --format=zip --output=artifacts/release/Infini-Transeon-source.zip HEAD
+      - name: Sign and create canonical release manifest
+        shell: pwsh
+        env:
+          AUTHENTICODE_CERTIFICATE: ${{ secrets.AUTHENTICODE_CERTIFICATE }}
+          AUTHENTICODE_PASSWORD: ${{ secrets.AUTHENTICODE_PASSWORD }}
+          AUTHENTICODE_PUBLISHER: ${{ secrets.AUTHENTICODE_PUBLISHER }}
+          RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.RELEASE_ED25519_PRIVATE_KEY }}
+          RELEASE_ED25519_KEY_ID: ${{ secrets.RELEASE_ED25519_KEY_ID }}
+        run: ./scripts/build-signed-release.ps1 -ReleaseDirectory artifacts/release -Version $env:GITHUB_REF_NAME
+      - name: Upload GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME artifacts/release/Infini-Transeon.msi artifacts/release/Infini-Transeon-portable.zip artifacts/release/Infini-Transeon-source.zip artifacts/release/release-manifest.json --verify-tag --generate-notes

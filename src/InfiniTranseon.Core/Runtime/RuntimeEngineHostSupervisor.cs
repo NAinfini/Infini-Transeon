@@ -1,5 +1,160 @@
 namespace InfiniTranseon.Core.Runtime;
 
+public interface IRecoverableRuntimeBackend : IAsyncDisposable
+{
+    Task Completion { get; }
+    ValueTask StartAsync(CancellationToken cancellationToken);
+}
+
+public sealed class RuntimeBackendUnexpectedCompletionException : Exception
+{
+    public RuntimeBackendUnexpectedCompletionException()
+        : base("runtime.backend.unexpectedCompletion")
+    {
+    }
+}
+
+public sealed class RuntimeBackendRecoveryCoordinator : IAsyncDisposable
+{
+    private readonly Func<CancellationToken, ValueTask<IRuntimeEngineHostSession>> _startSession;
+    private readonly Func<CancellationToken, ValueTask<IRuntimeEngineHostSession>> _restartSession;
+    private readonly Func<IRuntimeEngineHostSession, IRecoverableRuntimeBackend> _createBackend;
+    private readonly Func<Exception, CancellationToken, ValueTask> _reportFailure;
+    private readonly CancellationTokenSource _stop = new();
+    private Task? _loop;
+    private int _started;
+    private int _disposed;
+
+    public RuntimeBackendRecoveryCoordinator(
+        Func<CancellationToken, ValueTask<IRuntimeEngineHostSession>> startSession,
+        Func<CancellationToken, ValueTask<IRuntimeEngineHostSession>> restartSession,
+        Func<IRuntimeEngineHostSession, IRecoverableRuntimeBackend> createBackend,
+        Func<Exception, CancellationToken, ValueTask> reportFailure)
+    {
+        ArgumentNullException.ThrowIfNull(startSession);
+        ArgumentNullException.ThrowIfNull(restartSession);
+        ArgumentNullException.ThrowIfNull(createBackend);
+        ArgumentNullException.ThrowIfNull(reportFailure);
+        _startSession = startSession;
+        _restartSession = restartSession;
+        _createBackend = createBackend;
+        _reportFailure = reportFailure;
+    }
+
+    public Task Completion => _loop ?? Task.CompletedTask;
+
+    public void Start()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
+            throw new InvalidOperationException(
+                "Runtime backend recovery has already started.");
+        _loop = RunAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _stop.Cancel();
+        try
+        {
+            if (_loop is not null) await _loop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _stop.Dispose();
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        bool initial = true;
+        while (true)
+        {
+            _stop.Token.ThrowIfCancellationRequested();
+            IRuntimeEngineHostSession session;
+            try
+            {
+                session = await (initial
+                    ? _startSession(_stop.Token)
+                    : _restartSession(_stop.Token)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception launchFailure)
+            {
+                try
+                {
+                    await _reportFailure(launchFailure, _stop.Token).ConfigureAwait(false);
+                }
+                catch (Exception reportFailure)
+                {
+                    throw new AggregateException(launchFailure, reportFailure);
+                }
+                throw;
+            }
+            initial = false;
+            IRecoverableRuntimeBackend? backend = null;
+            Exception? failure = null;
+            try
+            {
+                backend = _createBackend(session) ??
+                    throw new InvalidOperationException(
+                        "Runtime backend factory returned no backend.");
+                await backend.StartAsync(_stop.Token).ConfigureAwait(false);
+                await backend.Completion.WaitAsync(_stop.Token).ConfigureAwait(false);
+                failure = new RuntimeBackendUnexpectedCompletionException();
+            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+            finally
+            {
+                if (backend is not null)
+                {
+                    try
+                    {
+                        await backend.DisposeAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception disposeFailure)
+                    {
+                        failure = failure is null
+                            ? disposeFailure
+                            : new AggregateException(failure, disposeFailure);
+                    }
+                }
+                try
+                {
+                    await session.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception sessionDisposeFailure)
+                {
+                    failure = failure is null
+                        ? sessionDisposeFailure
+                        : new AggregateException(failure, sessionDisposeFailure);
+                }
+            }
+            if (_stop.IsCancellationRequested)
+            {
+                if (failure is not null) throw failure;
+                return;
+            }
+            await _reportFailure(
+                failure ?? new RuntimeBackendUnexpectedCompletionException(),
+                _stop.Token).ConfigureAwait(false);
+        }
+    }
+}
+
 public sealed record RuntimeEngineHostRestartPolicy
 {
     public RuntimeEngineHostRestartPolicy(
@@ -151,6 +306,35 @@ public sealed class RuntimeEngineHostSupervisor : IAsyncDisposable
             {
                 throw new RuntimeRestartLimitExceededException();
             }
+
+            RuntimeEngineHostSession previous = _current;
+            _current = null;
+            await previous.DisposeAsync().ConfigureAwait(false);
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            _current = await RuntimeEngineHostLauncher.LaunchAsync(
+                _executablePath,
+                _handshakeTimeout,
+                cancellationToken).ConfigureAwait(false);
+            return _current;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async ValueTask<RuntimeEngineHostSession> RestartAfterRuntimeFailureAsync(
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_current is null)
+                throw new InvalidOperationException(
+                    "EngineHost supervisor has not been started.");
+            if (!_restartBudget.TryReserve(DateTimeOffset.UtcNow, out TimeSpan delay))
+                throw new RuntimeRestartLimitExceededException();
 
             RuntimeEngineHostSession previous = _current;
             _current = null;

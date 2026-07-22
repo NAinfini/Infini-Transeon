@@ -24,6 +24,7 @@ public sealed record RuntimeCapabilities(
     int MaxOcrSessions,
     long MaxOcrTensorWorkspaceBytes,
     long MaxEngineCommittedBytes,
+    long MaxModelWorkerCommittedBytes,
     long MaxGpuBytesPerAdapterCeiling,
     int MaxGpuBudgetPercentage,
     int MaxIpcMessageBytes,
@@ -32,6 +33,8 @@ public sealed record RuntimeCapabilities(
     long MaxTranslationCacheBytes,
     long MaxDatabasePageCacheBytes)
 {
+    public const long ModelWorkerCommittedBytesLimit = 8L * 1024 * 1024 * 1024;
+
     public static RuntimeCapabilities VersionOne { get; } = new(
         ProtocolVersion: 1,
         MaxCaptureSources: 8,
@@ -56,6 +59,7 @@ public sealed record RuntimeCapabilities(
         MaxOcrSessions: 4,
         MaxOcrTensorWorkspaceBytes: 268_435_456,
         MaxEngineCommittedBytes: 2_147_483_648,
+        MaxModelWorkerCommittedBytes: ModelWorkerCommittedBytesLimit,
         MaxGpuBytesPerAdapterCeiling: 1_073_741_824,
         MaxGpuBudgetPercentage: 25,
         MaxIpcMessageBytes: 8_388_608,

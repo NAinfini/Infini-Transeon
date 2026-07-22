@@ -13,7 +13,7 @@ public static class RuntimeHandshakeFrames
 {
     private const int ProcessIdBytes = sizeof(int);
     private const int PayloadBytes = (2 * ProcessIdBytes) + RuntimeProtocol.BootstrapNonceBytes;
-    private const int ResponsePayloadBytes = 172;
+    private const int ResponsePayloadBytes = 180;
 
     public static RuntimeFrame CreateRequest(
         int localProcessId,
@@ -135,7 +135,7 @@ public static class RuntimeHandshakeFrames
 
 internal static class RuntimeCapabilitiesWireCodec
 {
-    internal const int ByteCount = 168;
+    internal const int ByteCount = 176;
 
     public static void Write(Span<byte> destination, RuntimeCapabilities value)
     {
@@ -164,6 +164,7 @@ internal static class RuntimeCapabilitiesWireCodec
         WriteInt32(destination, ref offset, value.MaxOcrSessions);
         WriteInt64(destination, ref offset, value.MaxOcrTensorWorkspaceBytes);
         WriteInt64(destination, ref offset, value.MaxEngineCommittedBytes);
+        WriteInt64(destination, ref offset, value.MaxModelWorkerCommittedBytes);
         WriteInt64(destination, ref offset, value.MaxGpuBytesPerAdapterCeiling);
         WriteInt32(destination, ref offset, value.MaxGpuBudgetPercentage);
         WriteInt32(destination, ref offset, value.MaxIpcMessageBytes);
@@ -190,6 +191,7 @@ internal static class RuntimeCapabilitiesWireCodec
             ReadInt64(source, ref offset), ReadInt32(source, ref offset), ReadInt32(source, ref offset),
             ReadInt64(source, ref offset), ReadInt64(source, ref offset), ReadInt32(source, ref offset),
             ReadInt64(source, ref offset), ReadInt64(source, ref offset), ReadInt64(source, ref offset),
+            ReadInt64(source, ref offset),
             ReadInt32(source, ref offset), ReadInt32(source, ref offset), ReadInt64(source, ref offset),
             ReadInt64(source, ref offset), ReadInt64(source, ref offset), ReadInt64(source, ref offset));
         Validate(value);

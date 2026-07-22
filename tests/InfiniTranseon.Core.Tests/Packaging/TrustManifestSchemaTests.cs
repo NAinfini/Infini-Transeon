@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Diagnostics;
+using InfiniTranseon.Core.Updates;
 
 namespace InfiniTranseon.Core.Tests.Packaging;
 
@@ -33,6 +35,8 @@ public sealed class TrustManifestSchemaTests
             "downloadOrigins", "files");
         AssertRequired(schema.RootElement.GetProperty("$defs").GetProperty("modelFile"),
             "relativePath", "byteSize", "sha256");
+        Assert.Equal(0, model.GetProperty("properties").GetProperty("opset")
+            .GetProperty("minimum").GetInt32());
     }
 
     [Fact]
@@ -41,6 +45,49 @@ public sealed class TrustManifestSchemaTests
         string root = FindRepositoryRoot();
         Assert.Contains("Apache License", File.ReadAllText(Path.Combine(root, "LICENSE")));
         Assert.Contains("Infini-Transeon", File.ReadAllText(Path.Combine(root, "NOTICE")));
+    }
+
+    [Fact]
+    public async Task ReleaseSigningScriptCanonicalizerMatchesRuntimeForUnicodeAndPropertyOrder()
+    {
+        string root = FindRepositoryRoot();
+        string directory = Path.Combine(Path.GetTempPath(), "infini-canonical-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string input = Path.Combine(directory, "input.json");
+        string output = Path.Combine(directory, "output.json");
+        try
+        {
+            const string json = """
+                {"z":"测试<&","signatures":[{"signature":"ignored","keyId":"k","algorithm":"Ed25519"}],"a":{"y":2,"x":"é"}}
+                """;
+            await File.WriteAllTextAsync(input, json, TestContext.Current.CancellationToken);
+            using JsonDocument document = JsonDocument.Parse(json);
+            byte[] expected = SignatureVerifier.CanonicalizeWithoutSignatures(document.RootElement);
+            var start = new ProcessStartInfo("pwsh")
+            {
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true,
+            };
+            start.ArgumentList.Add("-NoProfile");
+            start.ArgumentList.Add("-File");
+            start.ArgumentList.Add(Path.Combine(root, "scripts", "convert-to-canonical-json.ps1"));
+            start.ArgumentList.Add("-InputPath");
+            start.ArgumentList.Add(input);
+            start.ArgumentList.Add("-OutputPath");
+            start.ArgumentList.Add(output);
+            using Process process = Process.Start(start) ?? throw new InvalidOperationException("pwsh did not start.");
+            string error = await process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(process.ExitCode == 0, error);
+            Assert.Equal(expected, await File.ReadAllBytesAsync(output, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static JsonDocument Load(string fileName) => JsonDocument.Parse(

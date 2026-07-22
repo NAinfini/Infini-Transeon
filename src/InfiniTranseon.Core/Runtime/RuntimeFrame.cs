@@ -38,5 +38,12 @@ public sealed class RuntimeFrame : IDisposable
     }
 
     private static bool IsSensitive(RuntimeMessageKind messageKind) =>
-        messageKind is RuntimeMessageKind.HandshakeRequest or RuntimeMessageKind.HandshakeResponse;
+        messageKind is RuntimeMessageKind.HandshakeRequest or
+            RuntimeMessageKind.HandshakeResponse or
+            RuntimeMessageKind.OcrResult or
+            RuntimeMessageKind.CloudOcrCropRequest or
+            RuntimeMessageKind.TranslationOutput or
+            RuntimeMessageKind.TranslationStreamSnapshot or
+            RuntimeMessageKind.OverlayDesiredState or
+            RuntimeMessageKind.Thumbnail;
 }

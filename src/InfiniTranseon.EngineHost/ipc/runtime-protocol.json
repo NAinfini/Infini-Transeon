@@ -39,7 +39,7 @@
     ]
   },
   "handshakeResponse": {
-    "payloadBytes": 172,
+    "payloadBytes": 180,
     "fields": [
       "authenticatedServerProcessId",
       "RuntimeCapabilitiesV1"
@@ -55,16 +55,32 @@
     "backpressure": "bounded-control-and-data-lanes-with-explicit-rejection",
     "ordering": "runtime epoch then source/channel/stage token then strictly increasing cumulative sequence",
     "streaming": "complete-cumulative-snapshot",
-    "policyAcknowledgement": "strictly-increasing-sent-revisions-only",
+    "policyAcknowledgement": "strictly-increasing-sent-revisions-per-profile-id",
     "reconnect": "full-state-no-text-replay"
   },
   "postHandshake": {
-    "ownership": "one serialized request-response owner per connection",
+    "ownership": "one receive loop multiplexes correlated responses and bounded events; writes are serialized",
     "heartbeatRequest": "ControlRequest",
     "heartbeatResponse": "ControlResponse",
     "shutdownRequest": "ShutdownRequest",
     "shutdownResponse": "ShutdownAcknowledgement",
+    "supportedCommands": [
+      "CaptureTargetCommand",
+      "OverlayDesiredState",
+      "PolicyRevision",
+      "ProcessingConfiguration",
+      "OcrResult"
+    ],
+    "overlayAcknowledgement": "returned only after the native overlay owner thread applies or explicitly rejects the complete revision",
+    "policyAcknowledgement": "returned only after profile identity validation and atomic replacement of every matching target policy, including an empty baseline snapshot",
+    "processingConfigurationAcknowledgement": "returned after target existence, profile identity, revision ordering, capacity and scheduling fields are validated and atomically stored",
+    "ocrResultAcknowledgement": "returned after embedded runtime identity, target, profile, area and monotonic source/result generations are validated",
     "unsupportedMessageBehavior": "explicit protocol failure and connection termination"
+  },
+  "payloadSchemas": {
+    "OverlayDesiredState": 4,
+    "PolicyRevision": 2,
+    "ProcessingConfiguration": 3
   },
   "backpressure": {
     "controlMaxItems": 64,
@@ -74,6 +90,7 @@
     "sharedMaxBytes": 33554432,
     "dataLaneKinds": [
       "CloudOcrCropRequest",
+      "OcrResult",
       "Thumbnail"
     ],
     "rejection": "immediate explicit failure without waiting or silent dropping"
@@ -111,7 +128,14 @@
     "Thumbnail",
     "ReconnectSnapshot",
     "ShutdownRequest",
-    "ShutdownAcknowledgement"
+    "ShutdownAcknowledgement",
+    "CaptureTargetCommand",
+    "CaptureTargetAcknowledgement",
+    "OverlayAcknowledgement",
+    "ProcessingConfiguration",
+    "ProcessingConfigurationAcknowledgement",
+    "OcrResultAcknowledgement",
+    "RuntimeBudgetSnapshot"
   ],
   "ordering": "request-scoped sequence and runtime epoch",
   "reconnect": "full state snapshot; never replay text or provider completions"

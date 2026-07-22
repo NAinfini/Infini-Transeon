@@ -33,6 +33,13 @@ public enum RuntimeMessageKind
     ReconnectSnapshot = 16,
     ShutdownRequest = 17,
     ShutdownAcknowledgement = 18,
+    CaptureTargetCommand = 19,
+    CaptureTargetAcknowledgement = 20,
+    OverlayAcknowledgement = 21,
+    ProcessingConfiguration = 22,
+    ProcessingConfigurationAcknowledgement = 23,
+    OcrResultAcknowledgement = 24,
+    RuntimeBudgetSnapshot = 25,
 }
 
 public sealed record RuntimeEnvelopeHeader(
@@ -60,6 +67,7 @@ public enum RuntimeProtocolError
     UnexpectedMessageKind,
     AuthenticationFailed,
     HandshakeAlreadyAttempted,
+    EventQueueCapacityExceeded,
 }
 
 public sealed class RuntimeProtocolException : Exception
