@@ -1,9 +1,20 @@
 using System.Text.Json;
 using System.Text;
+using GameOcrBench;
+
+// Generator / verification modes are dispatched before the original positional-args
+// contract so the CI smoke invocation (`<samples.json> <report.json>`) is untouched.
+if (args.Length >= 1 && args[0] == "generate-fixtures")
+    return FixtureGenerator.RunCli(args[1..]);
+if (args.Length >= 1 && args[0] == "--self-check")
+    return FixtureGenerator.SelfCheck();
 
 if (args.Length != 2)
 {
-    Console.Error.WriteLine("Usage: GameOcrBench <samples.json> <report.json>");
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  GameOcrBench <samples.json> <report.json>");
+    Console.Error.WriteLine("  GameOcrBench generate-fixtures <output-dir> [--seed N] [--scenarios a,b] [--languages a,b]");
+    Console.Error.WriteLine("  GameOcrBench --self-check");
     return 2;
 }
 
