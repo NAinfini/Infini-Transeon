@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Standalone frontend platform spike (Work Package 2, milestone M0, plan Task 0).
+    Deliberately NOT added to InfiniTranseon.sln; the orchestrator wires it up later.
+    No NuGet packages: BCL + Win32 P/Invoke only. TargetFramework, LangVersion,
+    Nullable, TreatWarningsAsErrors and PlatformTarget are inherited from
+    Directory.Build.props and re-stated here only where this spike must diverge.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.22621.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Pure Win32 P/Invoke; the WinRT projection is not needed for this spike. -->
+    <CsWinRTEnabled>false</CsWinRTEnabled>
+    <SelfContained>false</SelfContained>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>
