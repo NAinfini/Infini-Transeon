@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\InfiniTranseon.Core\InfiniTranseon.Core.csproj" />
   </ItemGroup>
 
   <!--
