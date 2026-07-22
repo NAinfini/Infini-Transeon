@@ -1,7 +1,10 @@
 <Page
     x:Class="InfiniTranseon.App.Features.SetupWizard.SetupWizardPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:data="using:InfiniTranseon.App.Presentation"
+    xmlns:probes="using:InfiniTranseon.Contracts.Probes"
+    Loaded="OnLoaded">
     <Grid Padding="{StaticResource PagePadding}" RowSpacing="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -52,24 +55,107 @@
         </StackPanel>
 
         <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Stretch">
-            <Grid>
-                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep1, Mode=OneWay}">
-                    <TextBlock x:Uid="SetupStep1Heading" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock x:Uid="SetupStep1Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep2, Mode=OneWay}">
-                    <TextBlock x:Uid="SetupStep2Heading" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock x:Uid="SetupStep2Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep3, Mode=OneWay}">
-                    <TextBlock x:Uid="SetupStep3Heading" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock x:Uid="SetupStep3Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep4, Mode=OneWay}">
-                    <TextBlock x:Uid="SetupStep4Heading" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock x:Uid="SetupStep4Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
-                </StackPanel>
-            </Grid>
+            <ScrollViewer>
+                <Grid>
+                    <!-- Step 1: profile name + capture target selection -->
+                    <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.IsStep1, Mode=OneWay}">
+                        <TextBlock x:Uid="SetupStep1Heading" Style="{StaticResource SectionHeaderStyle}" />
+                        <TextBox x:Uid="SetupProfileNameBox" Text="{x:Bind ViewModel.ProfileName, Mode=TwoWay}"
+                                 MaxWidth="420" HorizontalAlignment="Left" />
+                        <TextBlock x:Uid="SetupStep1Body" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
+                        <ListView ItemsSource="{x:Bind ViewModel.Targets, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedTarget, Mode=TwoWay}"
+                                  SelectionMode="Single" MaxHeight="260" HorizontalAlignment="Left" MinWidth="420">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="probes:CaptureProbeTarget">
+                                    <StackPanel Spacing="2" Padding="4">
+                                        <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" />
+                                        <TextBlock Style="{StaticResource CaptionTextStyle}">
+                                            <Run Text="{x:Bind Kind}" /><Run Text=" · " /><Run Text="{x:Bind PixelWidth}" /><Run Text="×" /><Run Text="{x:Bind PixelHeight}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+
+                    <!-- Step 2: languages + translator channel + credential entry -->
+                    <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.IsStep2, Mode=OneWay}">
+                        <TextBlock x:Uid="SetupStep2Heading" Style="{StaticResource SectionHeaderStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBox x:Uid="SetupSourceLanguageBox" Text="{x:Bind ViewModel.SourceLanguage, Mode=TwoWay}" Width="180" />
+                            <TextBox x:Uid="SetupTargetLanguageBox" Text="{x:Bind ViewModel.TargetLanguage, Mode=TwoWay}" Width="180" />
+                        </StackPanel>
+                        <ComboBox x:Uid="SetupProviderSelector" MinWidth="280" HorizontalAlignment="Left"
+                                  ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedProvider, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="data:ProviderRow">
+                                    <TextBlock Text="{x:Bind Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock x:Uid="SetupSecretHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PasswordBox x:Name="ProviderSecretBox" x:Uid="SetupSecretBox" MinWidth="280" />
+                            <Button x:Uid="SetupSaveSecretButton" Click="OnSaveSecretClick" VerticalAlignment="Bottom" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Step 3: region list editor (name + priority) -->
+                    <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.IsStep3, Mode=OneWay}">
+                        <TextBlock x:Uid="SetupStep3Heading" Style="{StaticResource SectionHeaderStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox x:Name="RegionNameBox" x:Uid="SetupRegionNameBox" MinWidth="220" />
+                            <ComboBox x:Name="RegionPrioritySelector" SelectedIndex="0" MinWidth="110" VerticalAlignment="Bottom">
+                                <ComboBoxItem Content="P0" />
+                                <ComboBoxItem Content="P1" />
+                                <ComboBoxItem Content="P2" />
+                                <ComboBoxItem Content="P3" />
+                            </ComboBox>
+                            <Button x:Uid="SetupAddRegionButton" Click="OnAddRegionClick"
+                                    Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom" />
+                        </StackPanel>
+                        <ListView ItemsSource="{x:Bind ViewModel.Regions, Mode=OneWay}" SelectionMode="None"
+                                  MaxHeight="240" HorizontalAlignment="Left" MinWidth="420">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="data:ProfileRegionDraft">
+                                    <Grid ColumnSpacing="12" Padding="4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{x:Bind Name}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Priority}" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="2" x:Uid="SetupRemoveRegionButton" Tag="{x:Bind}"
+                                                Click="OnRemoveRegionClick" MinWidth="32" MinHeight="32" Padding="6">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+
+                    <!-- Step 4: review + save -->
+                    <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.IsStep4, Mode=OneWay}">
+                        <TextBlock x:Uid="SetupStep4Heading" Style="{StaticResource SectionHeaderStyle}" />
+                        <TextBlock x:Uid="SetupSummaryProfileLabel" Style="{StaticResource CaptionTextStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.ProfileName, Mode=OneWay}" FontWeight="SemiBold" FontSize="{StaticResource TypeBodyLarge}" />
+                        <TextBlock Style="{StaticResource CaptionTextStyle}">
+                            <Run Text="{x:Bind ViewModel.SourceLanguage, Mode=OneWay}" /><Run Text=" → " /><Run Text="{x:Bind ViewModel.TargetLanguage, Mode=OneWay}" />
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock x:Uid="SetupSummaryRegionsLabel" Style="{StaticResource CaptionTextStyle}" />
+                            <TextBlock Text="{x:Bind ViewModel.Regions.Count, Mode=OneWay}" Style="{StaticResource CaptionTextStyle}" />
+                        </StackPanel>
+                        <InfoBar x:Uid="SetupSaveErrorBar" Severity="Error" IsClosable="False"
+                                 IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
         </Border>
 
         <Grid Grid.Row="3">
@@ -82,12 +168,18 @@
             </Button>
             <Button x:Uid="SetupNextButton" HorizontalAlignment="Right" MinWidth="120"
                     Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind ViewModel.CanGoNext, Mode=OneWay}"
                     Command="{x:Bind ViewModel.NextCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock x:Uid="SetupNextButtonLabel" />
                     <FontIcon Glyph="&#xE72A;" FontSize="14" />
                 </StackPanel>
             </Button>
+            <Button x:Uid="SetupSaveButton" HorizontalAlignment="Right" MinWidth="140"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind ViewModel.IsLastStep, Mode=OneWay}"
+                    IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
+                    Click="OnSaveProfileClick" />
         </Grid>
     </Grid>
 </Page>

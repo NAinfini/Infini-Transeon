@@ -4,41 +4,43 @@ using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
 using InfiniTranseon.Contracts.Probes;
+using InfiniTranseon.Core.Privacy;
+using InfiniTranseon.Core.Probes;
+using InfiniTranseon.Core.Settings;
+using InfiniTranseon.Core.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace InfiniTranseon.App.Composition;
 
 /// <summary>
-/// Composition root for the control application. Registration is kept free of WinUI types so the
-/// same graph is exercised by unit tests. Fakes are registered as the current implementations;
-/// real backend-integrated services replace them at their integration gates.
+/// Composition root for the control application. Registration is kept free of WinUI types so the same
+/// graph is exercised by unit tests. View models are shared across both compositions; production
+/// startup wires the real backend-integrated services (<see cref="AddRealPresentationServices"/>)
+/// while tests and the not-yet-realizable seams use fakes (<see cref="AddFakePresentationServices"/>).
 /// </summary>
 public static class PresentationComposition
 {
-    public static IServiceCollection AddPresentationServices(this IServiceCollection services)
+    /// <summary>
+    /// View models, the runtime state store, capabilities service, and the seams still owned by WP6
+    /// (the four Contracts.Probes doubles and the runtime control service). These stay fake in BOTH
+    /// compositions until WP6 lands their real counterparts; the UI already codes against the interfaces.
+    /// </summary>
+    public static IServiceCollection AddPresentationViewModels(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Presentation services (fakes until backend gates).
-        services.AddSingleton<IProfileService, FakeProfileService>();
-        services.AddSingleton<IRuntimeControlService, FakeRuntimeControlService>();
-        services.AddSingleton<IHistoryService, FakeHistoryService>();
-        services.AddSingleton<IDiagnosticsService, FakeDiagnosticsService>();
-        services.AddSingleton<IGlossaryService, FakeGlossaryService>();
-        services.AddSingleton<ISettingsService, FakeSettingsService>();
-        services.AddSingleton<ISecretReferenceService, FakeSecretReferenceService>();
         services.AddSingleton<IRuntimeCapabilitiesService, RuntimeCapabilitiesService>();
 
-        // Probe doubles for setup/workbench UI (real integrations at backend Tasks 3/6/8/11).
+        // Deterministic doubles for the runtime seams; the real graph overrides every one of these
+        // with the EngineHost-backed implementations in AddRealPresentationServices.
+        services.AddSingleton<IRuntimeControlService, FakeRuntimeControlService>();
         services.AddSingleton<ICaptureProbe, FakeCaptureProbe>();
         services.AddSingleton<IOcrProbe, FakeOcrProbe>();
         services.AddSingleton<ITranslationProbe, FakeTranslationProbe>();
         services.AddSingleton<IOverlayPreviewRenderer, FakeOverlayPreviewRenderer>();
 
-        // Single runtime state store.
         services.AddSingleton<RuntimeStateStore>();
 
-        // View models (new instance per navigation).
         services.AddTransient<ProfileCenterViewModel>();
         services.AddTransient<RunningTargetsViewModel>();
         services.AddTransient<HistoryViewModel>();
@@ -51,14 +53,121 @@ public static class PresentationComposition
         return services;
     }
 
+    /// <summary>Deterministic in-memory content services for unit tests and design-time.</summary>
+    public static IServiceCollection AddFakePresentationServices(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<IProfileService, FakeProfileService>();
+        services.AddSingleton<IHistoryService, FakeHistoryService>();
+        services.AddSingleton<IDiagnosticsService, FakeDiagnosticsService>();
+        services.AddSingleton<IGlossaryService, FakeGlossaryService>();
+        services.AddSingleton<ISettingsService, FakeSettingsService>();
+        services.AddSingleton<ISecretReferenceService, FakeSecretReferenceService>();
+
+        return services;
+    }
+
     /// <summary>
-    /// Builds the service provider. Any registration or construction failure propagates so the
-    /// caller can open a local recovery window instead of reporting fake success.
+    /// Real Core-backed content services. The data root directory is created eagerly when each store is
+    /// constructed; a failure to create it or open the database propagates out of <see cref="BuildReal"/>
+    /// so startup opens the recovery window instead of silently falling back to in-memory data.
     /// </summary>
+    public static IServiceCollection AddRealPresentationServices(
+        this IServiceCollection services,
+        AppDataOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(options);
+
+        services.AddSingleton(options);
+
+        services.AddSingleton(_ =>
+        {
+            options.EnsureRootExists();
+            return new ProfileRepository(options.DatabasePath);
+        });
+        services.AddSingleton(_ =>
+        {
+            options.EnsureRootExists();
+            return new ApplicationSettingsRepository(options.DatabasePath);
+        });
+        services.AddSingleton(_ =>
+        {
+            options.EnsureRootExists();
+            return new UiPreferencesStore(options.UiPreferencesPath);
+        });
+        services.AddSingleton<IBoundCredentialStore, GenericCredentialStore>();
+
+        services.AddSingleton<ISecretReferenceService>(provider =>
+            new RealSecretReferenceService(provider.GetRequiredService<IBoundCredentialStore>()));
+        services.AddSingleton<ISettingsService>(provider => new RealSettingsService(
+            provider.GetRequiredService<ApplicationSettingsRepository>(),
+            provider.GetRequiredService<UiPreferencesStore>(),
+            provider.GetRequiredService<ISecretReferenceService>()));
+        services.AddSingleton<IProfileService>(provider => new RealProfileService(
+            provider.GetRequiredService<ProfileRepository>(),
+            options.DatabasePath));
+        services.AddSingleton<IHistoryService>(provider => new RealHistoryService(
+            options,
+            provider.GetRequiredService<ProfileRepository>(),
+            provider.GetRequiredService<ISettingsService>()));
+        services.AddSingleton<IDiagnosticsService>(_ => new RealDiagnosticsService(options));
+        services.AddSingleton<IGlossaryService>(provider => new RealGlossaryService(
+            provider.GetRequiredService<ProfileRepository>()));
+
+        // Real probes: capture enumerates live windows/monitors; OCR crop and overlay pixel preview
+        // are not carried by protocol v1 and throw the typed unsupported exception; the translation
+        // probe exercises the same DeepL provider + credential binding the runtime uses.
+        services.AddSingleton<ICaptureProbe, CaptureProbe>();
+        services.AddSingleton<IOcrProbe, OcrProbe>();
+        services.AddSingleton<IOverlayPreviewRenderer, OverlayPreviewRenderer>();
+        services.AddSingleton<ITranslationProbe>(provider => new TranslationProbe(
+            EngineRuntimeComposition.BuildProviderRegistry(
+                provider.GetRequiredService<IBoundCredentialStore>()),
+            EngineRuntimeComposition.DeepLDefinition.Id,
+            timeout: null,
+            provider.GetRequiredService<IBoundCredentialStore>(),
+            Core.Translation.Rest.DeclarativeRestProvider.CreateBinding(
+                EngineRuntimeComposition.DeepLDefinition,
+                EngineRuntimeComposition.DeepLDefinition.CredentialReferences[0]),
+            EngineRuntimeComposition.DeepLDefinition.CredentialReferences[0]));
+
+        // Real engine runtime facade: locates/launches EngineHost per start, streams live targets.
+        services.AddSingleton<IRuntimeControlService>(provider => new RealRuntimeControlService(
+            provider.GetRequiredService<ProfileRepository>(),
+            provider.GetRequiredService<ICaptureProbe>(),
+            provider.GetRequiredService<ISettingsService>(),
+            provider.GetRequiredService<IBoundCredentialStore>(),
+            provider.GetRequiredService<IRuntimeCapabilitiesService>(),
+            options));
+
+        return services;
+    }
+
+    /// <summary>Builds the fake-backed graph used by unit tests and design-time.</summary>
     public static ServiceProvider Build()
     {
         ServiceCollection services = new();
-        services.AddPresentationServices();
+        services.AddPresentationViewModels();
+        services.AddFakePresentationServices();
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+    }
+
+    /// <summary>
+    /// Builds the real graph used at startup. Any registration or construction failure (including a
+    /// database that cannot be opened) propagates so the caller can open a local recovery window.
+    /// </summary>
+    public static ServiceProvider BuildReal(AppDataOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ServiceCollection services = new();
+        services.AddPresentationViewModels();
+        services.AddRealPresentationServices(options);
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateOnBuild = true,

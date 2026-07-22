@@ -30,6 +30,22 @@
   <data name="ToggleOverlayButtonLabel.Text" xml:space="preserve"><value>Toggle overlay</value></data>
   <data name="ManualOcrButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Manual OCR now</value></data>
   <data name="ManualOcrButtonLabel.Text" xml:space="preserve"><value>Manual OCR</value></data>
+  <data name="EngineStartButtonLabel.Text" xml:space="preserve"><value>Start engine</value></data>
+  <data name="EngineStopButtonLabel.Text" xml:space="preserve"><value>Stop engine</value></data>
+  <data name="ManualOcrUnsupportedText.Text" xml:space="preserve"><value>Manual OCR is not supported by engine protocol v1</value></data>
+  <data name="RunningTargetsEmptyText.Text" xml:space="preserve"><value>No running targets. Select a profile and start the engine.</value></data>
+  <data name="EngineStatusStopped" xml:space="preserve"><value>Engine stopped</value></data>
+  <data name="EngineStatusLocating" xml:space="preserve"><value>Locating engine…</value></data>
+  <data name="EngineStatusStarting" xml:space="preserve"><value>Starting engine…</value></data>
+  <data name="EngineStatusRunning" xml:space="preserve"><value>Engine running</value></data>
+  <data name="EngineStatusRestarting" xml:space="preserve"><value>Engine restarting…</value></data>
+  <data name="EngineStatusStopping" xml:space="preserve"><value>Stopping engine…</value></data>
+  <data name="EngineStatusFaulted" xml:space="preserve"><value>Engine faulted</value></data>
+  <data name="EngineStatusExecutableNotFound" xml:space="preserve"><value>Engine executable not found — searched paths below</value></data>
+  <data name="PauseAllLabel" xml:space="preserve"><value>Pause all</value></data>
+  <data name="ResumeAllLabel" xml:space="preserve"><value>Resume all</value></data>
+  <data name="HideOverlayLabel" xml:space="preserve"><value>Hide overlay</value></data>
+  <data name="ShowOverlayLabel" xml:space="preserve"><value>Show overlay</value></data>
   <data name="LatencyP95Label.Text" xml:space="preserve"><value>Latency P95</value></data>
   <data name="ActiveRegionsLabel.Text" xml:space="preserve"><value>Active regions</value></data>
 
@@ -162,4 +178,49 @@
 
   <data name="CompositionErrorTitle.Text" xml:space="preserve"><value>Infini-Transeon could not start</value></data>
   <data name="CompositionErrorBody.Text" xml:space="preserve"><value>A required service failed to initialize, so the application stopped instead of running in a degraded state. Share the details below with support.</value></data>
+
+  <data name="LoadErrorBar.Title" xml:space="preserve"><value>Couldn't load this page</value></data>
+
+  <data name="ProfilesEmptyTitle.Text" xml:space="preserve"><value>No profiles yet</value></data>
+  <data name="ProfilesEmptyBody.Text" xml:space="preserve"><value>Create your first profile to bind a capture target, languages, regions, and a translation channel.</value></data>
+  <data name="ProfilesEmptyCreateButton.Content" xml:space="preserve"><value>Create profile</value></data>
+  <data name="DeleteProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Delete profile</value></data>
+  <data name="DeleteProfileTitle" xml:space="preserve"><value>Delete profile?</value></data>
+  <data name="DeleteProfileBody" xml:space="preserve"><value>This permanently removes the profile and its regions, glossary, and style prompts. This cannot be undone.</value></data>
+  <data name="DeleteProfileConfirm" xml:space="preserve"><value>Delete</value></data>
+  <data name="DeleteProfileCancel" xml:space="preserve"><value>Cancel</value></data>
+
+  <data name="HistoryEmptyTitle.Text" xml:space="preserve"><value>No history yet</value></data>
+  <data name="HistoryEmptyBody.Text" xml:space="preserve"><value>Translated events for the active profile will appear here once capture runs.</value></data>
+  <data name="HistoryDisabledBar.Title" xml:space="preserve"><value>History is off</value></data>
+  <data name="HistoryDisabledBar.Message" xml:space="preserve"><value>History retention is set to Off, so no translation events are being recorded. Enable it in Settings to keep a text-only history.</value></data>
+
+  <data name="DiagnosticsEmptyTitle.Text" xml:space="preserve"><value>No diagnostics yet</value></data>
+  <data name="DiagnosticsEmptyBody.Text" xml:space="preserve"><value>Failures and degradations appear here with a direct recovery action. Nothing is reported externally.</value></data>
+
+  <data name="GlossaryNoProfileTitle.Text" xml:space="preserve"><value>No profile selected</value></data>
+  <data name="GlossaryNoProfileBody.Text" xml:space="preserve"><value>Create a profile first — glossary terms and style prompts are saved inside the active profile.</value></data>
+  <data name="DeleteTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Delete term</value></data>
+  <data name="GlossaryFieldSource" xml:space="preserve"><value>Source term</value></data>
+  <data name="GlossaryFieldTarget" xml:space="preserve"><value>Target term</value></data>
+  <data name="GlossaryFieldNotes" xml:space="preserve"><value>Notes</value></data>
+  <data name="GlossaryFieldProtected" xml:space="preserve"><value>Protected (never auto-corrected)</value></data>
+  <data name="AddTermDialogTitle" xml:space="preserve"><value>Add glossary term</value></data>
+  <data name="AddTermDialogSave" xml:space="preserve"><value>Add</value></data>
+  <data name="AddTermDialogCancel" xml:space="preserve"><value>Cancel</value></data>
+
+  <data name="SetupProfileNameBox.Header" xml:space="preserve"><value>Profile name</value></data>
+  <data name="SetupSourceLanguageBox.Header" xml:space="preserve"><value>Source language</value></data>
+  <data name="SetupTargetLanguageBox.Header" xml:space="preserve"><value>Target language</value></data>
+  <data name="SetupProviderSelector.Header" xml:space="preserve"><value>Translation channel</value></data>
+  <data name="SetupSecretHint.Text" xml:space="preserve"><value>Enter the provider API key. It is stored only in Windows Credential Manager and never written to the profile or logs.</value></data>
+  <data name="SetupSecretBox.Header" xml:space="preserve"><value>API key</value></data>
+  <data name="SetupSaveSecretButton.Content" xml:space="preserve"><value>Save key</value></data>
+  <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>Region name</value></data>
+  <data name="SetupAddRegionButton.Content" xml:space="preserve"><value>Add region</value></data>
+  <data name="SetupRemoveRegionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Remove region</value></data>
+  <data name="SetupSummaryProfileLabel.Text" xml:space="preserve"><value>Profile</value></data>
+  <data name="SetupSummaryRegionsLabel.Text" xml:space="preserve"><value>Regions:</value></data>
+  <data name="SetupSaveErrorBar.Title" xml:space="preserve"><value>Couldn't save profile</value></data>
+  <data name="SetupSaveButton.Content" xml:space="preserve"><value>Save profile</value></data>
 </root>

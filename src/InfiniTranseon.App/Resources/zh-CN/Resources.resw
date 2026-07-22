@@ -30,6 +30,22 @@
   <data name="ToggleOverlayButtonLabel.Text" xml:space="preserve"><value>切换覆盖层</value></data>
   <data name="ManualOcrButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>立即手动识别</value></data>
   <data name="ManualOcrButtonLabel.Text" xml:space="preserve"><value>手动识别</value></data>
+  <data name="EngineStartButtonLabel.Text" xml:space="preserve"><value>启动引擎</value></data>
+  <data name="EngineStopButtonLabel.Text" xml:space="preserve"><value>停止引擎</value></data>
+  <data name="ManualOcrUnsupportedText.Text" xml:space="preserve"><value>引擎协议 v1 不支持手动识别</value></data>
+  <data name="RunningTargetsEmptyText.Text" xml:space="preserve"><value>暂无运行中的目标。请选择配置档案并启动引擎。</value></data>
+  <data name="EngineStatusStopped" xml:space="preserve"><value>引擎已停止</value></data>
+  <data name="EngineStatusLocating" xml:space="preserve"><value>正在定位引擎…</value></data>
+  <data name="EngineStatusStarting" xml:space="preserve"><value>正在启动引擎…</value></data>
+  <data name="EngineStatusRunning" xml:space="preserve"><value>引擎运行中</value></data>
+  <data name="EngineStatusRestarting" xml:space="preserve"><value>引擎正在重启…</value></data>
+  <data name="EngineStatusStopping" xml:space="preserve"><value>正在停止引擎…</value></data>
+  <data name="EngineStatusFaulted" xml:space="preserve"><value>引擎发生故障</value></data>
+  <data name="EngineStatusExecutableNotFound" xml:space="preserve"><value>未找到引擎可执行文件——已探测路径见下方</value></data>
+  <data name="PauseAllLabel" xml:space="preserve"><value>全部暂停</value></data>
+  <data name="ResumeAllLabel" xml:space="preserve"><value>全部恢复</value></data>
+  <data name="HideOverlayLabel" xml:space="preserve"><value>隐藏覆盖层</value></data>
+  <data name="ShowOverlayLabel" xml:space="preserve"><value>显示覆盖层</value></data>
   <data name="LatencyP95Label.Text" xml:space="preserve"><value>延迟 P95</value></data>
   <data name="ActiveRegionsLabel.Text" xml:space="preserve"><value>活跃区域</value></data>
 
@@ -162,4 +178,49 @@
 
   <data name="CompositionErrorTitle.Text" xml:space="preserve"><value>Infini-Transeon 无法启动</value></data>
   <data name="CompositionErrorBody.Text" xml:space="preserve"><value>某个必需服务初始化失败，应用已停止运行，而非以降级状态继续。请将下方详细信息提供给支持人员。</value></data>
+
+  <data name="LoadErrorBar.Title" xml:space="preserve"><value>无法加载此页面</value></data>
+
+  <data name="ProfilesEmptyTitle.Text" xml:space="preserve"><value>暂无档案</value></data>
+  <data name="ProfilesEmptyBody.Text" xml:space="preserve"><value>创建第一个档案，以绑定捕获目标、语言、区域与翻译通道。</value></data>
+  <data name="ProfilesEmptyCreateButton.Content" xml:space="preserve"><value>创建档案</value></data>
+  <data name="DeleteProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>删除档案</value></data>
+  <data name="DeleteProfileTitle" xml:space="preserve"><value>删除此档案？</value></data>
+  <data name="DeleteProfileBody" xml:space="preserve"><value>这将永久删除该档案及其区域、术语表与风格提示。此操作无法撤销。</value></data>
+  <data name="DeleteProfileConfirm" xml:space="preserve"><value>删除</value></data>
+  <data name="DeleteProfileCancel" xml:space="preserve"><value>取消</value></data>
+
+  <data name="HistoryEmptyTitle.Text" xml:space="preserve"><value>暂无历史记录</value></data>
+  <data name="HistoryEmptyBody.Text" xml:space="preserve"><value>捕获运行后，当前档案的翻译事件会显示在这里。</value></data>
+  <data name="HistoryDisabledBar.Title" xml:space="preserve"><value>历史记录已关闭</value></data>
+  <data name="HistoryDisabledBar.Message" xml:space="preserve"><value>历史保留已设置为“关闭”，因此不会记录任何翻译事件。可在“设置”中启用以保留纯文本历史。</value></data>
+
+  <data name="DiagnosticsEmptyTitle.Text" xml:space="preserve"><value>暂无诊断信息</value></data>
+  <data name="DiagnosticsEmptyBody.Text" xml:space="preserve"><value>故障与降级会显示在这里，并附带直接的恢复操作。不会向外部上报任何内容。</value></data>
+
+  <data name="GlossaryNoProfileTitle.Text" xml:space="preserve"><value>未选择档案</value></data>
+  <data name="GlossaryNoProfileBody.Text" xml:space="preserve"><value>请先创建档案——术语表与风格提示会保存在当前档案中。</value></data>
+  <data name="DeleteTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>删除术语</value></data>
+  <data name="GlossaryFieldSource" xml:space="preserve"><value>源术语</value></data>
+  <data name="GlossaryFieldTarget" xml:space="preserve"><value>目标术语</value></data>
+  <data name="GlossaryFieldNotes" xml:space="preserve"><value>备注</value></data>
+  <data name="GlossaryFieldProtected" xml:space="preserve"><value>受保护（永不自动更正）</value></data>
+  <data name="AddTermDialogTitle" xml:space="preserve"><value>添加术语</value></data>
+  <data name="AddTermDialogSave" xml:space="preserve"><value>添加</value></data>
+  <data name="AddTermDialogCancel" xml:space="preserve"><value>取消</value></data>
+
+  <data name="SetupProfileNameBox.Header" xml:space="preserve"><value>档案名称</value></data>
+  <data name="SetupSourceLanguageBox.Header" xml:space="preserve"><value>源语言</value></data>
+  <data name="SetupTargetLanguageBox.Header" xml:space="preserve"><value>目标语言</value></data>
+  <data name="SetupProviderSelector.Header" xml:space="preserve"><value>翻译通道</value></data>
+  <data name="SetupSecretHint.Text" xml:space="preserve"><value>输入服务商 API 密钥。它仅存储在 Windows 凭据管理器中，不会写入档案或日志。</value></data>
+  <data name="SetupSecretBox.Header" xml:space="preserve"><value>API 密钥</value></data>
+  <data name="SetupSaveSecretButton.Content" xml:space="preserve"><value>保存密钥</value></data>
+  <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>区域名称</value></data>
+  <data name="SetupAddRegionButton.Content" xml:space="preserve"><value>添加区域</value></data>
+  <data name="SetupRemoveRegionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>移除区域</value></data>
+  <data name="SetupSummaryProfileLabel.Text" xml:space="preserve"><value>档案</value></data>
+  <data name="SetupSummaryRegionsLabel.Text" xml:space="preserve"><value>区域数：</value></data>
+  <data name="SetupSaveErrorBar.Title" xml:space="preserve"><value>无法保存档案</value></data>
+  <data name="SetupSaveButton.Content" xml:space="preserve"><value>保存档案</value></data>
 </root>

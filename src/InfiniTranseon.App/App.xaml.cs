@@ -1,5 +1,8 @@
 using System;
 using InfiniTranseon.App.Composition;
+using InfiniTranseon.App.Presentation;
+using InfiniTranseon.App.Presentation.Services;
+using InfiniTranseon.App.Theme;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
@@ -22,9 +25,20 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        ApplicationSettings settings;
         try
         {
-            Services = PresentationComposition.Build();
+            Services = PresentationComposition.BuildReal(AppDataOptions.Default);
+
+            // Read the persisted settings up front so the launch reflects the stored theme. The awaits
+            // inside the repository use ConfigureAwait(false), so this one-time startup block cannot
+            // deadlock the dispatcher. A failure here is a real settings/database fault and is routed to
+            // the recovery window rather than silently degraded.
+            settings = Services
+                .GetRequiredService<ISettingsService>()
+                .GetSettingsAsync()
+                .GetAwaiter()
+                .GetResult();
         }
         catch (Exception exception)
         {
@@ -34,7 +48,37 @@ public partial class App : Application
             return;
         }
 
-        _window = new Shell.AppShell();
+        var shell = new Shell.AppShell();
+        _window = shell;
+        // Never leave an EngineHost behind: stop and dispose the runtime facade when the window
+        // closes. The launcher's kill-on-close job object remains the hard backstop if this
+        // graceful path is interrupted.
+        shell.Closed += async (_, _) =>
+        {
+            var runtime = Services.GetRequiredService<IRuntimeControlService>();
+            try
+            {
+                await runtime.StopAsync();
+            }
+            finally
+            {
+                if (runtime is IAsyncDisposable disposable)
+                {
+                    await disposable.DisposeAsync();
+                }
+            }
+        };
+        ThemeMode mode = settings.Theme switch
+        {
+            UiThemePreference.Light => ThemeMode.Light,
+            UiThemePreference.Dark => ThemeMode.Dark,
+            _ => ThemeMode.System,
+        };
+        if (shell.Content is FrameworkElement root)
+        {
+            ThemeService.Instance.Apply(mode, root);
+        }
+
         _window.Activate();
     }
 }

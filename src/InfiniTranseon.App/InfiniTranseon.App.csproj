@@ -21,5 +21,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
+    <ProjectReference Include="..\InfiniTranseon.Core\InfiniTranseon.Core.csproj" />
   </ItemGroup>
 </Project>

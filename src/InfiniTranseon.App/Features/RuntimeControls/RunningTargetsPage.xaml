@@ -11,28 +11,85 @@
                 <TextBlock x:Uid="RunningTargetsSubtitle" Style="{StaticResource CaptionTextStyle}" />
             </StackPanel>
 
+            <!-- Engine status banner: localized state + verbatim error code / searched paths. -->
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <controls:StatusBadge
+                            Text="{x:Bind StatusText(ViewModel.EngineStatus), Mode=OneWay}"
+                            Severity="{x:Bind SeverityOf(ViewModel.EngineStatus), Mode=OneWay}"
+                            VerticalAlignment="Center" />
+                        <ComboBox
+                            MinWidth="260"
+                            ItemsSource="{x:Bind ViewModel.Profiles, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}"
+                            VerticalAlignment="Center">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="data:ProfileCard">
+                                    <TextBlock Text="{x:Bind Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Command="{x:Bind ViewModel.StartCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="14" />
+                                <TextBlock x:Uid="EngineStartButtonLabel" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{x:Bind ViewModel.StopCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE71A;" FontSize="14" />
+                                <TextBlock x:Uid="EngineStopButtonLabel" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <TextBlock
+                        Text="{x:Bind ViewModel.EngineStatusDetail, Mode=OneWay}"
+                        Visibility="{x:Bind HasDetail(ViewModel.EngineStatusDetail), Mode=OneWay}"
+                        Style="{StaticResource CaptionTextStyle}"
+                        IsTextSelectionEnabled="True"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        IsTextSelectionEnabled="True"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button x:Uid="PauseAllButton">
+                <Button Command="{x:Bind ViewModel.TogglePauseCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE769;" FontSize="14" />
-                        <TextBlock x:Uid="PauseAllButtonLabel" />
+                        <TextBlock Text="{x:Bind PauseLabel(ViewModel.IsPaused), Mode=OneWay}" />
                     </StackPanel>
                 </Button>
-                <Button x:Uid="ToggleOverlayButton">
+                <Button Command="{x:Bind ViewModel.ToggleOverlayCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE7B3;" FontSize="14" />
-                        <TextBlock x:Uid="ToggleOverlayButtonLabel" />
+                        <TextBlock Text="{x:Bind OverlayLabel(ViewModel.IsOverlayVisible), Mode=OneWay}" />
                     </StackPanel>
                 </Button>
-                <Button x:Uid="ManualOcrButton">
+                <Button Command="{x:Bind ViewModel.ManualOcrCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE773;" FontSize="14" />
                         <TextBlock x:Uid="ManualOcrButtonLabel" />
                     </StackPanel>
                 </Button>
+                <TextBlock
+                    x:Uid="ManualOcrUnsupportedText"
+                    Visibility="{x:Bind ViewModel.IsManualOcrUnavailable, Mode=OneWay}"
+                    Style="{StaticResource CaptionTextStyle}"
+                    VerticalAlignment="Center" />
             </StackPanel>
 
-            <ItemsRepeater ItemsSource="{x:Bind Targets}">
+            <TextBlock
+                x:Uid="RunningTargetsEmptyText"
+                Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}"
+                Style="{StaticResource CaptionTextStyle}" />
+
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Targets, Mode=OneWay}">
                 <ItemsRepeater.Layout>
                     <StackLayout Spacing="8" />
                 </ItemsRepeater.Layout>

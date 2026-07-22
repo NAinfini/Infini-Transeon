@@ -1,13 +1,21 @@
 <Page
     x:Class="InfiniTranseon.App.Features.Settings.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="OnLoaded">
     <ScrollViewer Padding="{StaticResource PagePadding}">
         <StackPanel Spacing="16" MaxWidth="820" HorizontalAlignment="Left">
             <StackPanel Spacing="4">
                 <TextBlock x:Uid="SettingsTitle" Style="{StaticResource PageTitleStyle}" />
                 <TextBlock x:Uid="SettingsSubtitle" Style="{StaticResource CaptionTextStyle}" />
             </StackPanel>
+
+            <InfoBar
+                x:Uid="LoadErrorBar"
+                Severity="Error"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
 
             <TextBlock x:Uid="AppearanceHeader" Style="{StaticResource SectionHeaderStyle}" />
             <Border Style="{StaticResource SettingRowStyle}">
@@ -37,7 +45,7 @@
                         <TextBlock x:Uid="LanguageSettingLabel" Style="{StaticResource BodyTextStyle}" />
                         <TextBlock x:Uid="LanguageSettingHint" Style="{StaticResource CaptionTextStyle}" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" VerticalAlignment="Center" MinWidth="140" SelectedIndex="0">
+                    <ComboBox x:Name="LanguageSelector" Grid.Column="1" VerticalAlignment="Center" MinWidth="140" SelectionChanged="OnLanguageChanged" SelectedIndex="0">
                         <ComboBoxItem Content="English (US)" />
                         <ComboBoxItem Content="简体中文" />
                     </ComboBox>
@@ -55,7 +63,7 @@
                         <TextBlock x:Uid="OfflineModeLabel" Style="{StaticResource BodyTextStyle}" />
                         <TextBlock x:Uid="OfflineModeHint" Style="{StaticResource CaptionTextStyle}" />
                     </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center" MinWidth="0" OnContent="" OffContent="" />
+                    <ToggleSwitch x:Name="OfflineToggle" Grid.Column="1" VerticalAlignment="Center" MinWidth="0" OnContent="" OffContent="" Toggled="OnOfflineToggled" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource SettingRowStyle}">
@@ -68,7 +76,7 @@
                         <TextBlock x:Uid="HistoryRetentionLabel" Style="{StaticResource BodyTextStyle}" />
                         <TextBlock x:Uid="HistoryRetentionHint" Style="{StaticResource CaptionTextStyle}" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" VerticalAlignment="Center" MinWidth="140" SelectedIndex="1">
+                    <ComboBox x:Name="RetentionSelector" Grid.Column="1" VerticalAlignment="Center" MinWidth="140" SelectionChanged="OnRetentionChanged" SelectedIndex="1">
                         <ComboBoxItem x:Uid="HistoryOff" />
                         <ComboBoxItem x:Uid="History30Days" />
                         <ComboBoxItem x:Uid="History90Days" />

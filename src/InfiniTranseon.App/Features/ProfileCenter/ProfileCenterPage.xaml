@@ -3,7 +3,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:InfiniTranseon.App.Controls"
-    xmlns:data="using:InfiniTranseon.App.Presentation">
+    xmlns:data="using:InfiniTranseon.App.Presentation"
+    Loaded="OnLoaded">
     <ScrollViewer Padding="{StaticResource PagePadding}">
         <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <Grid>
@@ -23,6 +24,28 @@
                     </StackPanel>
                 </Button>
             </Grid>
+
+            <InfoBar
+                x:Uid="LoadErrorBar"
+                Severity="Error"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+
+            <StackPanel
+                Spacing="10"
+                Margin="0,40,0,0"
+                HorizontalAlignment="Center"
+                Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
+                <FontIcon Glyph="&#xE7F4;" FontSize="34" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <TextBlock x:Uid="ProfilesEmptyTitle" HorizontalAlignment="Center" FontWeight="SemiBold" />
+                <TextBlock x:Uid="ProfilesEmptyBody" HorizontalAlignment="Center" TextAlignment="Center" Style="{StaticResource CaptionTextStyle}" />
+                <Button
+                    x:Uid="ProfilesEmptyCreateButton"
+                    HorizontalAlignment="Center"
+                    Click="OnNewProfileClick"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
 
             <ItemsRepeater ItemsSource="{x:Bind Profiles}">
                 <ItemsRepeater.Layout>
@@ -84,11 +107,13 @@
                                     <Grid Margin="0,4,0,0">
                                         <Button Content="{x:Bind PrimaryAction}" Style="{StaticResource AccentButtonStyle}" MinWidth="120" />
                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                                            <Button x:Uid="EditProfileButton" MinWidth="32" MinHeight="32" Padding="6">
+                                            <Button x:Uid="EditProfileButton" MinWidth="32" MinHeight="32" Padding="6"
+                                                    Tag="{x:Bind ProfileId}" Click="OnEditProfileClick">
                                                 <FontIcon Glyph="&#xE70F;" FontSize="14" />
                                             </Button>
-                                            <Button x:Uid="MoreProfileActionsButton" MinWidth="32" MinHeight="32" Padding="6">
-                                                <FontIcon Glyph="&#xE712;" FontSize="14" />
+                                            <Button x:Uid="DeleteProfileButton" MinWidth="32" MinHeight="32" Padding="6"
+                                                    Tag="{x:Bind ProfileId}" Click="OnDeleteProfileClick">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
                                             </Button>
                                         </StackPanel>
                                     </Grid>
