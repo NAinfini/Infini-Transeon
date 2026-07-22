@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.22621.0</SupportedOSPlatformVersion>
+    <Platforms>x64</Platforms>
+    <OutputType>Exe</OutputType>
+    <UseWinUI>false</UseWinUI>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <RootNamespace>InfiniTranseon.App.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
+  </ItemGroup>
+
+  <!--
+    The App is a WinUI project that cannot host xUnit headless. The testable presentation layer
+    (services, fakes, runtime state store, view models, DI composition) is compiled here from the
+    same App source files via links, so `dotnet test` runs without a WinUI host.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\InfiniTranseon.App\Presentation\**\*.cs" LinkBase="AppSources\Presentation" />
+    <Compile Include="..\..\src\InfiniTranseon.App\State\**\*.cs" LinkBase="AppSources\State" />
+    <Compile Include="..\..\src\InfiniTranseon.App\Composition\**\*.cs" LinkBase="AppSources\Composition" />
+    <Compile Include="..\..\src\InfiniTranseon.App\Controls\StatusSeverity.cs" Link="AppSources\Controls\StatusSeverity.cs" />
+    <Compile Include="..\..\src\InfiniTranseon.App\Shell\NavigationMap.cs" Link="AppSources\Shell\NavigationMap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

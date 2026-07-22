@@ -21,6 +21,7 @@ public sealed partial class AppShell : Window
 
     public AppShell()
     {
+        NavigationMap.EnsureConsistent(Pages.Keys);
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarArea);

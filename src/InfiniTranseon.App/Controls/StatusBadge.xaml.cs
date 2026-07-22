@@ -5,15 +5,6 @@ using Microsoft.UI.Xaml.Media;
 
 namespace InfiniTranseon.App.Controls;
 
-public enum StatusSeverity
-{
-    Neutral,
-    Success,
-    Warning,
-    Critical,
-    Info,
-}
-
 /// <summary>Text-plus-icon status chip; never communicates state by color alone.</summary>
 public sealed partial class StatusBadge : UserControl
 {

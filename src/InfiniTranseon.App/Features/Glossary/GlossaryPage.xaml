@@ -2,7 +2,7 @@
     x:Class="InfiniTranseon.App.Features.Glossary.GlossaryPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:data="using:InfiniTranseon.App.DesignData">
+    xmlns:data="using:InfiniTranseon.App.Presentation">
     <ScrollViewer Padding="{StaticResource PagePadding}">
         <StackPanel Spacing="16">
             <StackPanel Spacing="4">

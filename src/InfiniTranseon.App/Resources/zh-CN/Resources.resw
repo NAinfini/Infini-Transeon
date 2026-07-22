@@ -140,4 +140,26 @@
   <data name="HotkeyRegisteredHint.Text" xml:space="preserve"><value>已注册——显示真实的系统注册状态</value></data>
   <data name="AboutHeader.Text" xml:space="preserve"><value>关于</value></data>
   <data name="UpdatePolicyHint.Text" xml:space="preserve"><value>更新仅检查提示，绝不自动安装。</value></data>
+
+  <data name="SetupWizardTitle.Text" xml:space="preserve"><value>新建档案</value></data>
+  <data name="SetupWizardSubtitle.Text" xml:space="preserve"><value>四步引导——捕获目标、语言与服务、区域，最后测试并保存。</value></data>
+  <data name="SetupStep1Caption.Text" xml:space="preserve"><value>捕获目标</value></data>
+  <data name="SetupStep2Caption.Text" xml:space="preserve"><value>语言与服务</value></data>
+  <data name="SetupStep3Caption.Text" xml:space="preserve"><value>区域</value></data>
+  <data name="SetupStep4Caption.Text" xml:space="preserve"><value>测试并保存</value></data>
+  <data name="SetupStep1Heading.Text" xml:space="preserve"><value>选择捕获目标</value></data>
+  <data name="SetupStep1Body.Text" xml:space="preserve"><value>选择要翻译的窗口、显示器或桌面区域。每个目标保留真实分辨率与缩放；第 9 个目标会以禁用状态留在草稿中并标明原因。</value></data>
+  <data name="SetupStep2Heading.Text" xml:space="preserve"><value>语言与服务</value></data>
+  <data name="SetupStep2Body.Text" xml:space="preserve"><value>选择源语言与目标语言、本地或云端 OCR，以及一条初始翻译通道。持久翻译记忆与历史记录始终为可选项。</value></data>
+  <data name="SetupStep3Heading.Text" xml:space="preserve"><value>区域</value></data>
+  <data name="SetupStep3Body.Text" xml:space="preserve"><value>绘制区域、翻译整个目标，或扫描剩余区域。高级区域编辑稍后可在光学工作台中进行。</value></data>
+  <data name="SetupStep4Heading.Text" xml:space="preserve"><value>测试并保存</value></data>
+  <data name="SetupStep4Body.Text" xml:space="preserve"><value>运行捕获、OCR、翻译与覆盖层检查，查看关闭到托盘的行为与热键状态，然后保存档案。</value></data>
+  <data name="SetupBackButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>上一步</value></data>
+  <data name="SetupBackButtonLabel.Text" xml:space="preserve"><value>上一步</value></data>
+  <data name="SetupNextButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>下一步</value></data>
+  <data name="SetupNextButtonLabel.Text" xml:space="preserve"><value>下一步</value></data>
+
+  <data name="CompositionErrorTitle.Text" xml:space="preserve"><value>Infini-Transeon 无法启动</value></data>
+  <data name="CompositionErrorBody.Text" xml:space="preserve"><value>某个必需服务初始化失败，应用已停止运行，而非以降级状态继续。请将下方详细信息提供给支持人员。</value></data>
 </root>

@@ -140,4 +140,26 @@
   <data name="HotkeyRegisteredHint.Text" xml:space="preserve"><value>Registered — shows actual system registration state</value></data>
   <data name="AboutHeader.Text" xml:space="preserve"><value>About</value></data>
   <data name="UpdatePolicyHint.Text" xml:space="preserve"><value>Updates are check-only; nothing installs automatically.</value></data>
+
+  <data name="SetupWizardTitle.Text" xml:space="preserve"><value>New profile</value></data>
+  <data name="SetupWizardSubtitle.Text" xml:space="preserve"><value>Four guided steps — capture targets, languages and services, regions, then test and save.</value></data>
+  <data name="SetupStep1Caption.Text" xml:space="preserve"><value>Capture targets</value></data>
+  <data name="SetupStep2Caption.Text" xml:space="preserve"><value>Languages &amp; services</value></data>
+  <data name="SetupStep3Caption.Text" xml:space="preserve"><value>Regions</value></data>
+  <data name="SetupStep4Caption.Text" xml:space="preserve"><value>Test &amp; save</value></data>
+  <data name="SetupStep1Heading.Text" xml:space="preserve"><value>Choose capture targets</value></data>
+  <data name="SetupStep1Body.Text" xml:space="preserve"><value>Pick the windows, displays, or desktop regions to translate. Each target keeps its real resolution and scaling; a ninth target stays in the draft as disabled with a reason.</value></data>
+  <data name="SetupStep2Heading.Text" xml:space="preserve"><value>Languages &amp; services</value></data>
+  <data name="SetupStep2Body.Text" xml:space="preserve"><value>Select source and target languages, local or cloud OCR, and one initial translation channel. Persistent translation memory and history stay optional.</value></data>
+  <data name="SetupStep3Heading.Text" xml:space="preserve"><value>Regions</value></data>
+  <data name="SetupStep3Body.Text" xml:space="preserve"><value>Draw regions, translate the full target, or scan the remaining area. Advanced region editing is available later in the optical workbench.</value></data>
+  <data name="SetupStep4Heading.Text" xml:space="preserve"><value>Test &amp; save</value></data>
+  <data name="SetupStep4Body.Text" xml:space="preserve"><value>Run capture, OCR, translation, and overlay checks, review close-to-tray behavior and hotkey status, then save the profile.</value></data>
+  <data name="SetupBackButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Previous step</value></data>
+  <data name="SetupBackButtonLabel.Text" xml:space="preserve"><value>Back</value></data>
+  <data name="SetupNextButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Next step</value></data>
+  <data name="SetupNextButtonLabel.Text" xml:space="preserve"><value>Next</value></data>
+
+  <data name="CompositionErrorTitle.Text" xml:space="preserve"><value>Infini-Transeon could not start</value></data>
+  <data name="CompositionErrorBody.Text" xml:space="preserve"><value>A required service failed to initialize, so the application stopped instead of running in a degraded state. Share the details below with support.</value></data>
 </root>

@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:InfiniTranseon.App.Controls"
-    xmlns:data="using:InfiniTranseon.App.DesignData">
+    xmlns:data="using:InfiniTranseon.App.Presentation">
     <ScrollViewer Padding="{StaticResource PagePadding}">
         <StackPanel Spacing="16">
             <StackPanel Spacing="4">

@@ -1,0 +1,93 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.SetupWizard.SetupWizardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock x:Uid="SetupWizardTitle" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock x:Uid="SetupWizardSubtitle" Style="{StaticResource CaptionTextStyle}" />
+        </StackPanel>
+
+        <!-- Step indicator: current step marked by the accent underline (no color-only state). -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="28">
+            <StackPanel Spacing="6" MinWidth="150">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="1" Style="{StaticResource MetricTextStyle}" />
+                    <TextBlock x:Uid="SetupStep1Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" />
+                </StackPanel>
+                <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="{x:Bind ViewModel.IsStep1, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel Spacing="6" MinWidth="180">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="2" Style="{StaticResource MetricTextStyle}" />
+                    <TextBlock x:Uid="SetupStep2Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" />
+                </StackPanel>
+                <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="{x:Bind ViewModel.IsStep2, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel Spacing="6" MinWidth="120">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="3" Style="{StaticResource MetricTextStyle}" />
+                    <TextBlock x:Uid="SetupStep3Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" />
+                </StackPanel>
+                <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="{x:Bind ViewModel.IsStep3, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel Spacing="6" MinWidth="140">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="4" Style="{StaticResource MetricTextStyle}" />
+                    <TextBlock x:Uid="SetupStep4Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" />
+                </StackPanel>
+                <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="{x:Bind ViewModel.IsStep4, Mode=OneWay}" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}" VerticalAlignment="Stretch">
+            <Grid>
+                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep1, Mode=OneWay}">
+                    <TextBlock x:Uid="SetupStep1Heading" Style="{StaticResource SectionHeaderStyle}" />
+                    <TextBlock x:Uid="SetupStep1Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep2, Mode=OneWay}">
+                    <TextBlock x:Uid="SetupStep2Heading" Style="{StaticResource SectionHeaderStyle}" />
+                    <TextBlock x:Uid="SetupStep2Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep3, Mode=OneWay}">
+                    <TextBlock x:Uid="SetupStep3Heading" Style="{StaticResource SectionHeaderStyle}" />
+                    <TextBlock x:Uid="SetupStep3Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.IsStep4, Mode=OneWay}">
+                    <TextBlock x:Uid="SetupStep4Heading" Style="{StaticResource SectionHeaderStyle}" />
+                    <TextBlock x:Uid="SetupStep4Body" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="3">
+            <Button x:Uid="SetupBackButton" HorizontalAlignment="Left" MinWidth="120"
+                    Command="{x:Bind ViewModel.BackCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                    <TextBlock x:Uid="SetupBackButtonLabel" />
+                </StackPanel>
+            </Button>
+            <Button x:Uid="SetupNextButton" HorizontalAlignment="Right" MinWidth="120"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Command="{x:Bind ViewModel.NextCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Uid="SetupNextButtonLabel" />
+                    <FontIcon Glyph="&#xE72A;" FontSize="14" />
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+</Page>
