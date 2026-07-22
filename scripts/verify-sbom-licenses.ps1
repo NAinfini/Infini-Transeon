@@ -19,13 +19,34 @@ $allowed = [System.Collections.Generic.HashSet[string]]::new(
     'Zlib',
     'Unicode-3.0',
     'MS-PL',
-    'LicenseRef-Public-Domain-SQLite'
+    'LicenseRef-Public-Domain-SQLite',
+    'LicenseRef-Microsoft-Software-License-Terms'
 ) | ForEach-Object { [void]$allowed.Add($_) }
 
 $reviewedLicenseOverrides = @{
     # SQLite declares a public-domain dedication rather than an SPDX expression.
     # Pin the exact binary package version so every upgrade requires a fresh review.
     'SourceGear.sqlite3@3.50.4.5' = 'LicenseRef-Public-Domain-SQLite'
+
+    # Windows App SDK / WebView2 / Windows SDK first-party packages ship the
+    # "Microsoft Software License Terms" as a license FILE (no SPDX expression in
+    # the nuspec). Those terms explicitly permit redistribution with the
+    # application (self-contained WinUI deployment), reviewed 2026-07-22.
+    # Versions are pinned so every upgrade forces a fresh review here.
+    'Microsoft.Web.WebView2@1.0.3719.77' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.Windows.AI.MachineLearning@2.1.70' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.Windows.SDK.BuildTools@10.0.26100.4654' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.Windows.SDK.BuildTools.MSIX@1.7.251221100' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK@2.2.0' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.AI@2.2.3' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.Base@2.0.4' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.DWrite@2.1.0' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.Foundation@2.1.0' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.InteractiveExperiences@2.0.15' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.ML@2.1.70' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.Runtime@2.2.0' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.Widgets@2.0.5' = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.WindowsAppSDK.WinUI@2.2.1' = 'LicenseRef-Microsoft-Software-License-Terms'
 }
 $notices = [System.Collections.Generic.List[object]]::new()
 
