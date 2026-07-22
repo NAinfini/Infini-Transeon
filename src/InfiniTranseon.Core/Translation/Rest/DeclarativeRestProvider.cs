@@ -238,25 +238,37 @@ public sealed class DeclarativeRestProvider : ITranslationProvider
         return result;
     }
 
-    public CredentialBinding CreateBinding(string reference)
+    public CredentialBinding CreateBinding(string reference) =>
+        CreateBinding(_definition, reference, _proxyPolicy);
+
+    /// <summary>
+    /// The exact binding this provider uses to read <paramref name="reference"/> for
+    /// <paramref name="definition"/>. Configuration UIs must write secrets with this same
+    /// binding or every read fails the origin check.
+    /// </summary>
+    public static CredentialBinding CreateBinding(
+        DeclarativeRestAdapterDefinition definition,
+        string reference,
+        ProxyPolicy proxyPolicy = ProxyPolicy.System)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
-        string authTemplate = string.Join("\n", _definition.Headers
+        string authTemplate = string.Join("\n", definition.Headers
             .Where(item => item.Value.Contains("{{credential:" + reference + "}}", StringComparison.Ordinal))
             .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
             .Select(item => item.Key + ":" + item.Value));
-        if (_definition.BodyTemplate?.Contains("{{credential:" + reference + "}}", StringComparison.Ordinal) == true)
-            authTemplate += "\nbody:" + _definition.BodyTemplate;
+        if (definition.BodyTemplate?.Contains("{{credential:" + reference + "}}", StringComparison.Ordinal) == true)
+            authTemplate += "\nbody:" + definition.BodyTemplate;
         string digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(authTemplate)));
-        int port = _definition.Endpoint.IsDefaultPort ? 443 : _definition.Endpoint.Port;
+        int port = definition.Endpoint.IsDefaultPort ? 443 : definition.Endpoint.Port;
         return new CredentialBinding(
-            _definition.Id,
+            definition.Id,
             reference,
-            _definition.Endpoint.Scheme,
-            _definition.Endpoint.IdnHost,
+            definition.Endpoint.Scheme,
+            definition.Endpoint.IdnHost,
             port,
             "template-sha256-" + digest,
-            _proxyPolicy);
+            proxyPolicy);
     }
 
     private static async Task<byte[]> ReadBoundedAsync(

@@ -54,17 +54,24 @@ public sealed class OpenAiCompatibleProvider : ITranslationProvider
         _credentialStore = credentialStore;
     }
 
-    public CredentialBinding CreateCredentialBinding()
+    public CredentialBinding CreateCredentialBinding() => CreateCredentialBinding(_options);
+
+    /// <summary>
+    /// The exact binding this provider uses to read its credential. Configuration UIs must
+    /// write the secret with this same binding or every read fails the origin check.
+    /// </summary>
+    public static CredentialBinding CreateCredentialBinding(OpenAiCompatibleOptions options)
     {
-        int port = _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port;
+        ArgumentNullException.ThrowIfNull(options);
+        int port = options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port;
         return new CredentialBinding(
-            _options.ProviderId,
+            options.ProviderId,
             "api-key",
-            _options.Endpoint.Scheme,
-            _options.Endpoint.IdnHost,
+            options.Endpoint.Scheme,
+            options.Endpoint.IdnHost,
             port,
             "bearer",
-            _options.ProxyPolicy);
+            options.ProxyPolicy);
     }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(

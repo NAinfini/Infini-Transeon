@@ -12,7 +12,19 @@ public sealed record CaptureProbeTarget(
     int PixelHeight,
     int Dpi,
     bool Capturable,
-    string? ErrorCode);
+    string? ErrorCode)
+{
+    /// <summary>
+    /// Native OS handle for the enumerated target (HWND for windows, HMONITOR for
+    /// monitors), packed as an unsigned value. Zero when unknown (for example the
+    /// presentation-neutral fakes). Additive: existing constructors and fakes are
+    /// unaffected.
+    /// </summary>
+    public ulong NativeHandle { get; init; }
+
+    /// <summary>Owning process image name for window targets, when resolvable.</summary>
+    public string? ProcessName { get; init; }
+}
 
 public sealed record CaptureProbeResult(IReadOnlyList<CaptureProbeTarget> Targets);
 
