@@ -1,0 +1,77 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.History.HistoryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
+    xmlns:data="using:InfiniTranseon.App.DesignData">
+    <ScrollViewer Padding="{StaticResource PagePadding}">
+        <StackPanel Spacing="16">
+            <StackPanel Spacing="4">
+                <TextBlock x:Uid="HistoryTitle" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock x:Uid="HistorySubtitle" Style="{StaticResource CaptionTextStyle}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <AutoSuggestBox x:Uid="HistorySearchBox" QueryIcon="Find" MinWidth="260" />
+                <ComboBox x:Uid="HistoryProfileFilter" MinWidth="180" SelectedIndex="0">
+                    <ComboBoxItem Content="Elden Ring — JP main story" />
+                    <ComboBoxItem Content="Persona 5 Royal" />
+                </ComboBox>
+                <ComboBox x:Uid="HistoryDateFilter" MinWidth="140" SelectedIndex="0">
+                    <ComboBoxItem x:Uid="HistoryDateToday" />
+                    <ComboBoxItem x:Uid="HistoryDate7Days" />
+                    <ComboBoxItem x:Uid="HistoryDate30Days" />
+                </ComboBox>
+            </StackPanel>
+
+            <ItemsRepeater ItemsSource="{x:Bind Events}">
+                <ItemsRepeater.Layout>
+                    <StackLayout Spacing="8" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="data:HistoryEvent">
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="10">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="{x:Bind Timestamp}" Style="{StaticResource MetricTextStyle}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{x:Bind Region}" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Button x:Uid="CopySourceButton" HorizontalAlignment="Right" MinWidth="32" MinHeight="32" Padding="6">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                    </Button>
+                                </Grid>
+                                <TextBlock Text="{x:Bind SourceText}" FontSize="{StaticResource TypeBodyLarge}" TextWrapping="Wrap" />
+                                <ItemsRepeater ItemsSource="{x:Bind Channels}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout MinItemWidth="300" MinColumnSpacing="8" MinRowSpacing="8" ItemsStretch="Fill" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="data:ChannelResult">
+                                            <Border
+                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                CornerRadius="{StaticResource ControlCorner}"
+                                                Padding="12">
+                                                <StackPanel Spacing="6">
+                                                    <Grid>
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{x:Bind ChannelLabel}" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                                                            <TextBlock Text="{x:Bind Provider}" Style="{StaticResource CaptionTextStyle}" />
+                                                        </StackPanel>
+                                                        <TextBlock Text="{x:Bind Latency}" Style="{StaticResource CaptionTextStyle}" HorizontalAlignment="Right" />
+                                                    </Grid>
+                                                    <TextBlock Text="{x:Bind Text}" Style="{StaticResource BodyTextStyle}" />
+                                                    <controls:StatusBadge Text="{x:Bind StateText}" Severity="{x:Bind StateSeverity}" HorizontalAlignment="Left" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

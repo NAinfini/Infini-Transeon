@@ -1,0 +1,108 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.Glossary.GlossaryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:data="using:InfiniTranseon.App.DesignData">
+    <ScrollViewer Padding="{StaticResource PagePadding}">
+        <StackPanel Spacing="16">
+            <StackPanel Spacing="4">
+                <TextBlock x:Uid="GlossaryTitle" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock x:Uid="GlossarySubtitle" Style="{StaticResource CaptionTextStyle}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <AutoSuggestBox x:Uid="GlossarySearchBox" QueryIcon="Find" MinWidth="260" />
+                <Button x:Uid="AddTermButton" Style="{StaticResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE710;" FontSize="14" />
+                        <TextBlock x:Uid="AddTermButtonLabel" />
+                    </StackPanel>
+                </Button>
+                <Button x:Uid="ImportGlossaryButton">
+                    <TextBlock x:Uid="ImportGlossaryButtonLabel" />
+                </Button>
+                <Button x:Uid="ExportGlossaryButton">
+                    <TextBlock x:Uid="ExportGlossaryButtonLabel" />
+                </Button>
+            </StackPanel>
+
+            <Border Style="{StaticResource CardBorderStyle}" Padding="0">
+                <StackPanel>
+                    <Grid Padding="16,10" ColumnSpacing="12" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Uid="GlossarySourceColumn" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                        <TextBlock x:Uid="GlossaryTargetColumn" Grid.Column="1" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                        <TextBlock x:Uid="GlossaryScopeColumn" Grid.Column="2" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                        <TextBlock x:Uid="GlossaryProtectedColumn" Grid.Column="3" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" MinWidth="70" />
+                        <TextBlock x:Uid="GlossaryNotesColumn" Grid.Column="4" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                    </Grid>
+                    <ItemsRepeater ItemsSource="{x:Bind Entries}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="data:GlossaryEntry">
+                                <Grid Padding="16,10" ColumnSpacing="12" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="2*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind SourceTerm}" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock Text="{x:Bind TargetTerm}" Grid.Column="1" Style="{StaticResource BodyTextStyle}" />
+                                    <TextBlock Text="{x:Bind Scope}" Grid.Column="2" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
+                                    <FontIcon
+                                        Grid.Column="3"
+                                        Glyph="&#xE72E;"
+                                        FontSize="13"
+                                        MinWidth="70"
+                                        Visibility="{x:Bind Protected}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Text="{x:Bind Notes}" Grid.Column="4" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Uid="StylePromptHeader" Style="{StaticResource SectionHeaderStyle}" Margin="0,8,0,0" />
+            <Border Style="{StaticResource CardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock x:Uid="StylePromptVersionLabel" Style="{StaticResource BodyTextStyle}" VerticalAlignment="Center" />
+                            <ComboBox MinWidth="200" SelectedIndex="0">
+                                <ComboBoxItem Content="v3 — casual game tone" />
+                                <ComboBoxItem Content="v2 — literal" />
+                                <ComboBoxItem Content="v1 — default template" />
+                            </ComboBox>
+                        </StackPanel>
+                        <Button x:Uid="SavePromptVersionButton" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}">
+                            <TextBlock x:Uid="SavePromptVersionButtonLabel" />
+                        </Button>
+                    </Grid>
+                    <TextBox
+                        x:Uid="StylePromptEditor"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        MinHeight="120"
+                        Text="Translate as natural, casual game dialogue. Keep proper nouns from the glossary untouched. Prefer short sentences that fit an overlay slot." />
+                    <InfoBar
+                        x:Uid="StylePromptCacheWarning"
+                        IsOpen="True"
+                        IsClosable="False"
+                        Severity="Informational" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

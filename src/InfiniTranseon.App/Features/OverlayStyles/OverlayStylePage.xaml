@@ -1,0 +1,90 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.OverlayStyles.OverlayStylePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer Padding="{StaticResource PagePadding}">
+        <StackPanel Spacing="16">
+            <StackPanel Spacing="4">
+                <TextBlock x:Uid="OverlayStylesTitle" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock x:Uid="OverlayStylesSubtitle" Style="{StaticResource CaptionTextStyle}" />
+            </StackPanel>
+
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="320" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Style controls -->
+                <StackPanel Spacing="8">
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Uid="OverlayModeHeader" FontWeight="SemiBold" />
+                            <RadioButtons SelectedIndex="0">
+                                <RadioButton x:Uid="OverlayModeReplace" />
+                                <RadioButton x:Uid="OverlayModeTranslucent" />
+                                <RadioButton x:Uid="OverlayModeOffset" />
+                                <RadioButton x:Uid="OverlayModeFloating" />
+                            </RadioButtons>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Uid="OverlayTextHeader" FontWeight="SemiBold" />
+                            <Slider x:Uid="OverlayOpacitySlider" Minimum="20" Maximum="100" Value="90" />
+                            <Slider x:Uid="OverlayFontSizeSlider" Minimum="12" Maximum="36" Value="18" />
+                            <ToggleSwitch x:Uid="OverlayOutlineToggle" IsOn="True" />
+                            <ToggleSwitch x:Uid="OverlayAutoContrastToggle" IsOn="True" />
+                        </StackPanel>
+                    </Border>
+                    <InfoBar
+                        x:Uid="OverlayContrastWarning"
+                        IsOpen="True"
+                        IsClosable="False"
+                        Severity="Warning" />
+                </StackPanel>
+
+                <!-- Preview: 4 fixed translator slots over a flat game-like background -->
+                <Border Grid.Column="1" Background="{ThemeResource OverlayPreviewGameBrush}" CornerRadius="{StaticResource CardCornerRadius}" MinHeight="480">
+                    <Grid Padding="24">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            x:Uid="OverlayPreviewHint"
+                            Style="{StaticResource CaptionTextStyle}"
+                            Foreground="#80FFFFFF"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource OverlayPreviewPanelBrush}"
+                            CornerRadius="{StaticResource ControlCorner}"
+                            Padding="14"
+                            MaxWidth="560">
+                            <StackPanel Spacing="8">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Channel 1 · DeepL" FontSize="11" Foreground="#90FFFFFF" />
+                                    <TextBlock Text="无力之人啊，你为何而来。" FontSize="18" Foreground="{ThemeResource OverlayPreviewTextBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Channel 2 · GPT-5.4 + refine" FontSize="11" Foreground="#90FFFFFF" />
+                                    <TextBlock Text="无力者啊，为何来到此地。" FontSize="18" Foreground="{ThemeResource OverlayPreviewTextBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Channel 3 · Local MADLAD" FontSize="11" Foreground="#90FFFFFF" />
+                                    <TextBlock Text="…" FontSize="18" Foreground="#B0FFFFFF" />
+                                </StackPanel>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Channel 4 · Baidu" FontSize="11" Foreground="#90FFFFFF" />
+                                    <TextBlock Text="Failed — credential missing" FontSize="13" Foreground="#FF99A4" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

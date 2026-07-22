@@ -1,0 +1,25 @@
+<UserControl
+    x:Class="InfiniTranseon.App.Controls.StatusBadge"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <Border
+        x:Name="Root"
+        Background="{ThemeResource StatusNeutralBackgroundBrush}"
+        CornerRadius="{StaticResource BadgeCornerRadius}"
+        Padding="8,3">
+        <StackPanel Orientation="Horizontal" Spacing="5">
+            <FontIcon
+                x:Name="Glyph"
+                FontSize="11"
+                VerticalAlignment="Center"
+                Glyph="&#xEA3A;"
+                Foreground="{ThemeResource StatusNeutralBrush}" />
+            <TextBlock
+                x:Name="Label"
+                FontSize="{StaticResource TypeCaption}"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource StatusNeutralBrush}" />
+        </StackPanel>
+    </Border>
+</UserControl>

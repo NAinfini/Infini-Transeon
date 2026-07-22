@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="NavProfiles.Content" xml:space="preserve"><value>档案</value></data>
+  <data name="NavRunningTargets.Content" xml:space="preserve"><value>运行中的目标</value></data>
+  <data name="NavHistory.Content" xml:space="preserve"><value>历史记录</value></data>
+  <data name="NavServicesModels.Content" xml:space="preserve"><value>服务与模型</value></data>
+  <data name="NavGlossary.Content" xml:space="preserve"><value>术语表与风格</value></data>
+  <data name="NavOverlayStyles.Content" xml:space="preserve"><value>覆盖层样式</value></data>
+  <data name="NavWorkbench.Content" xml:space="preserve"><value>光学工作台</value></data>
+  <data name="NavDiagnostics.Content" xml:space="preserve"><value>诊断</value></data>
+  <data name="NavSettings.Content" xml:space="preserve"><value>设置</value></data>
+
+  <data name="ProfilesTitle.Text" xml:space="preserve"><value>档案</value></data>
+  <data name="ProfilesSubtitle.Text" xml:space="preserve"><value>配置一次，然后专心游戏——档案绑定捕获目标、语言、区域与翻译通道。</value></data>
+  <data name="NewProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>新建档案</value></data>
+  <data name="NewProfileButtonLabel.Text" xml:space="preserve"><value>新建档案</value></data>
+  <data name="EditProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>编辑档案</value></data>
+  <data name="MoreProfileActionsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>更多档案操作</value></data>
+
+  <data name="RunningTargetsTitle.Text" xml:space="preserve"><value>运行中的目标</value></data>
+  <data name="RunningTargetsSubtitle.Text" xml:space="preserve"><value>实时捕获目标的健康度、延迟与逐目标控制。此处任何操作都不会抢占游戏焦点。</value></data>
+  <data name="PauseAllButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>暂停全部目标</value></data>
+  <data name="PauseAllButtonLabel.Text" xml:space="preserve"><value>全部暂停</value></data>
+  <data name="ToggleOverlayButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>切换覆盖层</value></data>
+  <data name="ToggleOverlayButtonLabel.Text" xml:space="preserve"><value>切换覆盖层</value></data>
+  <data name="ManualOcrButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>立即手动识别</value></data>
+  <data name="ManualOcrButtonLabel.Text" xml:space="preserve"><value>手动识别</value></data>
+  <data name="LatencyP95Label.Text" xml:space="preserve"><value>延迟 P95</value></data>
+  <data name="ActiveRegionsLabel.Text" xml:space="preserve"><value>活跃区域</value></data>
+
+  <data name="HistoryTitle.Text" xml:space="preserve"><value>历史记录</value></data>
+  <data name="HistorySubtitle.Text" xml:space="preserve"><value>按档案分组的翻译事件，同一来源代次的所有通道结果并列展示。</value></data>
+  <data name="HistorySearchBox.PlaceholderText" xml:space="preserve"><value>搜索原文或译文</value></data>
+  <data name="HistoryProfileFilter.PlaceholderText" xml:space="preserve"><value>档案</value></data>
+  <data name="HistoryDateFilter.PlaceholderText" xml:space="preserve"><value>时间范围</value></data>
+  <data name="HistoryDateToday.Content" xml:space="preserve"><value>今天</value></data>
+  <data name="HistoryDate7Days.Content" xml:space="preserve"><value>近 7 天</value></data>
+  <data name="HistoryDate30Days.Content" xml:space="preserve"><value>近 30 天</value></data>
+  <data name="CopySourceButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>复制原文</value></data>
+
+  <data name="ServicesModelsTitle.Text" xml:space="preserve"><value>服务与模型</value></data>
+  <data name="ServicesModelsSubtitle.Text" xml:space="preserve"><value>翻译与 OCR 提供商、凭据及可选本地模型。密钥仅存于 Windows 凭据管理器。</value></data>
+  <data name="AddProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加提供商</value></data>
+  <data name="AddProviderButtonLabel.Text" xml:space="preserve"><value>添加提供商</value></data>
+  <data name="AddRestAdapterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加 REST 适配器</value></data>
+  <data name="AddRestAdapterButtonLabel.Text" xml:space="preserve"><value>添加 REST 适配器</value></data>
+  <data name="ConfigureProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>配置提供商</value></data>
+  <data name="ConfigureProviderButtonLabel.Text" xml:space="preserve"><value>配置</value></data>
+
+  <data name="GlossaryTitle.Text" xml:space="preserve"><value>术语表与风格提示词</value></data>
+  <data name="GlossarySubtitle.Text" xml:space="preserve"><value>受保护术语永不被自动纠正。编辑术语表或提示词版本会使受影响的翻译缓存失效。</value></data>
+  <data name="GlossarySearchBox.PlaceholderText" xml:space="preserve"><value>搜索术语</value></data>
+  <data name="AddTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加术语</value></data>
+  <data name="AddTermButtonLabel.Text" xml:space="preserve"><value>添加术语</value></data>
+  <data name="ImportGlossaryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>导入术语表</value></data>
+  <data name="ImportGlossaryButtonLabel.Text" xml:space="preserve"><value>导入</value></data>
+  <data name="ExportGlossaryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>导出术语表</value></data>
+  <data name="ExportGlossaryButtonLabel.Text" xml:space="preserve"><value>导出</value></data>
+  <data name="GlossarySourceColumn.Text" xml:space="preserve"><value>源术语</value></data>
+  <data name="GlossaryTargetColumn.Text" xml:space="preserve"><value>目标术语</value></data>
+  <data name="GlossaryScopeColumn.Text" xml:space="preserve"><value>作用域</value></data>
+  <data name="GlossaryProtectedColumn.Text" xml:space="preserve"><value>受保护</value></data>
+  <data name="GlossaryNotesColumn.Text" xml:space="preserve"><value>备注</value></data>
+  <data name="StylePromptHeader.Text" xml:space="preserve"><value>风格提示词</value></data>
+  <data name="StylePromptVersionLabel.Text" xml:space="preserve"><value>版本</value></data>
+  <data name="SavePromptVersionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存为新版本</value></data>
+  <data name="SavePromptVersionButtonLabel.Text" xml:space="preserve"><value>保存为新版本</value></data>
+  <data name="StylePromptEditor.Header" xml:space="preserve"><value>提示词模板</value></data>
+  <data name="StylePromptCacheWarning.Title" xml:space="preserve"><value>缓存影响</value></data>
+  <data name="StylePromptCacheWarning.Message" xml:space="preserve"><value>保存新版本会使该档案的翻译缓存失效；运行中的目标仅在确认应用后才会采用。</value></data>
+
+  <data name="OverlayStylesTitle.Text" xml:space="preserve"><value>覆盖层样式</value></data>
+  <data name="OverlayStylesSubtitle.Text" xml:space="preserve"><value>逐区域的覆盖层外观，实时预览最多 4 个固定翻译槽位。</value></data>
+  <data name="OverlayModeHeader.Text" xml:space="preserve"><value>覆盖模式</value></data>
+  <data name="OverlayModeReplace.Content" xml:space="preserve"><value>完全替换</value></data>
+  <data name="OverlayModeTranslucent.Content" xml:space="preserve"><value>半透明背景</value></data>
+  <data name="OverlayModeOffset.Content" xml:space="preserve"><value>偏移区域</value></data>
+  <data name="OverlayModeFloating.Content" xml:space="preserve"><value>浮动面板</value></data>
+  <data name="OverlayTextHeader.Text" xml:space="preserve"><value>文字与对比度</value></data>
+  <data name="OverlayOpacitySlider.Header" xml:space="preserve"><value>背景不透明度</value></data>
+  <data name="OverlayFontSizeSlider.Header" xml:space="preserve"><value>字号</value></data>
+  <data name="OverlayOutlineToggle.Header" xml:space="preserve"><value>文字描边</value></data>
+  <data name="OverlayAutoContrastToggle.Header" xml:space="preserve"><value>自动对比度</value></data>
+  <data name="OverlayContrastWarning.Title" xml:space="preserve"><value>对比度检查</value></data>
+  <data name="OverlayContrastWarning.Message" xml:space="preserve"><value>预览背景无法反映文字后方的真实像素；所选回退（描边）始终可用。</value></data>
+  <data name="OverlayPreviewHint.Text" xml:space="preserve"><value>游戏画面区域——仅为预览，非真实捕获</value></data>
+
+  <data name="WorkbenchTitle.Text" xml:space="preserve"><value>光学工作台</value></data>
+  <data name="WorkbenchSubtitle.Text" xml:space="preserve"><value>高级区域编辑。区域树是画布的完整键盘与读屏替代方案。</value></data>
+  <data name="RegionTreeHeader.Text" xml:space="preserve"><value>目标与区域</value></data>
+  <data name="CanvasPlaceholderHint.Text" xml:space="preserve"><value>捕获画布——缩略图将随后端集成到位</value></data>
+  <data name="InspectorHeader.Text" xml:space="preserve"><value>区域检查器</value></data>
+  <data name="InspectorBasic.Header" xml:space="preserve"><value>基础</value></data>
+  <data name="InspectorOcr.Header" xml:space="preserve"><value>OCR</value></data>
+  <data name="InspectorChannels.Header" xml:space="preserve"><value>翻译通道</value></data>
+  <data name="InspectorOverlay.Header" xml:space="preserve"><value>覆盖层</value></data>
+  <data name="InspectorLayout.Header" xml:space="preserve"><value>排版与换行</value></data>
+  <data name="InspectorPerformance.Header" xml:space="preserve"><value>性能与降级</value></data>
+  <data name="RegionNameBox.Header" xml:space="preserve"><value>区域名称</value></data>
+  <data name="RegionPriorityBox.Header" xml:space="preserve"><value>优先级</value></data>
+  <data name="RegionLockToggle.Header" xml:space="preserve"><value>锁定设置（禁止自动降级）</value></data>
+  <data name="HealthStripCapture.Text" xml:space="preserve"><value>捕获</value></data>
+  <data name="HealthStripOcr.Text" xml:space="preserve"><value>OCR</value></data>
+  <data name="HealthStripPipeline.Text" xml:space="preserve"><value>管线</value></data>
+  <data name="HealthStripMemory.Text" xml:space="preserve"><value>内存</value></data>
+
+  <data name="DiagnosticsTitle.Text" xml:space="preserve"><value>诊断</value></data>
+  <data name="DiagnosticsSubtitle.Text" xml:space="preserve"><value>每个故障与降级都标明影响范围、当前行为与直接恢复操作。无隐藏遥测。</value></data>
+  <data name="ExportDiagnosticsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>导出脱敏诊断包</value></data>
+  <data name="ExportDiagnosticsButtonLabel.Text" xml:space="preserve"><value>导出脱敏诊断包</value></data>
+  <data name="CrashReportsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>查看本地崩溃报告</value></data>
+  <data name="CrashReportsButtonLabel.Text" xml:space="preserve"><value>本地崩溃报告</value></data>
+
+  <data name="SettingsTitle.Text" xml:space="preserve"><value>设置</value></data>
+  <data name="SettingsSubtitle.Text" xml:space="preserve"><value>应用外观、隐私、热键与更新。</value></data>
+  <data name="AppearanceHeader.Text" xml:space="preserve"><value>外观</value></data>
+  <data name="ThemeSettingLabel.Text" xml:space="preserve"><value>应用主题</value></data>
+  <data name="ThemeSettingHint.Text" xml:space="preserve"><value>立即生效，不会重建导航</value></data>
+  <data name="ThemeSystem.Content" xml:space="preserve"><value>跟随系统</value></data>
+  <data name="ThemeLight.Content" xml:space="preserve"><value>浅色</value></data>
+  <data name="ThemeDark.Content" xml:space="preserve"><value>深色</value></data>
+  <data name="LanguageSettingLabel.Text" xml:space="preserve"><value>界面语言</value></data>
+  <data name="LanguageSettingHint.Text" xml:space="preserve"><value>数字与日期格式默认跟随系统</value></data>
+  <data name="PrivacyHeader.Text" xml:space="preserve"><value>隐私与历史</value></data>
+  <data name="OfflineModeLabel.Text" xml:space="preserve"><value>严格离线模式</value></data>
+  <data name="OfflineModeHint.Text" xml:space="preserve"><value>阻止全部网络请求；仅本地 OCR 与本地模型可用</value></data>
+  <data name="HistoryRetentionLabel.Text" xml:space="preserve"><value>历史保留</value></data>
+  <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>纯文本历史，按档案单独开启</value></data>
+  <data name="HistoryOff.Content" xml:space="preserve"><value>关闭</value></data>
+  <data name="History30Days.Content" xml:space="preserve"><value>30 天</value></data>
+  <data name="History90Days.Content" xml:space="preserve"><value>90 天</value></data>
+  <data name="HotkeysHeader.Text" xml:space="preserve"><value>热键</value></data>
+  <data name="ToggleOverlayHotkeyLabel.Text" xml:space="preserve"><value>切换覆盖层</value></data>
+  <data name="PauseAllHotkeyLabel.Text" xml:space="preserve"><value>全部暂停 / 恢复</value></data>
+  <data name="HotkeyRegisteredHint.Text" xml:space="preserve"><value>已注册——显示真实的系统注册状态</value></data>
+  <data name="AboutHeader.Text" xml:space="preserve"><value>关于</value></data>
+  <data name="UpdatePolicyHint.Text" xml:space="preserve"><value>更新仅检查提示，绝不自动安装。</value></data>
+</root>

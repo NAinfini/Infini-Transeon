@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="NavProfiles.Content" xml:space="preserve"><value>Profiles</value></data>
+  <data name="NavRunningTargets.Content" xml:space="preserve"><value>Running targets</value></data>
+  <data name="NavHistory.Content" xml:space="preserve"><value>History</value></data>
+  <data name="NavServicesModels.Content" xml:space="preserve"><value>Services &amp; models</value></data>
+  <data name="NavGlossary.Content" xml:space="preserve"><value>Glossary &amp; style</value></data>
+  <data name="NavOverlayStyles.Content" xml:space="preserve"><value>Overlay styles</value></data>
+  <data name="NavWorkbench.Content" xml:space="preserve"><value>Optical workbench</value></data>
+  <data name="NavDiagnostics.Content" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="NavSettings.Content" xml:space="preserve"><value>Settings</value></data>
+
+  <data name="ProfilesTitle.Text" xml:space="preserve"><value>Profiles</value></data>
+  <data name="ProfilesSubtitle.Text" xml:space="preserve"><value>Configure once, then play — profiles bind capture targets, languages, regions, and translation channels.</value></data>
+  <data name="NewProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>New profile</value></data>
+  <data name="NewProfileButtonLabel.Text" xml:space="preserve"><value>New profile</value></data>
+  <data name="EditProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Edit profile</value></data>
+  <data name="MoreProfileActionsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>More profile actions</value></data>
+
+  <data name="RunningTargetsTitle.Text" xml:space="preserve"><value>Running targets</value></data>
+  <data name="RunningTargetsSubtitle.Text" xml:space="preserve"><value>Live capture targets with health, latency, and per-target controls. Nothing here steals game focus.</value></data>
+  <data name="PauseAllButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Pause all targets</value></data>
+  <data name="PauseAllButtonLabel.Text" xml:space="preserve"><value>Pause all</value></data>
+  <data name="ToggleOverlayButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Toggle overlay</value></data>
+  <data name="ToggleOverlayButtonLabel.Text" xml:space="preserve"><value>Toggle overlay</value></data>
+  <data name="ManualOcrButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Manual OCR now</value></data>
+  <data name="ManualOcrButtonLabel.Text" xml:space="preserve"><value>Manual OCR</value></data>
+  <data name="LatencyP95Label.Text" xml:space="preserve"><value>Latency P95</value></data>
+  <data name="ActiveRegionsLabel.Text" xml:space="preserve"><value>Active regions</value></data>
+
+  <data name="HistoryTitle.Text" xml:space="preserve"><value>History</value></data>
+  <data name="HistorySubtitle.Text" xml:space="preserve"><value>Per-profile translation events with every channel result grouped by source generation.</value></data>
+  <data name="HistorySearchBox.PlaceholderText" xml:space="preserve"><value>Search source or translated text</value></data>
+  <data name="HistoryProfileFilter.PlaceholderText" xml:space="preserve"><value>Profile</value></data>
+  <data name="HistoryDateFilter.PlaceholderText" xml:space="preserve"><value>Date range</value></data>
+  <data name="HistoryDateToday.Content" xml:space="preserve"><value>Today</value></data>
+  <data name="HistoryDate7Days.Content" xml:space="preserve"><value>Last 7 days</value></data>
+  <data name="HistoryDate30Days.Content" xml:space="preserve"><value>Last 30 days</value></data>
+  <data name="CopySourceButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Copy source text</value></data>
+
+  <data name="ServicesModelsTitle.Text" xml:space="preserve"><value>Services &amp; models</value></data>
+  <data name="ServicesModelsSubtitle.Text" xml:space="preserve"><value>Translation and OCR providers, credentials, and optional local models. Secrets stay in Windows Credential Manager.</value></data>
+  <data name="AddProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add provider</value></data>
+  <data name="AddProviderButtonLabel.Text" xml:space="preserve"><value>Add provider</value></data>
+  <data name="AddRestAdapterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add REST adapter</value></data>
+  <data name="AddRestAdapterButtonLabel.Text" xml:space="preserve"><value>Add REST adapter</value></data>
+  <data name="ConfigureProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Configure provider</value></data>
+  <data name="ConfigureProviderButtonLabel.Text" xml:space="preserve"><value>Configure</value></data>
+
+  <data name="GlossaryTitle.Text" xml:space="preserve"><value>Glossary &amp; style prompts</value></data>
+  <data name="GlossarySubtitle.Text" xml:space="preserve"><value>Protected terms are never auto-corrected. Editing a glossary or prompt version invalidates affected translation caches.</value></data>
+  <data name="GlossarySearchBox.PlaceholderText" xml:space="preserve"><value>Search terms</value></data>
+  <data name="AddTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add term</value></data>
+  <data name="AddTermButtonLabel.Text" xml:space="preserve"><value>Add term</value></data>
+  <data name="ImportGlossaryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Import glossary</value></data>
+  <data name="ImportGlossaryButtonLabel.Text" xml:space="preserve"><value>Import</value></data>
+  <data name="ExportGlossaryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Export glossary</value></data>
+  <data name="ExportGlossaryButtonLabel.Text" xml:space="preserve"><value>Export</value></data>
+  <data name="GlossarySourceColumn.Text" xml:space="preserve"><value>Source term</value></data>
+  <data name="GlossaryTargetColumn.Text" xml:space="preserve"><value>Target term</value></data>
+  <data name="GlossaryScopeColumn.Text" xml:space="preserve"><value>Scope</value></data>
+  <data name="GlossaryProtectedColumn.Text" xml:space="preserve"><value>Protected</value></data>
+  <data name="GlossaryNotesColumn.Text" xml:space="preserve"><value>Notes</value></data>
+  <data name="StylePromptHeader.Text" xml:space="preserve"><value>Style prompt</value></data>
+  <data name="StylePromptVersionLabel.Text" xml:space="preserve"><value>Version</value></data>
+  <data name="SavePromptVersionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Save as new version</value></data>
+  <data name="SavePromptVersionButtonLabel.Text" xml:space="preserve"><value>Save as new version</value></data>
+  <data name="StylePromptEditor.Header" xml:space="preserve"><value>Prompt template</value></data>
+  <data name="StylePromptCacheWarning.Title" xml:space="preserve"><value>Cache impact</value></data>
+  <data name="StylePromptCacheWarning.Message" xml:space="preserve"><value>Saving a new version invalidates cached translations for this profile. Running targets apply it only after acknowledgement.</value></data>
+
+  <data name="OverlayStylesTitle.Text" xml:space="preserve"><value>Overlay styles</value></data>
+  <data name="OverlayStylesSubtitle.Text" xml:space="preserve"><value>Per-region overlay appearance with a live preview of up to 4 fixed translator slots.</value></data>
+  <data name="OverlayModeHeader.Text" xml:space="preserve"><value>Overlay mode</value></data>
+  <data name="OverlayModeReplace.Content" xml:space="preserve"><value>Complete replacement</value></data>
+  <data name="OverlayModeTranslucent.Content" xml:space="preserve"><value>Translucent background</value></data>
+  <data name="OverlayModeOffset.Content" xml:space="preserve"><value>Offset region</value></data>
+  <data name="OverlayModeFloating.Content" xml:space="preserve"><value>Floating panel</value></data>
+  <data name="OverlayTextHeader.Text" xml:space="preserve"><value>Text &amp; contrast</value></data>
+  <data name="OverlayOpacitySlider.Header" xml:space="preserve"><value>Background opacity</value></data>
+  <data name="OverlayFontSizeSlider.Header" xml:space="preserve"><value>Font size</value></data>
+  <data name="OverlayOutlineToggle.Header" xml:space="preserve"><value>Text outline</value></data>
+  <data name="OverlayAutoContrastToggle.Header" xml:space="preserve"><value>Automatic contrast</value></data>
+  <data name="OverlayContrastWarning.Title" xml:space="preserve"><value>Contrast check</value></data>
+  <data name="OverlayContrastWarning.Message" xml:space="preserve"><value>Preview background cannot reveal the true pixels behind text. The selected fallback (outline) is always available.</value></data>
+  <data name="OverlayPreviewHint.Text" xml:space="preserve"><value>Game content area — preview only, not real capture</value></data>
+
+  <data name="WorkbenchTitle.Text" xml:space="preserve"><value>Optical workbench</value></data>
+  <data name="WorkbenchSubtitle.Text" xml:space="preserve"><value>Advanced region editing. The region tree is a complete keyboard and screen-reader alternative to the canvas.</value></data>
+  <data name="RegionTreeHeader.Text" xml:space="preserve"><value>Targets &amp; regions</value></data>
+  <data name="CanvasPlaceholderHint.Text" xml:space="preserve"><value>Capture canvas — thumbnails arrive with backend integration</value></data>
+  <data name="InspectorHeader.Text" xml:space="preserve"><value>Region inspector</value></data>
+  <data name="InspectorBasic.Header" xml:space="preserve"><value>Basic</value></data>
+  <data name="InspectorOcr.Header" xml:space="preserve"><value>OCR</value></data>
+  <data name="InspectorChannels.Header" xml:space="preserve"><value>Translation channels</value></data>
+  <data name="InspectorOverlay.Header" xml:space="preserve"><value>Overlay</value></data>
+  <data name="InspectorLayout.Header" xml:space="preserve"><value>Layout &amp; line breaks</value></data>
+  <data name="InspectorPerformance.Header" xml:space="preserve"><value>Performance &amp; degradation</value></data>
+  <data name="RegionNameBox.Header" xml:space="preserve"><value>Region name</value></data>
+  <data name="RegionPriorityBox.Header" xml:space="preserve"><value>Priority</value></data>
+  <data name="RegionLockToggle.Header" xml:space="preserve"><value>Lock settings (no auto-degradation)</value></data>
+  <data name="HealthStripCapture.Text" xml:space="preserve"><value>Capture</value></data>
+  <data name="HealthStripOcr.Text" xml:space="preserve"><value>OCR</value></data>
+  <data name="HealthStripPipeline.Text" xml:space="preserve"><value>Pipeline</value></data>
+  <data name="HealthStripMemory.Text" xml:space="preserve"><value>Memory</value></data>
+
+  <data name="DiagnosticsTitle.Text" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="DiagnosticsSubtitle.Text" xml:space="preserve"><value>Every failure and degradation with its scope, current behavior, and a direct recovery action. No hidden telemetry.</value></data>
+  <data name="ExportDiagnosticsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Export redacted diagnostics</value></data>
+  <data name="ExportDiagnosticsButtonLabel.Text" xml:space="preserve"><value>Export redacted package</value></data>
+  <data name="CrashReportsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Review local crash reports</value></data>
+  <data name="CrashReportsButtonLabel.Text" xml:space="preserve"><value>Local crash reports</value></data>
+
+  <data name="SettingsTitle.Text" xml:space="preserve"><value>Settings</value></data>
+  <data name="SettingsSubtitle.Text" xml:space="preserve"><value>Application appearance, privacy, hotkeys, and updates.</value></data>
+  <data name="AppearanceHeader.Text" xml:space="preserve"><value>Appearance</value></data>
+  <data name="ThemeSettingLabel.Text" xml:space="preserve"><value>App theme</value></data>
+  <data name="ThemeSettingHint.Text" xml:space="preserve"><value>Applies immediately without rebuilding navigation</value></data>
+  <data name="ThemeSystem.Content" xml:space="preserve"><value>Use system setting</value></data>
+  <data name="ThemeLight.Content" xml:space="preserve"><value>Light</value></data>
+  <data name="ThemeDark.Content" xml:space="preserve"><value>Dark</value></data>
+  <data name="LanguageSettingLabel.Text" xml:space="preserve"><value>Display language</value></data>
+  <data name="LanguageSettingHint.Text" xml:space="preserve"><value>Number and date formats follow the system by default</value></data>
+  <data name="PrivacyHeader.Text" xml:space="preserve"><value>Privacy &amp; history</value></data>
+  <data name="OfflineModeLabel.Text" xml:space="preserve"><value>Strict offline mode</value></data>
+  <data name="OfflineModeHint.Text" xml:space="preserve"><value>Blocks every network request; only local OCR and local models run</value></data>
+  <data name="HistoryRetentionLabel.Text" xml:space="preserve"><value>History retention</value></data>
+  <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>Text-only history, separate opt-in per profile</value></data>
+  <data name="HistoryOff.Content" xml:space="preserve"><value>Off</value></data>
+  <data name="History30Days.Content" xml:space="preserve"><value>30 days</value></data>
+  <data name="History90Days.Content" xml:space="preserve"><value>90 days</value></data>
+  <data name="HotkeysHeader.Text" xml:space="preserve"><value>Hotkeys</value></data>
+  <data name="ToggleOverlayHotkeyLabel.Text" xml:space="preserve"><value>Toggle overlay</value></data>
+  <data name="PauseAllHotkeyLabel.Text" xml:space="preserve"><value>Pause / resume all</value></data>
+  <data name="HotkeyRegisteredHint.Text" xml:space="preserve"><value>Registered — shows actual system registration state</value></data>
+  <data name="AboutHeader.Text" xml:space="preserve"><value>About</value></data>
+  <data name="UpdatePolicyHint.Text" xml:space="preserve"><value>Updates are check-only; nothing installs automatically.</value></data>
+</root>
