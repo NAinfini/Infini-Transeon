@@ -77,13 +77,31 @@ public interface IStillFrameProbe
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A one-shot recognition of a single already-encoded crop. <paramref name="LanguageTag"/> is the
+/// BCP-47 tag of the text being read, or <c>"auto"</c>/<see langword="null"/> to use the user profile
+/// languages — the same convention the native engine applies. Recognising Japanese with an English
+/// model does not fail, it returns confident nonsense, so the caller's configured source language
+/// must reach the engine rather than being guessed here.
+/// </summary>
 public sealed record OcrProbeRequest(
     RegionId RegionId,
     int PixelWidth,
     int PixelHeight,
-    ReadOnlyMemory<byte> EncodedCrop);
+    ReadOnlyMemory<byte> EncodedCrop,
+    string? LanguageTag = null);
 
-public sealed record OcrProbeResult(string Text, IReadOnlyList<TextLine> Lines, TimeSpan Latency);
+/// <summary>
+/// <paramref name="LanguageTag"/> is the language the engine actually recognised with, which is not
+/// necessarily the one requested: <c>"auto"</c> resolves to the account's display languages, so a
+/// Japanese game read on an English-only Windows returns fluent-looking nonsense with no error. The
+/// caller must be able to show which model ran.
+/// </summary>
+public sealed record OcrProbeResult(
+    string Text,
+    IReadOnlyList<TextLine> Lines,
+    TimeSpan Latency,
+    string? LanguageTag = null);
 
 public interface IOcrProbe
 {

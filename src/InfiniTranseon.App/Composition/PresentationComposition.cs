@@ -155,13 +155,14 @@ public static class PresentationComposition
             provider.GetRequiredService<ProfileRepository>(),
             provider.GetRequiredService<IRuntimeControlService>()));
 
-        // Real probes: capture enumerates live windows/monitors; OCR crop and overlay pixel preview
-        // are not carried by protocol v1 and throw the typed unsupported exception; the translation
-        // probe exercises the provider the caller selected, with that provider's own credential
-        // bindings — the same ones the runtime uses.
+        // Real probes: capture enumerates live windows/monitors; overlay pixel preview is not carried
+        // by protocol v1 and throws the typed unsupported exception; OCR runs in-process on the same
+        // Windows.Media.Ocr engine the native runtime uses, so the wizard's test reads what the
+        // profile will read; the translation probe exercises the provider the caller selected, with
+        // that provider's own credential bindings — the same ones the runtime uses.
         services.AddSingleton<ICaptureProbe, CaptureProbe>();
         services.AddSingleton<IStillFrameProbe, StillFrameProbe>();
-        services.AddSingleton<IOcrProbe, OcrProbe>();
+        services.AddSingleton<IOcrProbe, WindowsMediaOcrProbe>();
         services.AddSingleton<IOverlayPreviewRenderer, OverlayPreviewRenderer>();
         services.AddSingleton<ITranslationProbe>(provider => new CatalogTranslationProbe(
             provider.GetRequiredService<IBoundCredentialStore>(),

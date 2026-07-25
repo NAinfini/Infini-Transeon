@@ -210,6 +210,10 @@
   <data name="WorkbenchSavedStatus" xml:space="preserve"><value>已保存</value></data>
   <data name="WorkbenchPreviewRuntimeStopped" xml:space="preserve"><value>启动此档案以启用实时预览</value></data>
   <data name="WorkbenchPreviewLive" xml:space="preserve"><value>实时预览 · {0}×{1} · 第 {2} 帧</value></data>
+  <data name="WorkbenchPreviewStillFrame" xml:space="preserve"><value>静态帧 · {0}×{1} · 启动档案可获得实时预览</value></data>
+  <data name="WorkbenchPreviewTargetNotFound" xml:space="preserve"><value>「{0}」未在运行，无法抓取画面</value></data>
+  <data name="WorkbenchPreviewRefused" xml:space="preserve"><value>此窗口拒绝离屏渲染（全屏 DirectX 游戏常见）。请改用显示器捕获。</value></data>
+  <data name="WorkbenchPreviewTargetGone" xml:space="preserve"><value>捕获目标已关闭</value></data>
   <data name="WorkbenchCloudConsentTitle" xml:space="preserve"><value>将此区域发送到云端 OCR？</value></data>
   <data name="WorkbenchCloudConsentMessage" xml:space="preserve"><value>此区域运行时，裁剪后的游戏像素可能发送给所选云端 OCR 服务。不会包含完整画面、其他区域、API 密钥或历史记录。</value></data>
   <data name="WorkbenchCloudConsentConfirm" xml:space="preserve"><value>允许此区域</value></data>
@@ -406,6 +410,7 @@
   <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>试跑 OCR</value></data>
   <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>识别文本：</value></data>
   <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>无法从该目标取得画面，因此没有可供 OCR 的内容。原因见预览区旁的说明。</value></data>
+  <data name="SetupOcrAutoLanguage" xml:space="preserve"><value>源语言为「自动」，Windows 使用 {0} 模型进行了识别。若上方文本不正确，请显式指定源语言——用英文模型识别日文不会报错，只会返回看似合理的乱码。</value></data>
   <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 1 步：捕获目标</value></data>
   <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>
   <data name="SetupProviderReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>

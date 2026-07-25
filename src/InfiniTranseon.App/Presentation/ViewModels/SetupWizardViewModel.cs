@@ -397,7 +397,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             ? selectedTargets
             : Targets.Take(1));
         SelectedProvider = Providers.FirstOrDefault(provider =>
-            string.Equals(provider.Name, model.TranslationProviderId, StringComparison.OrdinalIgnoreCase))
+            Matches(provider, model.TranslationProviderId))
             ?? Providers.FirstOrDefault();
         ReplaceRegions(model.Regions.Select(ToWorkbenchRegion));
 
@@ -469,7 +469,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             return;
         }
 
-        await _secrets.SetSecretAsync(SelectedProvider.Name, secret, cancellationToken).ConfigureAwait(true);
+        await _secrets.SetSecretAsync(SelectedProvider.Id, secret, cancellationToken).ConfigureAwait(true);
         await LoadCatalogsAsync(cancellationToken).ConfigureAwait(true);
     }
 
@@ -496,7 +496,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
                     SourceLanguage,
                     TargetLanguage,
                     Context: null,
-                    ProviderId: SelectedProvider.Name),
+                    ProviderId: SelectedProvider.Id),
                 CancellationToken.None).ConfigureAwait(true);
             if (result.ErrorCode is not null)
             {
@@ -523,7 +523,12 @@ public sealed partial class SetupWizardViewModel : ObservableObject
     /// caller-supplied encoded crop. The view model never captures pixels itself (that requires
     /// WinUI imaging APIs owned by the page); it only ever forwards real bytes or reports a real
     /// probe failure — it does not fabricate a crop when none is available.</summary>
-    public async Task<(string? Text, TimeSpan Latency, string? Error)> TestOcrAsync(
+    /// <summary>
+    /// <paramref name="EngineLanguageTag"/> is the model that actually ran. It is returned separately
+    /// from the text because with a source language of "auto" it can be unrelated to the game's
+    /// language, and that mismatch produces plausible-looking wrong text rather than an error.
+    /// </summary>
+    public async Task<(string? Text, TimeSpan Latency, string? Error, string? EngineLanguageTag)> TestOcrAsync(
         WorkbenchRegionItem region,
         int pixelWidth,
         int pixelHeight,
@@ -534,15 +539,29 @@ public sealed partial class SetupWizardViewModel : ObservableObject
         try
         {
             OcrProbeResult result = await _ocrProbe.RecognizeAsync(
-                new OcrProbeRequest(new RegionId(region.RegionId), pixelWidth, pixelHeight, encodedCrop),
+                new OcrProbeRequest(
+                    new RegionId(region.RegionId),
+                    pixelWidth,
+                    pixelHeight,
+                    encodedCrop,
+                    LanguageTag: SourceLanguage),
                 cancellationToken).ConfigureAwait(true);
-            return (result.Text, result.Latency, null);
+            return (result.Text, result.Latency, null, result.LanguageTag);
         }
         catch (Exception exception)
         {
-            return (null, TimeSpan.Zero, exception.Message);
+            return (null, TimeSpan.Zero, exception.Message, null);
         }
     }
+
+    /// <summary>
+    /// True when the OCR engine that ran cannot correspond to the configured source language, so the
+    /// text it produced must be treated as unreliable. Only "auto" reaches here — an explicit source
+    /// language with no installed pack fails in the probe instead of quietly substituting another.
+    /// </summary>
+    public bool IsOcrLanguageMismatch(string? engineLanguageTag) =>
+        !string.IsNullOrWhiteSpace(engineLanguageTag) &&
+        string.Equals(SourceLanguage, "auto", StringComparison.OrdinalIgnoreCase);
 
     private async Task LoadCatalogsAsync(CancellationToken cancellationToken)
     {
@@ -564,7 +583,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
 
             IReadOnlyList<ProviderRow> providers =
                 await _settingsService.GetProvidersAsync(cancellationToken).ConfigureAwait(true);
-            string? selectedProviderName = SelectedProvider?.Name;
+            string? selectedProviderId = SelectedProvider?.Id;
             Providers.Clear();
             foreach (ProviderRow provider in providers.Where(provider =>
                          provider.IsTranslationProvider && provider.IsSelectable))
@@ -579,7 +598,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
                 ? restoredTargets
                 : Targets.Take(1));
             SelectedProvider = Providers.FirstOrDefault(provider =>
-                string.Equals(provider.Name, selectedProviderName, StringComparison.OrdinalIgnoreCase))
+                Matches(provider, selectedProviderId))
                 ?? Providers.FirstOrDefault();
         }
         catch (Exception exception)
@@ -622,7 +641,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
                 primaryTarget.Name,
                 primaryTarget.Kind,
                 primaryTarget.Resolution,
-                SelectedProvider?.Name ?? string.Empty,
+                SelectedProvider?.Id ?? string.Empty,
                 Regions.Select(ToProfileRegionDraft).ToArray(),
                 primaryTarget.DesktopRegion,
                 captureTargets);
@@ -755,6 +774,18 @@ public sealed partial class SetupWizardViewModel : ObservableObject
     partial void OnDesktopRegionWidthChanged(double value) => NotifyTargetBoundsChanged();
 
     partial void OnDesktopRegionHeightChanged(double value) => NotifyTargetBoundsChanged();
+
+    /// <summary>
+    /// Re-selects a provider row from a persisted value. Profiles store the catalog id, which is the
+    /// only value the runtime can resolve, so <see cref="ProviderRow.Id"/> is matched first. Display
+    /// names are still accepted because builds before this fix wrote the display name into
+    /// <c>TranslationProviderId</c>; without that leg those profiles would silently re-select the
+    /// first provider in the list and overwrite the user's choice on the next save.
+    /// </summary>
+    private static bool Matches(ProviderRow provider, string? idOrDisplayName) =>
+        !string.IsNullOrWhiteSpace(idOrDisplayName) &&
+        (string.Equals(provider.Id, idOrDisplayName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(provider.Name, idOrDisplayName, StringComparison.OrdinalIgnoreCase));
 
     partial void OnSelectedProviderChanged(ProviderRow? value)
     {

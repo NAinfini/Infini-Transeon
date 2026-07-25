@@ -199,6 +199,10 @@
   <data name="WorkbenchSavedStatus" xml:space="preserve"><value>Saved</value></data>
   <data name="WorkbenchPreviewRuntimeStopped" xml:space="preserve"><value>Start this profile to enable live preview</value></data>
   <data name="WorkbenchPreviewLive" xml:space="preserve"><value>Live preview · {0}×{1} · frame {2}</value></data>
+  <data name="WorkbenchPreviewStillFrame" xml:space="preserve"><value>Still frame · {0}×{1} · start the profile for live preview</value></data>
+  <data name="WorkbenchPreviewTargetNotFound" xml:space="preserve"><value>'{0}' is not running, so no frame can be captured</value></data>
+  <data name="WorkbenchPreviewRefused" xml:space="preserve"><value>This window refuses off-screen rendering (common for fullscreen DirectX games). Capture the monitor instead.</value></data>
+  <data name="WorkbenchPreviewTargetGone" xml:space="preserve"><value>The capture target has closed</value></data>
   <data name="WorkbenchCloudConsentTitle" xml:space="preserve"><value>Send this region to cloud OCR?</value></data>
   <data name="WorkbenchCloudConsentMessage" xml:space="preserve"><value>When this region runs, cropped game pixels can be sent to the selected cloud OCR provider. Full frames, other regions, API keys, and history are not included.</value></data>
   <data name="WorkbenchCloudConsentConfirm" xml:space="preserve"><value>Allow for this region</value></data>
@@ -406,6 +410,7 @@
   <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>Test OCR</value></data>
   <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>Recognized text:</value></data>
   <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>No frame could be taken from this target, so there is nothing to run OCR on. See the reason next to the preview.</value></data>
+  <data name="SetupOcrAutoLanguage" xml:space="preserve"><value>Source language is "auto", so Windows recognised this with its {0} model. If the text above is wrong, set the source language explicitly — an English model reading Japanese returns plausible nonsense, not an error.</value></data>
   <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 1: capture targets</value></data>
   <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 2: languages &amp; services</value></data>
   <data name="SetupProviderReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 2: languages &amp; services</value></data>

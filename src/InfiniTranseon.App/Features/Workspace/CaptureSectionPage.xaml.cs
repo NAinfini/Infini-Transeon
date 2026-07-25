@@ -3,7 +3,9 @@ using InfiniTranseon.App.Controls.Dialogs;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
+using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Probes;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -13,6 +15,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.Windows.ApplicationModel.Resources;
+using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 using Windows.System;
 using Windows.UI.Core;
@@ -33,6 +36,8 @@ public sealed partial class CaptureSectionPage : Page
 
     private readonly IRuntimeControlService _runtime;
     private readonly IProfileService _profiles;
+    private readonly ICaptureProbe _captureProbe;
+    private readonly IStillFrameProbe _stillFrames;
     private readonly DialogService _dialogs;
     private readonly DispatcherTimer _previewTimer = new()
     {
@@ -47,6 +52,8 @@ public sealed partial class CaptureSectionPage : Page
         ViewModel = App.GetService<WorkbenchViewModel>();
         _runtime = App.GetService<IRuntimeControlService>();
         _profiles = App.GetService<IProfileService>();
+        _captureProbe = App.GetService<ICaptureProbe>();
+        _stillFrames = App.GetService<IStillFrameProbe>();
         _dialogs = new DialogService(() => XamlRoot);
         InitializeComponent();
         _previewTimer.Tick += OnPreviewTimerTick;
@@ -467,9 +474,11 @@ public sealed partial class CaptureSectionPage : Page
             }
             if (thumbnail is null)
             {
-                ClearPreview();
-                PreviewStatusText.Text = Strings.GetString("WorkbenchPreviewRuntimeStopped");
-                PreviewStatusIcon.Foreground = new SolidColorBrush(Colors.Gray);
+                // The engine only produces thumbnails while it is running, so editing regions on a
+                // stopped profile used to mean drawing boxes onto an empty canvas. Fall back to an
+                // in-process still frame of the same window/monitor. This is a separate source, not a
+                // disguised runtime frame: the status line says so, and every refusal is reported.
+                await ApplyStillFramePreviewAsync(target, requestedTargetId);
                 return;
             }
             using var stream = new InMemoryRandomAccessStream();
@@ -507,6 +516,111 @@ public sealed partial class CaptureSectionPage : Page
         {
             _previewInFlight = false;
         }
+    }
+
+    /// <summary>
+    /// Shows a GDI still frame of the live window/monitor the target names, for use while the engine
+    /// is stopped. The target row stores a name and a kind, not a native handle, so the live target
+    /// list is re-enumerated and matched by the same rules the engine start path uses.
+    /// </summary>
+    private async Task ApplyStillFramePreviewAsync(WorkbenchTargetItem target, Guid requestedTargetId)
+    {
+        CaptureProbeTarget? live;
+        try
+        {
+            CaptureProbeResult probe = await _captureProbe.ProbeAsync(
+                new CaptureProbeRequest(NameFilter: null),
+                CancellationToken.None);
+            live = ResolveLiveTarget(probe.Targets, target);
+        }
+        catch (Exception exception)
+        {
+            ShowPreviewUnavailable(exception.Message);
+            return;
+        }
+
+        if (live is null)
+        {
+            ShowPreviewUnavailable(string.Format(
+                Strings.GetString("WorkbenchPreviewTargetNotFound"),
+                target.Name));
+            return;
+        }
+
+        try
+        {
+            StillFrameProbeResult frame = await _stillFrames.CaptureAsync(
+                new StillFrameProbeRequest(live.NativeHandle, live.Kind, 960),
+                CancellationToken.None);
+            if (ViewModel.SelectedTarget?.TargetId != requestedTargetId)
+            {
+                return;
+            }
+            Canvas.CoordinateWidth = frame.PixelWidth;
+            Canvas.CoordinateHeight = frame.PixelHeight;
+            Canvas.PreviewSource = await CreateBitmapAsync(frame);
+            PreviewStatusText.Text = string.Format(
+                Strings.GetString("WorkbenchPreviewStillFrame"),
+                frame.PixelWidth,
+                frame.PixelHeight);
+            PreviewStatusIcon.Foreground = new SolidColorBrush(Colors.Gray);
+        }
+        catch (StillFrameUnavailableException unavailable)
+        {
+            ShowPreviewUnavailable(Strings.GetString(
+                unavailable.ErrorCode == StillFrameUnavailableException.TargetRefusedToRenderCode
+                    ? "WorkbenchPreviewRefused"
+                    : "WorkbenchPreviewTargetGone"));
+        }
+        catch (Exception exception)
+        {
+            ShowPreviewUnavailable(exception.Message);
+        }
+    }
+
+    private static CaptureProbeTarget? ResolveLiveTarget(
+        IReadOnlyList<CaptureProbeTarget> candidates,
+        WorkbenchTargetItem target)
+    {
+        bool wantsWindow = string.Equals(target.Kind, "Window", StringComparison.OrdinalIgnoreCase);
+        CaptureProbeTarget[] matching = [.. candidates.Where(candidate =>
+            candidate.Capturable &&
+            candidate.NativeHandle != 0 &&
+            (wantsWindow
+                ? string.Equals(candidate.Kind, "Window", StringComparison.OrdinalIgnoreCase)
+                : !string.Equals(candidate.Kind, "Window", StringComparison.OrdinalIgnoreCase)))];
+        return matching.FirstOrDefault(candidate =>
+                string.Equals(candidate.DisplayName, target.Name, StringComparison.OrdinalIgnoreCase)) ??
+            matching.FirstOrDefault(candidate =>
+                candidate.DisplayName.Contains(target.Name, StringComparison.OrdinalIgnoreCase)) ??
+            (!wantsWindow && matching.Length == 1 ? matching[0] : null);
+    }
+
+    private void ShowPreviewUnavailable(string reason)
+    {
+        ClearPreview();
+        PreviewStatusText.Text = reason;
+        PreviewStatusIcon.Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 185, 0));
+    }
+
+    private static async Task<ImageSource> CreateBitmapAsync(StillFrameProbeResult frame)
+    {
+        using var stream = new InMemoryRandomAccessStream();
+        BitmapEncoder encoder =
+            await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Ignore,
+            (uint)frame.PixelWidth,
+            (uint)frame.PixelHeight,
+            96,
+            96,
+            frame.BgraPixels);
+        await encoder.FlushAsync();
+        stream.Seek(0);
+        var bitmap = new BitmapImage();
+        await bitmap.SetSourceAsync(stream);
+        return bitmap;
     }
 
     private void ClearPreview()

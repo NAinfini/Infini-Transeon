@@ -661,7 +661,7 @@ public sealed partial class SetupWizardPage : Page
             (byte[] Bytes, int Width, int Height) crop = thumbnail is not null
                 ? await CropRegionAsync(thumbnail, region)
                 : await CropRegionAsync(_stillFrame!, region);
-            (string? Text, TimeSpan Latency, string? Error) result =
+            (string? Text, TimeSpan Latency, string? Error, string? EngineLanguageTag) result =
                 await ViewModel.TestOcrAsync(region, crop.Width, crop.Height, crop.Bytes);
             if (result.Error is not null)
             {
@@ -672,6 +672,17 @@ public sealed partial class SetupWizardPage : Page
             OcrResultLabel.Visibility = Visibility.Visible;
             OcrResultText.Visibility = Visibility.Visible;
             OcrResultText.Text = result.Text;
+            // Reading Japanese with an English model does not fail — it returns confident nonsense.
+            // With "auto" the engine follows Windows' display languages, not the game's, so the user
+            // has to be told which model produced the text above.
+            if (ViewModel.IsOcrLanguageMismatch(result.EngineLanguageTag))
+            {
+                ShowOcrInfo(
+                    InfoBarSeverity.Warning,
+                    string.Format(
+                        Strings.GetString("SetupOcrAutoLanguage"),
+                        result.EngineLanguageTag));
+            }
         }
         catch (Exception exception)
         {
