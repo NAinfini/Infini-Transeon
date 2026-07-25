@@ -33,6 +33,32 @@ public sealed class FakeCaptureProbe : ICaptureProbe
     }
 }
 
+/// <summary>
+/// Design-time still frame: a flat opaque fill at the requested size. It never claims to be a
+/// picture of anything — the real probe is the only thing that produces game pixels.
+/// </summary>
+public sealed class FakeStillFrameProbe : IStillFrameProbe
+{
+    public ValueTask<StillFrameProbeResult> CaptureAsync(
+        StillFrameProbeRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        int width = Math.Clamp(request.MaximumLongEdge, 16, 1920);
+        int height = Math.Max(1, width * 9 / 16);
+        byte[] pixels = new byte[checked(width * height * 4)];
+        for (int index = 0; index < pixels.Length; index += 4)
+        {
+            pixels[index] = 0x2E;
+            pixels[index + 1] = 0x25;
+            pixels[index + 2] = 0x23;
+            pixels[index + 3] = 0xFF;
+        }
+        return ValueTask.FromResult(new StillFrameProbeResult(width, height, pixels));
+    }
+}
+
 public sealed class FakeOcrProbe : IOcrProbe
 {
     public ValueTask<OcrProbeResult> RecognizeAsync(

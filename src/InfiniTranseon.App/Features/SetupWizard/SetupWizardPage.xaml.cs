@@ -7,6 +7,7 @@ using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Probes;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -42,6 +43,10 @@ public sealed partial class SetupWizardPage : Page
         LanguageCatalog.CreateTargetOptions();
     private readonly AppNavigationState _navigation;
     private readonly IRuntimeControlService _runtime;
+    private readonly IStillFrameProbe _stillFrames;
+    /// <summary>Last in-process frame of the selected target: shown in step 1, drawn on in step 3,
+    /// and cropped for the step 3 OCR test so all three agree on the same pixels.</summary>
+    private StillFrameProbeResult? _stillFrame;
     private Guid _editProfileId;
     private bool _isSynchronizingLanguageText;
     private bool _isSynchronizingTargetSelection;
@@ -53,6 +58,7 @@ public sealed partial class SetupWizardPage : Page
         ViewModel = App.GetService<SetupWizardViewModel>();
         _navigation = App.GetService<AppNavigationState>();
         _runtime = App.GetService<IRuntimeControlService>();
+        _stillFrames = App.GetService<IStillFrameProbe>();
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         Canvas.Regions = ViewModel.Regions;
     }
@@ -222,54 +228,117 @@ public sealed partial class SetupWizardPage : Page
         }
     }
 
-    /// <summary>Honest gap: <see cref="IRuntimeControlService.RequestThumbnailAsync"/> only ever
-    /// returns pixels for a target the engine is actively capturing, which a brand-new (unsaved,
-    /// unstarted) profile never is. This still makes the real call — for a profile being edited
-    /// while its engine happens to be running it can genuinely succeed — but always falls back to
-    /// the labeled "preview unavailable" placeholder rather than fabricating a picture.</summary>
+    /// <summary>
+    /// Shows a real frame of the selected target. The engine's own thumbnail is preferred when a
+    /// profile is being edited while its engine runs; otherwise <see cref="IStillFrameProbe"/>
+    /// grabs one in-process, which is what makes step 1 and step 3 usable for a brand-new profile.
+    /// Nothing here fabricates a picture: when neither source can produce a frame the placeholder
+    /// states the actual reason.
+    /// </summary>
     private async Task RefreshTargetPreviewAsync()
     {
-        if (!ViewModel.IsStep1 || ViewModel.SelectedTarget is not { } target)
+        if (ViewModel.SelectedTarget is not { } target)
         {
-            ClearTargetPreview();
+            ClearTargetPreview(Strings.GetString("SetupTargetPreviewNoTarget"));
+            return;
+        }
+        if (!ViewModel.IsStep1 && !ViewModel.IsStep3)
+        {
             return;
         }
 
         try
         {
-            RuntimeThumbnail? thumbnail = await _runtime.RequestThumbnailAsync(target.TargetId.Value, 480);
-            if (thumbnail is null)
+            RuntimeThumbnail? thumbnail =
+                await _runtime.RequestThumbnailAsync(target.TargetId.Value, 1600);
+            if (thumbnail is not null)
             {
-                ClearTargetPreview();
+                ApplyTargetPreview(await DecodeThumbnailAsync(thumbnail));
                 return;
             }
-
-            using var stream = new InMemoryRandomAccessStream();
-            using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
-            {
-                writer.WriteBytes(thumbnail.EncodedImage.ToArray());
-                await writer.StoreAsync();
-                await writer.FlushAsync();
-                writer.DetachStream();
-            }
-            stream.Seek(0);
-            var bitmap = new BitmapImage();
-            await bitmap.SetSourceAsync(stream);
-            TargetPreviewImage.Source = bitmap;
-            TargetPreviewImage.Visibility = Visibility.Visible;
-            TargetPreviewPlaceholder.Visibility = Visibility.Collapsed;
         }
         catch (Exception)
         {
-            ClearTargetPreview();
+            // The engine path is optional here; fall through to the in-process probe, whose own
+            // failure is reported to the user below.
+        }
+
+        try
+        {
+            _stillFrame = await _stillFrames.CaptureAsync(
+                new StillFrameProbeRequest(target.NativeHandle, target.Kind, 1600),
+                CancellationToken.None);
+            ApplyTargetPreview(await CreateBitmapAsync(_stillFrame));
+        }
+        catch (StillFrameUnavailableException unavailable)
+        {
+            ClearTargetPreview(Strings.GetString(
+                unavailable.ErrorCode == StillFrameUnavailableException.TargetRefusedToRenderCode
+                    ? "SetupTargetPreviewRefused"
+                    : "SetupTargetPreviewGone"));
+        }
+        catch (Exception exception)
+        {
+            ClearTargetPreview(exception.Message);
         }
     }
 
-    private void ClearTargetPreview()
+    private void ApplyTargetPreview(ImageSource source)
     {
+        TargetPreviewImage.Source = source;
+        TargetPreviewImage.Visibility = Visibility.Visible;
+        TargetPreviewPlaceholder.Visibility = Visibility.Collapsed;
+        // Step 3 draws regions over the same frame, so the user is no longer drawing boxes blind.
+        Canvas.PreviewSource = source;
+    }
+
+    private void ClearTargetPreview(string reason)
+    {
+        _stillFrame = null;
         TargetPreviewImage.Source = null;
         TargetPreviewImage.Visibility = Visibility.Collapsed;
+        TargetPreviewPlaceholder.Text = reason;
         TargetPreviewPlaceholder.Visibility = Visibility.Visible;
+        Canvas.PreviewSource = null;
+    }
+
+    private static async Task<ImageSource> DecodeThumbnailAsync(RuntimeThumbnail thumbnail)
+    {
+        using var stream = new InMemoryRandomAccessStream();
+        using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+        {
+            writer.WriteBytes(thumbnail.EncodedImage.ToArray());
+            await writer.StoreAsync();
+            await writer.FlushAsync();
+            writer.DetachStream();
+        }
+        stream.Seek(0);
+        var bitmap = new BitmapImage();
+        await bitmap.SetSourceAsync(stream);
+        return bitmap;
+    }
+
+    /// <summary>Wraps the probe's raw BGRA in a decodable image. The round trip through the PNG
+    /// encoder keeps this on the same WinRT imaging path the rest of the page uses, rather than
+    /// depending on the buffer interop extensions that modern .NET no longer ships.</summary>
+    private static async Task<ImageSource> CreateBitmapAsync(StillFrameProbeResult frame)
+    {
+        using var stream = new InMemoryRandomAccessStream();
+        BitmapEncoder encoder =
+            await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Ignore,
+            (uint)frame.PixelWidth,
+            (uint)frame.PixelHeight,
+            96,
+            96,
+            frame.BgraPixels);
+        await encoder.FlushAsync();
+        stream.Seek(0);
+        var bitmap = new BitmapImage();
+        await bitmap.SetSourceAsync(stream);
+        return bitmap;
     }
 
     // -- Step 2: language & service ----------------------------------------------------------
@@ -564,7 +633,7 @@ public sealed partial class SetupWizardPage : Page
         OcrResultLabel.Visibility = Visibility.Collapsed;
         OcrResultText.Visibility = Visibility.Collapsed;
 
-        RuntimeThumbnail? thumbnail;
+        RuntimeThumbnail? thumbnail = null;
         try
         {
             thumbnail = await _runtime.RequestThumbnailAsync(target.TargetId.Value, 1600);
@@ -575,7 +644,13 @@ public sealed partial class SetupWizardPage : Page
             return;
         }
 
-        if (thumbnail is null)
+        // Before this, a not-yet-started profile had no frame at all and the button could never
+        // succeed. The still frame taken for the region canvas is the same pixels the user drew on.
+        if (thumbnail is null && _stillFrame is null)
+        {
+            await RefreshTargetPreviewAsync();
+        }
+        if (thumbnail is null && _stillFrame is null)
         {
             ShowOcrInfo(InfoBarSeverity.Informational, Strings.GetString("SetupOcrTestUnavailable"));
             return;
@@ -583,7 +658,9 @@ public sealed partial class SetupWizardPage : Page
 
         try
         {
-            (byte[] Bytes, int Width, int Height) crop = await CropRegionAsync(thumbnail, region);
+            (byte[] Bytes, int Width, int Height) crop = thumbnail is not null
+                ? await CropRegionAsync(thumbnail, region)
+                : await CropRegionAsync(_stillFrame!, region);
             (string? Text, TimeSpan Latency, string? Error) result =
                 await ViewModel.TestOcrAsync(region, crop.Width, crop.Height, crop.Bytes);
             if (result.Error is not null)
@@ -663,6 +740,53 @@ public sealed partial class SetupWizardPage : Page
         await reader.LoadAsync((uint)targetStream.Size);
         reader.ReadBytes(bytes);
         return (bytes, (int)cropWidth, (int)cropHeight);
+    }
+
+    /// <summary>Crops the region out of an in-process still frame. The pixels are already BGRA, so
+    /// this only slices rows and re-encodes as PNG for <see cref="IOcrProbe"/>.</summary>
+    private static async Task<(byte[] Bytes, int Width, int Height)> CropRegionAsync(
+        StillFrameProbeResult frame,
+        WorkbenchRegionItem region)
+    {
+        int cropX = (int)Math.Clamp(region.X * frame.PixelWidth, 0, frame.PixelWidth - 1);
+        int cropY = (int)Math.Clamp(region.Y * frame.PixelHeight, 0, frame.PixelHeight - 1);
+        int cropWidth = (int)Math.Clamp(
+            region.Width * frame.PixelWidth, 1, frame.PixelWidth - cropX);
+        int cropHeight = (int)Math.Clamp(
+            region.Height * frame.PixelHeight, 1, frame.PixelHeight - cropY);
+
+        var pixels = new byte[checked(cropWidth * cropHeight * 4)];
+        int sourceStride = frame.PixelWidth * 4;
+        int targetStride = cropWidth * 4;
+        for (int row = 0; row < cropHeight; row++)
+        {
+            Array.Copy(
+                frame.BgraPixels,
+                ((cropY + row) * sourceStride) + (cropX * 4),
+                pixels,
+                row * targetStride,
+                targetStride);
+        }
+
+        using var targetStream = new InMemoryRandomAccessStream();
+        BitmapEncoder encoder =
+            await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, targetStream);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Premultiplied,
+            (uint)cropWidth,
+            (uint)cropHeight,
+            96,
+            96,
+            pixels);
+        await encoder.FlushAsync();
+
+        var bytes = new byte[targetStream.Size];
+        targetStream.Seek(0);
+        using var reader = new DataReader(targetStream.GetInputStreamAt(0));
+        await reader.LoadAsync((uint)targetStream.Size);
+        reader.ReadBytes(bytes);
+        return (bytes, cropWidth, cropHeight);
     }
 
     // -- Step 4: review & save ----------------------------------------------------------------

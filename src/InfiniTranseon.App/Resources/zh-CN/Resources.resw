@@ -389,7 +389,10 @@
   <data name="SetupSaveOnlyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存档案但不启动运行时</value></data>
   <data name="SetupSaveErrorBar.Title" xml:space="preserve"><value>无法保存档案</value></data>
   <data name="SetupTargetPreviewHeader.Text" xml:space="preserve"><value>目标预览</value></data>
-  <data name="SetupTargetPreviewUnavailable.Text" xml:space="preserve"><value>档案启动运行后即可查看预览。</value></data>
+  <data name="SetupTargetPreviewUnavailable.Text" xml:space="preserve"><value>选择一个捕获目标即可看到实时画面。</value></data>
+  <data name="SetupTargetPreviewNoTarget" xml:space="preserve"><value>选择一个捕获目标即可看到实时画面。</value></data>
+  <data name="SetupTargetPreviewRefused" xml:space="preserve"><value>该窗口不会渲染静态帧 —— 独占全屏和部分 DirectX 游戏一律如此。请改为捕获它所在的显示器。</value></data>
+  <data name="SetupTargetPreviewGone" xml:space="preserve"><value>该捕获目标已关闭或没有有效尺寸。请刷新列表后重新选择。</value></data>
   <data name="SetupTestTranslationButton.Content" xml:space="preserve"><value>测试翻译</value></data>
   <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>将通过所选翻译服务商发送示例句子 “Hello, adventurer.”：</value></data>
   <data name="SetupTestTranslationErrorTitle.Title" xml:space="preserve"><value>翻译测试失败</value></data>
@@ -402,7 +405,7 @@
   <data name="SetupInspectorHeader.Text" xml:space="preserve"><value>所选区域</value></data>
   <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>试跑 OCR</value></data>
   <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>识别文本：</value></data>
-  <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>OCR 试跑需要该目标处于正在捕获的运行状态。请先保存并启动一次档案，或稍后在工作台中验证 OCR。</value></data>
+  <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>无法从该目标取得画面，因此没有可供 OCR 的内容。原因见预览区旁的说明。</value></data>
   <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 1 步：捕获目标</value></data>
   <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>
   <data name="SetupProviderReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>

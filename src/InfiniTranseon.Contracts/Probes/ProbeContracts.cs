@@ -42,6 +42,41 @@ public interface ICaptureProbe
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A single frame grabbed from a capture target without starting the engine.
+/// <paramref name="NativeHandle"/> and <paramref name="Kind"/> come straight from the
+/// <see cref="CaptureProbeTarget"/> the user picked.
+/// </summary>
+public sealed record StillFrameProbeRequest(
+    ulong NativeHandle,
+    string Kind,
+    int MaximumLongEdge);
+
+/// <summary>
+/// Bottom-up-free, top-down BGRA32 pixels with no row padding
+/// (<paramref name="PixelWidth"/> * 4 bytes per row). Encoding to a container format needs an
+/// imaging stack, which Core deliberately does not depend on — the presentation layer already has
+/// one and does that step.
+/// </summary>
+public sealed record StillFrameProbeResult(
+    int PixelWidth,
+    int PixelHeight,
+    byte[] BgraPixels);
+
+/// <summary>
+/// Grabs one frame from a window or monitor in-process, so region drawing, preview and the OCR
+/// test work before a profile has ever been started. This is not the runtime capture path: it uses
+/// GDI, it is a still image, and it fails loudly (never a blank frame) when the target refuses to
+/// render — notably fullscreen-exclusive and some DirectX games, for which the caller must tell the
+/// user to use monitor capture instead.
+/// </summary>
+public interface IStillFrameProbe
+{
+    ValueTask<StillFrameProbeResult> CaptureAsync(
+        StillFrameProbeRequest request,
+        CancellationToken cancellationToken);
+}
+
 public sealed record OcrProbeRequest(
     RegionId RegionId,
     int PixelWidth,

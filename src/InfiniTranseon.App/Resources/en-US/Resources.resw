@@ -389,7 +389,10 @@
   <data name="SetupSaveOnlyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Save profile without starting the runtime</value></data>
   <data name="SetupSaveErrorBar.Title" xml:space="preserve"><value>Couldn't save profile</value></data>
   <data name="SetupTargetPreviewHeader.Text" xml:space="preserve"><value>Target preview</value></data>
-  <data name="SetupTargetPreviewUnavailable.Text" xml:space="preserve"><value>Preview becomes available once this profile is running.</value></data>
+  <data name="SetupTargetPreviewUnavailable.Text" xml:space="preserve"><value>Select a capture target to see a live frame.</value></data>
+  <data name="SetupTargetPreviewNoTarget" xml:space="preserve"><value>Select a capture target to see a live frame.</value></data>
+  <data name="SetupTargetPreviewRefused" xml:space="preserve"><value>This window will not render a still frame — fullscreen-exclusive and some DirectX games never do. Capture the monitor it runs on instead.</value></data>
+  <data name="SetupTargetPreviewGone" xml:space="preserve"><value>This capture target has closed or reports no size. Refresh the list and pick it again.</value></data>
   <data name="SetupTestTranslationButton.Content" xml:space="preserve"><value>Test translation</value></data>
   <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>Sends the sample sentence "Hello, adventurer." through the selected translator:</value></data>
   <data name="SetupTestTranslationErrorTitle.Title" xml:space="preserve"><value>Translation test failed</value></data>
@@ -402,7 +405,7 @@
   <data name="SetupInspectorHeader.Text" xml:space="preserve"><value>Selected region</value></data>
   <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>Test OCR</value></data>
   <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>Recognized text:</value></data>
-  <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>OCR test needs a running capture session for this target. Save and start the profile once, or verify OCR later in the workspace.</value></data>
+  <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>No frame could be taken from this target, so there is nothing to run OCR on. See the reason next to the preview.</value></data>
   <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 1: capture targets</value></data>
   <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 2: languages &amp; services</value></data>
   <data name="SetupProviderReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 2: languages &amp; services</value></data>

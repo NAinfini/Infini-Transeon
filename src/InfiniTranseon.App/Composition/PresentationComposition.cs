@@ -35,6 +35,7 @@ public static class PresentationComposition
         // with the EngineHost-backed implementations in AddRealPresentationServices.
         services.AddSingleton<IRuntimeControlService, FakeRuntimeControlService>();
         services.AddSingleton<ICaptureProbe, FakeCaptureProbe>();
+        services.AddSingleton<IStillFrameProbe, FakeStillFrameProbe>();
         services.AddSingleton<IOcrProbe, FakeOcrProbe>();
         services.AddSingleton<ITranslationProbe, FakeTranslationProbe>();
         services.AddSingleton<IOverlayPreviewRenderer, FakeOverlayPreviewRenderer>();
@@ -159,6 +160,7 @@ public static class PresentationComposition
         // probe exercises the provider the caller selected, with that provider's own credential
         // bindings — the same ones the runtime uses.
         services.AddSingleton<ICaptureProbe, CaptureProbe>();
+        services.AddSingleton<IStillFrameProbe, StillFrameProbe>();
         services.AddSingleton<IOcrProbe, OcrProbe>();
         services.AddSingleton<IOverlayPreviewRenderer, OverlayPreviewRenderer>();
         services.AddSingleton<ITranslationProbe>(provider => new CatalogTranslationProbe(
