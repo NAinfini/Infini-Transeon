@@ -9,6 +9,26 @@ public enum FormattingRegionMode
     Explicit,
 }
 
+public enum ThemePreference
+{
+    System,
+    Light,
+    Dark,
+}
+
+public enum HistoryRetentionPolicy
+{
+    Off,
+    Days30,
+    Days90,
+}
+
+public sealed record HotkeySetting(
+    string Action,
+    string Gesture,
+    bool Enabled,
+    string Scope);
+
 public sealed record PerformanceRuntimeSettings
 {
     public PerformancePreset Preset { get; init; } = PerformancePreset.Balanced;
@@ -48,7 +68,16 @@ public sealed record ApplicationSettings
     public string UiLanguage { get; init; } = "en-US";
     public FormattingRegionMode FormattingRegionMode { get; init; } = FormattingRegionMode.System;
     public string? FormattingRegion { get; init; }
+    public ThemePreference Theme { get; init; } = ThemePreference.System;
+    public bool StrictOffline { get; init; }
+    public HistoryRetentionPolicy HistoryRetention { get; init; } = HistoryRetentionPolicy.Days30;
+    public IReadOnlyList<HotkeySetting>? Hotkeys { get; init; }
+    public IReadOnlyDictionary<string, string> ProviderEndpoints { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
     public bool ReducedMotion { get; init; }
+    public bool CloseToTray { get; init; } = true;
+    public bool CloseToTrayConfirmed { get; init; }
+    public IReadOnlyList<Guid> PinnedProfileIds { get; init; } = [];
     public PerformanceRuntimeSettings Performance { get; init; } = new();
 
     public void Validate()
@@ -66,6 +95,49 @@ public sealed record ApplicationSettings
         {
             throw new InvalidDataException("An explicit formatting region is required.");
         }
+        if (!Enum.IsDefined(Theme) || !Enum.IsDefined(HistoryRetention))
+        {
+            throw new InvalidDataException("Application presentation settings are invalid.");
+        }
+        if (Hotkeys is { Count: > 32 })
+        {
+            throw new InvalidDataException("Too many global hotkeys are configured.");
+        }
+        foreach (HotkeySetting hotkey in Hotkeys ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(hotkey.Action) || hotkey.Action.Length > 64 ||
+                string.IsNullOrWhiteSpace(hotkey.Gesture) || hotkey.Gesture.Length > 128 ||
+                string.IsNullOrWhiteSpace(hotkey.Scope) || hotkey.Scope.Length > 64)
+            {
+                throw new InvalidDataException("A global hotkey setting is invalid.");
+            }
+        }
+        ArgumentNullException.ThrowIfNull(ProviderEndpoints);
+        ArgumentNullException.ThrowIfNull(PinnedProfileIds);
+        if (PinnedProfileIds.Count > 256 ||
+            PinnedProfileIds.Any(profileId => profileId == Guid.Empty) ||
+            PinnedProfileIds.Distinct().Count() != PinnedProfileIds.Count)
+        {
+            throw new InvalidDataException("Pinned profile IDs are invalid.");
+        }
+        if (ProviderEndpoints.Count > 32)
+        {
+            throw new InvalidDataException("Too many provider endpoints are configured.");
+        }
+        foreach ((string providerId, string endpointText) in ProviderEndpoints)
+        {
+            if (string.IsNullOrWhiteSpace(providerId) || providerId.Length > 128 ||
+                !Uri.TryCreate(endpointText, UriKind.Absolute, out Uri? endpoint) ||
+                endpoint.Scheme != Uri.UriSchemeHttps ||
+                !string.IsNullOrEmpty(endpoint.UserInfo) ||
+                endpoint.AbsolutePath != "/" ||
+                !string.IsNullOrEmpty(endpoint.Query) ||
+                !string.IsNullOrEmpty(endpoint.Fragment))
+            {
+                throw new InvalidDataException(
+                    $"Provider endpoint '{providerId}' must be an HTTPS origin.");
+            }
+        }
         ArgumentNullException.ThrowIfNull(Performance);
         Performance.Validate();
         try
@@ -79,12 +151,4 @@ public sealed record ApplicationSettings
             throw new InvalidDataException("Application language or formatting region is invalid.", error);
         }
     }
-}
-
-public static class ApplicationDataPaths
-{
-    public static string ProfileDatabase => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Infini-Transeon",
-        "profiles.db");
 }

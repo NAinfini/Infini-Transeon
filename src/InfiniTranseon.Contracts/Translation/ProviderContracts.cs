@@ -25,6 +25,12 @@ public sealed record ProviderCostReservation(
     decimal? MaximumCost,
     string? Currency);
 
+public enum TranslationOperation
+{
+    Translate,
+    Refine,
+}
+
 public sealed record TranslationRequest(
     string SourceText,
     string SourceLanguage,
@@ -37,7 +43,9 @@ public sealed record TranslationRequest(
     int MaximumOutputCharacters,
     int MaximumOutputTokens,
     ProviderCostReservation CostReservation,
-    bool StrictOffline);
+    bool StrictOffline,
+    TranslationOperation Operation = TranslationOperation.Translate,
+    string? StylePrompt = null);
 
 public sealed record ProviderUsage(long InputUnits, long OutputUnits, string BillingUnit)
 {

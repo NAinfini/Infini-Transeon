@@ -145,4 +145,13 @@ public interface IEngineRuntime : IAsyncDisposable
 
     /// <summary>Request an out-of-cadence OCR pass, when the backend supports it.</summary>
     ValueTask RequestManualOcrAsync(CancellationToken cancellationToken);
+
+    /// <summary>Request one bounded preview frame for a running target.</summary>
+    ValueTask<RuntimeThumbnail> RequestThumbnailAsync(
+        TargetInstanceId targetInstanceId,
+        int maximumLongEdge,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromException<RuntimeThumbnail>(
+            new NotSupportedException("engine.runtime.unsupported.thumbnail"));
+
 }

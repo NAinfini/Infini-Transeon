@@ -9,6 +9,7 @@ namespace InfiniTranseon.Core.Translation;
 public interface IGoogleAccessTokenSource
 {
     ValueTask<string> GetAccessTokenAsync(CancellationToken cancellationToken);
+    ValueTask<string> GetProjectIdAsync(CancellationToken cancellationToken);
 }
 
 public sealed record GoogleServiceAccountTokenOptions(
@@ -17,17 +18,18 @@ public sealed record GoogleServiceAccountTokenOptions(
     ProxyPolicy ProxyPolicy,
     int MaximumCredentialCharacters = 256 * 1024,
     int MaximumResponseBytes = 64 * 1024,
-    Func<DateTimeOffset>? Clock = null);
+    Func<DateTimeOffset>? Clock = null,
+    string ProviderId = "translation.google-cloud");
 
 public sealed class GoogleServiceAccountTokenSource : IGoogleAccessTokenSource, IDisposable
 {
-    private const string ProviderId = "google.oauth2";
     private const string Scope = "https://www.googleapis.com/auth/cloud-translation";
     private readonly GoogleServiceAccountTokenOptions _options;
     private readonly HttpClient _httpClient;
     private readonly IBoundCredentialStore _credentials;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private AccessToken? _cached;
+    private string? _projectId;
     private bool _disposed;
 
     public GoogleServiceAccountTokenSource(
@@ -51,14 +53,21 @@ public sealed class GoogleServiceAccountTokenSource : IGoogleAccessTokenSource, 
         _credentials = credentials;
     }
 
-    public CredentialBinding CreateCredentialBinding() => new(
-        ProviderId,
+    public CredentialBinding CreateCredentialBinding() => CreateCredentialBinding(_options);
+
+    public static CredentialBinding CreateCredentialBinding(
+        GoogleServiceAccountTokenOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new(
+        options.ProviderId,
         "service-account-json",
         "https",
-        _options.TokenEndpoint.IdnHost,
-        _options.TokenEndpoint.IsDefaultPort ? 443 : _options.TokenEndpoint.Port,
+        options.TokenEndpoint.IdnHost,
+        options.TokenEndpoint.IsDefaultPort ? 443 : options.TokenEndpoint.Port,
         "oauth2-jwt-bearer",
-        _options.ProxyPolicy);
+        options.ProxyPolicy);
+    }
 
     public async ValueTask<string> GetAccessTokenAsync(CancellationToken cancellationToken)
     {
@@ -73,6 +82,7 @@ public sealed class GoogleServiceAccountTokenSource : IGoogleAccessTokenSource, 
             cached = _cached;
             if (cached is not null && now < cached.RefreshAfterUtc) return cached.Value;
             ServiceAccount account = await ReadServiceAccountAsync(cancellationToken).ConfigureAwait(false);
+            Volatile.Write(ref _projectId, account.ProjectId);
             string assertion = CreateAssertion(account, now);
             using var message = new HttpRequestMessage(HttpMethod.Post, _options.TokenEndpoint)
             {
@@ -128,6 +138,16 @@ public sealed class GoogleServiceAccountTokenSource : IGoogleAccessTokenSource, 
         }
     }
 
+    public async ValueTask<string> GetProjectIdAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        string? cached = Volatile.Read(ref _projectId);
+        if (!string.IsNullOrWhiteSpace(cached)) return cached;
+        ServiceAccount account = await ReadServiceAccountAsync(cancellationToken).ConfigureAwait(false);
+        Volatile.Write(ref _projectId, account.ProjectId);
+        return account.ProjectId;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -163,9 +183,10 @@ public sealed class GoogleServiceAccountTokenSource : IGoogleAccessTokenSource, 
                 throw new InvalidOperationException("google.oauth.unsupportedCredentialType");
             string email = Required(root, "client_email");
             string privateKey = Required(root, "private_key");
-            if (email.Length > 320 || privateKey.Length > 64 * 1024)
+            string projectId = Required(root, "project_id");
+            if (email.Length > 320 || privateKey.Length > 64 * 1024 || projectId.Length > 256)
                 throw new InvalidOperationException("google.oauth.malformedCredential");
-            return new ServiceAccount(email, privateKey);
+            return new ServiceAccount(email, privateKey, projectId);
         }
         catch (JsonException exception)
         {
@@ -235,6 +256,6 @@ public sealed class GoogleServiceAccountTokenSource : IGoogleAccessTokenSource, 
     private static string Base64Url(ReadOnlySpan<byte> value) =>
         Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private sealed record ServiceAccount(string Email, string PrivateKey);
+    private sealed record ServiceAccount(string Email, string PrivateKey, string ProjectId);
     private sealed record AccessToken(string Value, DateTimeOffset RefreshAfterUtc);
 }

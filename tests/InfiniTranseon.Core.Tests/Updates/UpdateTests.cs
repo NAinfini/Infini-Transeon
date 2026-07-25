@@ -106,14 +106,16 @@ public sealed class UpdateTests
             service.DownloadApprovedAsync(
                 new UpdateArtifact(
                     new Uri("https://github.com/owner/repo/releases/download/v2/app.zip"),
-                    "app.zip", 1, new string('0', 64), null),
+                    "app.zip", 1, new string('0', 64),
+                    ArtifactCodeSigningPolicies.NotApplicable, null),
                 Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
                 false,
                 TestContext.Current.CancellationToken).AsTask());
         await Assert.ThrowsAsync<ArgumentException>(() => service.DownloadApprovedAsync(
             new UpdateArtifact(
                 new Uri("https://example.com/app.zip"),
-                "app.zip", 1, new string('0', 64), null),
+                "app.zip", 1, new string('0', 64),
+                ArtifactCodeSigningPolicies.NotApplicable, null),
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             true,
             TestContext.Current.CancellationToken).AsTask());
@@ -148,7 +150,7 @@ public sealed class UpdateTests
     public void SignedReleaseFixtureUsesTheRuntimeCanonicalBytes()
     {
         const string expected =
-            "{\"architecture\":\"win-x64\",\"artifacts\":[{\"byteSize\":7,\"fileName\":\"app.zip\",\"sha256\":\"a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829\"}],\"channel\":\"stable\",\"minimumWindowsBuild\":22621,\"publishedAtUtc\":\"2026-07-21T00:00:00\\u002B00:00\",\"releaseSequence\":2,\"releaseVersion\":\"2.0.0\",\"schemaVersion\":1}";
+            "{\"architecture\":\"win-x64\",\"artifacts\":[{\"byteSize\":7,\"codeSigning\":\"not-applicable\",\"fileName\":\"app.zip\",\"sha256\":\"a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829\"}],\"channel\":\"stable\",\"minimumWindowsBuild\":22621,\"publishedAtUtc\":\"2026-07-21T00:00:00\\u002B00:00\",\"releaseSequence\":2,\"releaseVersion\":\"2.0.0\",\"schemaVersion\":1}";
         using System.Text.Json.JsonDocument document =
             System.Text.Json.JsonDocument.Parse(SignedReleaseManifest());
         byte[] canonical = SignatureVerifier.CanonicalizeWithoutSignatures(document.RootElement);
@@ -158,7 +160,7 @@ public sealed class UpdateTests
             .VerifyDetached(
                 canonical,
                 Convert.FromBase64String(
-                    "o7CkmoUreV4ojCHAyhs71X7Uju32KyZhmYjZEyh8HLYeD48l8Tn9sIaVKoVRTzwEa5+euCT78RNxB1Ng6ZHBAQ=="),
+                    "jP4LQY1rJi2wSAgjJ9/CIA5+/lX5YpLU4hb2EOxo+H247/0ZeGaWm8IPHmroPlM3KRUGCjgtJNuTL9FJ11zJAw=="),
                 TestKey()));
     }
 
@@ -282,7 +284,7 @@ public sealed class UpdateTests
     }
 
     [Fact]
-    public async Task ExecutableUpdateArtifactRequiresAnAuthenticodePublisher()
+    public async Task ExecutableUpdateArtifactRequiresAnExplicitCodeSigningPolicy()
     {
         byte[] payload = "release"u8.ToArray();
         int clientConstructions = 0;
@@ -291,6 +293,7 @@ public sealed class UpdateTests
             "app.msi",
             payload.Length,
             Convert.ToHexString(SHA256.HashData(payload)),
+            ArtifactCodeSigningPolicies.NotApplicable,
             null);
         var service = Service(() =>
         {
@@ -309,6 +312,40 @@ public sealed class UpdateTests
             TestContext.Current.CancellationToken).AsTask());
 
         Assert.Equal(0, clientConstructions);
+    }
+
+    [Fact]
+    public async Task ExplicitlyUnsignedInstallerUsesSignedManifestHashAndPublishesAtomically()
+    {
+        byte[] payload = "release"u8.ToArray();
+        var artifact = new UpdateArtifact(
+            new Uri("https://github.com/owner/repo/releases/download/v2/app.msi"),
+            "app.msi",
+            payload.Length,
+            Convert.ToHexString(SHA256.HashData(payload)),
+            ArtifactCodeSigningPolicies.Unsigned,
+            null);
+        using var client = new HttpClient(new DelegateHandler(request => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            RequestMessage = request,
+            Content = new ByteArrayContent(payload),
+        }));
+        var service = Service(() => client);
+        string directory = Path.Combine(Path.GetTempPath(), "infini-update-" + Guid.NewGuid().ToString("N"));
+        string destination = Path.Combine(directory, "app.msi");
+        try
+        {
+            string result = await service.DownloadApprovedAsync(
+                artifact, destination, true, TestContext.Current.CancellationToken);
+
+            Assert.Equal(Path.GetFullPath(destination), result);
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                destination, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -375,7 +412,7 @@ public sealed class UpdateTests
     }
 
     private static string SignedReleaseManifest() => """
-        {"schemaVersion":1,"releaseSequence":2,"releaseVersion":"2.0.0","channel":"stable","architecture":"win-x64","minimumWindowsBuild":22621,"publishedAtUtc":"2026-07-21T00:00:00+00:00","artifacts":[{"fileName":"app.zip","byteSize":7,"sha256":"a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829"}],"signatures":[{"keyId":"rfc8032","algorithm":"Ed25519","signature":"o7CkmoUreV4ojCHAyhs71X7Uju32KyZhmYjZEyh8HLYeD48l8Tn9sIaVKoVRTzwEa5+euCT78RNxB1Ng6ZHBAQ=="}]}
+        {"schemaVersion":1,"releaseSequence":2,"releaseVersion":"2.0.0","channel":"stable","architecture":"win-x64","minimumWindowsBuild":22621,"publishedAtUtc":"2026-07-21T00:00:00+00:00","artifacts":[{"fileName":"app.zip","byteSize":7,"sha256":"a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829","codeSigning":"not-applicable"}],"signatures":[{"keyId":"rfc8032","algorithm":"Ed25519","signature":"jP4LQY1rJi2wSAgjJ9/CIA5+/lX5YpLU4hb2EOxo+H247/0ZeGaWm8IPHmroPlM3KRUGCjgtJNuTL9FJ11zJAw=="}]}
         """;
 
     private static UpdateArtifact Artifact(byte[] payload) => new(
@@ -383,6 +420,7 @@ public sealed class UpdateTests
         "app.zip",
         payload.Length,
         Convert.ToHexString(SHA256.HashData(payload)),
+        ArtifactCodeSigningPolicies.NotApplicable,
         null);
 
     private sealed class DelegateHandler(Func<HttpRequestMessage, HttpResponseMessage> send) : HttpMessageHandler

@@ -1,7 +1,7 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text.Json;
 using InfiniTranseon.Contracts.Security;
+using InfiniTranseon.Core.Artifacts;
 
 namespace InfiniTranseon.Core.Updates;
 
@@ -18,6 +18,7 @@ public sealed record ReleaseManifestArtifact(
     string FileName,
     long ByteSize,
     string Sha256,
+    string CodeSigning,
     string? AuthenticodePublisher);
 
 public sealed record ReleaseManifest(
@@ -36,7 +37,15 @@ public sealed record UpdateArtifact(
     string FileName,
     long ByteSize,
     string Sha256,
+    string CodeSigning,
     string? AuthenticodePublisher);
+
+public static class ArtifactCodeSigningPolicies
+{
+    public const string NotApplicable = "not-applicable";
+    public const string Unsigned = "unsigned";
+    public const string Authenticode = "authenticode";
+}
 
 public sealed record UpdateMetadata(
     Version Version,
@@ -52,7 +61,20 @@ public sealed class UpdatePolicyException(string code, string message) : Invalid
     public string Code { get; } = code;
 }
 
-public sealed class GitHubReleaseUpdateService
+public interface IReleaseUpdateClient
+{
+    ValueTask<UpdateMetadata?> CheckAsync(
+        UpdateCheckContext context,
+        CancellationToken cancellationToken);
+
+    ValueTask<string> DownloadApprovedAsync(
+        UpdateArtifact artifact,
+        string destinationPath,
+        bool userApproved,
+        CancellationToken cancellationToken);
+}
+
+public sealed class GitHubReleaseUpdateService : IReleaseUpdateClient
 {
     private const int MaximumGitHubMetadataBytes = 512 * 1024;
     private const int MaximumManifestBytes = 256 * 1024;
@@ -137,7 +159,7 @@ public sealed class GitHubReleaseUpdateService
         if (version <= context.CurrentVersion) return null;
         UpdateArtifact[] result = manifest.Artifacts.Select(artifact => new UpdateArtifact(
             assetUris[artifact.FileName], artifact.FileName, artifact.ByteSize,
-            artifact.Sha256, artifact.AuthenticodePublisher)).ToArray();
+            artifact.Sha256, artifact.CodeSigning, artifact.AuthenticodePublisher)).ToArray();
         return new UpdateMetadata(
             version, manifest.ReleaseSequence, manifest.Channel, manifest.Architecture,
             manifest.PublishedAtUtc, result, keyId);
@@ -169,8 +191,8 @@ public sealed class GitHubReleaseUpdateService
         try
         {
             await CopyAndVerifyAsync(response.Content, temporary, artifact, cancellationToken).ConfigureAwait(false);
-            if (artifact.AuthenticodePublisher is not null)
-                AuthenticodeVerifier.Verify(temporary, artifact.AuthenticodePublisher);
+            if (artifact.CodeSigning == ArtifactCodeSigningPolicies.Authenticode)
+                AuthenticodeVerifier.Verify(temporary, artifact.AuthenticodePublisher!);
             File.Move(temporary, destination, overwrite: true);
             return destination;
         }
@@ -201,8 +223,10 @@ public sealed class GitHubReleaseUpdateService
                 !assetUris.ContainsKey(artifact.FileName) || artifact.ByteSize < 1 ||
                 artifact.ByteSize > MaximumArtifactBytes || artifact.Sha256.Length != 64 ||
                 !artifact.Sha256.All(char.IsAsciiHexDigit) ||
-                HasInvalidAuthenticodePublisher(
-                    artifact.FileName, artifact.AuthenticodePublisher))
+                HasInvalidCodeSigningPolicy(
+                    artifact.FileName,
+                    artifact.CodeSigning,
+                    artifact.AuthenticodePublisher))
                 throw new InvalidDataException("Release manifest artifact is invalid.");
         }
     }
@@ -311,19 +335,29 @@ public sealed class GitHubReleaseUpdateService
             Path.GetFileName(artifact.FileName) != artifact.FileName ||
             artifact.ByteSize is < 1 or > MaximumArtifactBytes ||
             artifact.Sha256.Length != 64 || !artifact.Sha256.All(char.IsAsciiHexDigit) ||
-            HasInvalidAuthenticodePublisher(
-                artifact.FileName, artifact.AuthenticodePublisher))
+            HasInvalidCodeSigningPolicy(
+                artifact.FileName,
+                artifact.CodeSigning,
+                artifact.AuthenticodePublisher))
             throw new ArgumentException("Update artifact metadata is invalid.", nameof(artifact));
     }
 
-    private static bool HasInvalidAuthenticodePublisher(
+    private static bool HasInvalidCodeSigningPolicy(
         string fileName,
+        string codeSigning,
         string? publisher) =>
-        publisher is not null &&
-            (string.IsNullOrWhiteSpace(publisher) || publisher.Length > 512) ||
-        RequiresAuthenticode(fileName) && string.IsNullOrWhiteSpace(publisher);
+        IsExecutableInstaller(fileName)
+            ? codeSigning switch
+            {
+                ArtifactCodeSigningPolicies.Unsigned => publisher is not null,
+                ArtifactCodeSigningPolicies.Authenticode =>
+                    string.IsNullOrWhiteSpace(publisher) || publisher.Length > 512,
+                _ => true,
+            }
+            : codeSigning != ArtifactCodeSigningPolicies.NotApplicable ||
+                publisher is not null;
 
-    private static bool RequiresAuthenticode(string fileName)
+    private static bool IsExecutableInstaller(string fileName)
     {
         string extension = Path.GetExtension(fileName);
         return extension.Equals(".msi", StringComparison.OrdinalIgnoreCase) ||
@@ -342,24 +376,13 @@ public sealed class GitHubReleaseUpdateService
         CancellationToken cancellationToken)
     {
         await using Stream input = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var output = new FileStream(
-            temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan | FileOptions.WriteThrough);
-        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        byte[] buffer = new byte[128 * 1024];
-        long total = 0;
-        while (true)
-        {
-            int read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            if (read == 0) break;
-            total += read;
-            if (total > artifact.ByteSize) throw new InvalidDataException("Update artifact exceeded signed size.");
-            hash.AppendData(buffer.AsSpan(0, read));
-            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-        }
-        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
-        if (total != artifact.ByteSize ||
-            !Convert.ToHexString(hash.GetHashAndReset()).Equals(artifact.Sha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Update artifact checksum verification failed.");
+        await VerifiedArtifactWriter.WriteAsync(
+            input,
+            temporary,
+            artifact.ByteSize,
+            artifact.Sha256,
+            "Update artifact",
+            reportBytes: null,
+            cancellationToken).ConfigureAwait(false);
     }
 }

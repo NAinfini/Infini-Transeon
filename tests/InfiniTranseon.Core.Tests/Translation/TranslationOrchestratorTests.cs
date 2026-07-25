@@ -231,6 +231,59 @@ public sealed class TranslationOrchestratorTests
         Assert.False(hit.EstimateOnly);
     }
 
+    [Fact]
+    public async Task ExactManualCorrectionBypassesProvider()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "InfiniTranseonTests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            int providerCalls = 0;
+            using OnlineProviderService providers = CreateProviders(
+                new Dictionary<string, Func<TranslationRequest, ProviderWireEvent[]>>
+                {
+                    ["primary"] = _ =>
+                    {
+                        providerCalls++;
+                        return Success("provider result");
+                    },
+                });
+            TextGeneration source = CreateSource();
+            TranslationRunOptions options = CreateOptions();
+            var corrections = new CorrectionStore(Path.Combine(directory, "corrections.db"));
+            await corrections.AddAsync(
+                new CorrectionScope(
+                    options.ProfileId,
+                    source.SourceToken.Area.UserRegionId!.Value,
+                    options.SourceLanguage,
+                    options.TargetLanguage,
+                    options.GlossaryVersion),
+                source.SourceText,
+                "manual result",
+                TestContext.Current.CancellationToken);
+            var runner = new TranslationChannelRunner(providers, corrections: corrections);
+
+            IReadOnlyList<TranslationOutput> outputs = await CollectAsync(runner.RunAsync(
+                source,
+                CreateChannel("primary", 0),
+                options,
+                TestContext.Current.CancellationToken));
+
+            TranslationOutput result = Assert.Single(outputs);
+            Assert.Equal("manual result", result.Text);
+            Assert.Equal("correction.manual", result.ProviderId);
+            Assert.True(result.CacheHit);
+            Assert.Equal(0, providerCalls);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static OnlineProviderService CreateProviders(
         IReadOnlyDictionary<string, Func<TranslationRequest, ProviderWireEvent[]>> scripts)
     {

@@ -1,0 +1,76 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.Workspace.ProfileWorkspacePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="OnLoaded"
+    Unloaded="OnUnloaded">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- The sidebar highlights the section but never says which profile is being edited; the
+             breadcrumb carries that identity and makes the profile root one click away. -->
+        <BreadcrumbBar
+            x:Name="WorkspaceBreadcrumb"
+            Margin="{StaticResource InsetM}"
+            ItemClicked="OnBreadcrumbItemClicked" />
+
+        <Frame x:Name="WorkspaceFrame" Grid.Row="1" />
+
+        <!-- The five sections share one draft, but only the capture section used to own a save
+             command: channel, overlay and language edits had no way to reach storage at all. The bar
+             belongs to the workspace container so every section saves through the same path. -->
+        <Border
+            x:Name="SaveBar"
+            Grid.Row="2"
+            Visibility="Collapsed"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="{StaticResource InsetM}">
+            <Grid ColumnSpacing="{StaticResource SpaceM}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource SpaceS}"
+                    VerticalAlignment="Center">
+                    <FontIcon
+                        x:Name="SaveBarGlyph"
+                        Glyph="&#xE7BA;"
+                        FontSize="{StaticResource TypeCaption}"
+                        Foreground="{ThemeResource StatusWarningBrush}" />
+                    <TextBlock
+                        x:Name="SaveBarStatusText"
+                        Style="{StaticResource CaptionTextStyle}"
+                        TextWrapping="Wrap"
+                        VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource SpaceS}">
+                    <Button
+                        x:Name="SaveBarDiscardButton"
+                        x:Uid="WorkspaceSaveBarDiscardButton"
+                        Click="OnDiscardClick" />
+                    <Button
+                        x:Name="SaveBarSaveButton"
+                        x:Uid="WorkspaceSaveBarSaveButton"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="OnSaveClick" />
+                    <Button
+                        x:Name="SaveBarDismissButton"
+                        x:Uid="WorkspaceSaveBarDismissButton"
+                        Visibility="Collapsed"
+                        Click="OnDismissResultClick" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

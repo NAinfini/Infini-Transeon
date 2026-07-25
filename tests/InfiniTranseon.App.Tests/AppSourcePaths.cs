@@ -28,4 +28,34 @@ internal static class AppSourcePaths
 
     public static string AppShellXaml =>
         Path.Combine(ProjectDirectory.Value, "Shell", "AppShell.xaml");
+
+    public static string DesignTokensXaml =>
+        Path.Combine(ProjectDirectory.Value, "Theme", "DesignTokens.xaml");
+
+    public static string ControlStylesXaml =>
+        Path.Combine(ProjectDirectory.Value, "Theme", "ControlStyles.xaml");
+
+    public static string PageShellXaml =>
+        Path.Combine(ProjectDirectory.Value, "Controls", "PageShell.xaml");
+
+    public static string AppShellCode =>
+        Path.Combine(ProjectDirectory.Value, "Shell", "AppShell.xaml.cs");
+
+    /// <summary>Every C# file in the App project, excluding generated output.</summary>
+    public static IReadOnlyList<string> AllCSharpFiles() =>
+        Directory.GetFiles(ProjectDirectory.Value, "*.cs", SearchOption.AllDirectories)
+            .Where(IsAuthoredSource)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>Every XAML file shipped by the App project, for repository-wide XAML invariants.</summary>
+    public static IReadOnlyList<string> AllXamlFiles() =>
+        Directory.GetFiles(ProjectDirectory.Value, "*.xaml", SearchOption.AllDirectories)
+            .Where(IsAuthoredSource)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+    private static bool IsAuthoredSource(string path) =>
+        !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+        !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
 }

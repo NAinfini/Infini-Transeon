@@ -160,6 +160,60 @@ public sealed class RuntimeBackendCoordinatorTests
     }
 
     [Fact]
+    public async Task HotApplyUpdatesProcessingAndPipelineWithoutRestartingCapture()
+    {
+        ProfileDocument profile = Profile();
+        RuntimeTargetBinding current = Binding(profile, profile.Targets[0]);
+        var session = new FakeSession();
+        var pipeline = new FakePipeline();
+        await using var coordinator = new RuntimeBackendCoordinator(
+            session,
+            profile,
+            3,
+            [current],
+            pipeline,
+            (_, _) => ValueTask.CompletedTask,
+            (_, _) => ValueTask.CompletedTask,
+            TimeSpan.FromSeconds(1));
+        await coordinator.StartAsync(TestContext.Current.CancellationToken);
+
+        ProfileRegion changedRegion = profile.Targets[0].Regions[0] with
+        {
+            RecognitionInterval = TimeSpan.FromMilliseconds(900),
+            Bounds = new NormalizedRect(0.2, 0.6, 0.7, 0.25),
+        };
+        ProfileTarget changedTarget = profile.Targets[0] with
+        {
+            Regions = [changedRegion],
+        };
+        ProfileDocument changedProfile = profile with
+        {
+            Targets = [changedTarget],
+        };
+        RuntimeTargetBinding changedBinding = new(
+            changedTarget,
+            current.TargetInstanceId,
+            current.NativeHandle,
+            current.DesktopRegion,
+            current.TargetPixelWidth,
+            current.TargetPixelHeight,
+            current.CommandRevision,
+            configurationRevision: 2,
+            current.RunOptions);
+
+        await coordinator.ApplyProfileAsync(
+            new RuntimeProfileBinding(changedProfile, 4, [changedBinding]),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, session.Calls.Count(call => call == "capture:Upsert"));
+        Assert.Equal(2, session.Calls.Count(call => call == "processing"));
+        RuntimeTranslationTarget replacement = Assert.Single(pipeline.ReplacedTargets);
+        Assert.Equal(4, replacement.ProfileRevision);
+        Assert.Equal(900, replacement.ProfileTarget.Regions[0]
+            .RecognitionInterval.TotalMilliseconds);
+    }
+
+    [Fact]
     public async Task SecondProfileFailureRollsBackBothProfilesInReverseOrder()
     {
         ProfileDocument firstProfile = Profile();
@@ -350,9 +404,18 @@ public sealed class RuntimeBackendCoordinatorTests
         public IReadOnlyList<TargetInstanceId> Registered =>
             RegisteredTargets.Select(target => target.TargetInstanceId).ToArray();
         public List<TargetInstanceId> Unregistered { get; } = [];
+        public List<RuntimeTranslationTarget> ReplacedTargets { get; } = [];
         public bool Disposed { get; private set; }
 
         public void Register(RuntimeTranslationTarget target) => RegisteredTargets.Add(target);
+        public ValueTask ReplaceAsync(
+            RuntimeTranslationTarget target,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplacedTargets.Add(target);
+            return ValueTask.CompletedTask;
+        }
         public void Unregister(TargetInstanceId targetInstanceId) => Unregistered.Add(targetInstanceId);
         public ValueTask EnqueueAsync(OcrResultSnapshot result, CancellationToken cancellationToken) =>
             _results.Writer.WriteAsync(result, cancellationToken);
@@ -492,6 +555,9 @@ public sealed class RuntimeBackendCoordinatorTests
             Calls.Add("policy");
             return ValueTask.FromResult(new PolicyAcknowledgement(revision.Revision, true, null));
         }
+        public ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+            TimeSpan timeout, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
         public ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
             OcrResultSnapshot result, TimeSpan timeout, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

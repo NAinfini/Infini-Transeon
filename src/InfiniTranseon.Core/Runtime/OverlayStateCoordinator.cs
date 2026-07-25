@@ -121,6 +121,23 @@ public sealed class OverlayStateCoordinator
         }
     }
 
+    public bool Clear(out OverlayDesiredState? state)
+    {
+        lock (_gate)
+        {
+            if (_regions.Count == 0)
+            {
+                state = null;
+                return false;
+            }
+            _regions.Clear();
+            _sourceRegions.Clear();
+            AdvanceRevision();
+            state = SnapshotUnsafe();
+            return true;
+        }
+    }
+
     public bool RemoveAreaRegionsExcept(
         CaptureAreaKey area,
         IReadOnlySet<Guid> retainedRegionIds,

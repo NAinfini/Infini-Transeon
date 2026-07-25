@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace InfiniTranseon.App.Tests;
@@ -76,6 +77,58 @@ public sealed class LocalizationParityTests
         ];
 
         Assert.True(empties.Count == 0, $"Empty value(s) in {culture}: [{string.Join(", ", empties)}].");
+    }
+
+    // The workspace breadcrumb resolves section labels by resource name at runtime rather than by
+    // x:Uid, so a renamed or dropped key would silently render an empty crumb instead of failing.
+    [Theory]
+    [InlineData(BaseCulture)]
+    [InlineData(TargetCulture)]
+    public void Breadcrumb_section_labels_exist(string culture)
+    {
+        string[] required =
+        [
+            "NavWorkspaceOverview.Content",
+            "NavWorkspaceCapture.Content",
+            "NavWorkspaceChannels.Content",
+            "NavWorkspaceOverlay.Content",
+            "NavWorkspaceLanguage.Content",
+            "NavWorkspaceHistory.Content",
+        ];
+        IReadOnlyDictionary<string, string> resources = LoadResources(culture);
+        List<string> missing = [.. required.Where(key => !resources.ContainsKey(key))];
+
+        Assert.True(missing.Count == 0, $"Missing in {culture}: [{string.Join(", ", missing)}].");
+    }
+
+    // Code-side lookups are resolved by MRT, which addresses a property-style resw name
+    // ("SetupStep1Caption.Text") as a path with '/'. The dotted spelling that works in x:Uid markup
+    // raises NAMED_RESOURCE_NOT_FOUND at runtime, and it did: the setup wizard threw the moment it
+    // loaded. A typo has the same effect, so every literal lookup is checked against the resw here.
+    [Fact]
+    public void Every_literal_resource_lookup_resolves()
+    {
+        IReadOnlyDictionary<string, string> resources = LoadResources(BaseCulture);
+        var failures = new List<string>();
+
+        foreach (string file in AppSourcePaths.AllCSharpFiles())
+        {
+            string source = File.ReadAllText(file);
+            foreach (Match match in Regex.Matches(source, @"GetString\(""([^""]+)""\)"))
+            {
+                string key = match.Groups[1].Value;
+                if (key.Contains('.', StringComparison.Ordinal))
+                {
+                    failures.Add($"{Path.GetFileName(file)}: '{key}' uses '.' where MRT expects '/'.");
+                }
+                else if (!resources.ContainsKey(key.Replace('/', '.')))
+                {
+                    failures.Add($"{Path.GetFileName(file)}: '{key}' is not declared in {BaseCulture}.");
+                }
+            }
+        }
+
+        Assert.Empty(failures);
     }
 
     [Fact]

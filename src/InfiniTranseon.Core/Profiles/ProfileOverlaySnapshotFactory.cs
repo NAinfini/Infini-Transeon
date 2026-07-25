@@ -53,7 +53,7 @@ public static class ProfileOverlaySnapshotFactory
             region.Overlay.Opacity,
             region.Overlay.BlurRadius,
             Padding: 8,
-            PreferredFontSize: 24,
+            PreferredFontSize: region.Overlay.PreferredFontSize,
             MinimumFontSize: 12,
             MaximumLines: region.MaximumLines)
         {

@@ -252,6 +252,9 @@ public sealed class RuntimeEngineHostSupervisorTests
             ApplyProcessingConfigurationAsync(
                 RuntimeProcessingConfiguration configuration, TimeSpan timeout,
                 CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
         public ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
             OcrResultSnapshot result, TimeSpan timeout,
             CancellationToken cancellationToken) => throw new NotSupportedException();

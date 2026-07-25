@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <EmbeddedResource Include="Translation\provider-matrix.json" />
     <EmbeddedResource Include="Translation\declarative-rest.schema.json" />
   </ItemGroup>
 </Project>

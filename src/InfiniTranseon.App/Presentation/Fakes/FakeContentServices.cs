@@ -52,12 +52,19 @@ public sealed class FakeProfileService : IProfileService
         _profiles.RemoveAll(profile => profile.ProfileId == profileId);
         return Task.CompletedTask;
     }
+
+    public Task ExportAsync(
+        Guid profileId,
+        Stream destination,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("The design-time profile service does not export files.");
+
+    public Task<Guid> ImportAsync(Stream source, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("The design-time profile service does not import files.");
 }
 
 // Deterministic double of the engine runtime facade. It walks the same status machine the real
-// service exposes (Stopped → Locating → Starting → Running → Stopping → Stopped) synchronously,
-// and mirrors the real protocol truth for manual OCR: protocol v1 has no such message, so the
-// fake throws the same typed exception the real backend does.
+// service exposes (Stopped → Locating → Starting → Running → Stopping → Stopped) synchronously.
 public sealed class FakeRuntimeControlService : IRuntimeControlService
 {
     private static readonly IReadOnlyList<RunningTarget> Seed =
@@ -117,8 +124,28 @@ public sealed class FakeRuntimeControlService : IRuntimeControlService
         return Task.CompletedTask;
     }
 
-    public Task RequestManualOcrAsync(CancellationToken cancellationToken = default) =>
-        throw new EngineRuntimeUnsupportedOperationException("manualOcr");
+    public Task RequestManualOcrAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    public Task<ProfileRuntimeApplyResult> ApplyProfileAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(
+            Status == EngineRuntimeStatus.Running
+                ? ProfileRuntimeApplyResult.HotApplied
+                : ProfileRuntimeApplyResult.SavedOnly);
+    }
+
+    public Task<RuntimeThumbnail?> RequestThumbnailAsync(
+        Guid targetId,
+        int maximumLongEdge,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<RuntimeThumbnail?>(null);
 
     private void SetStatus(EngineRuntimeStatus status)
     {
@@ -127,6 +154,102 @@ public sealed class FakeRuntimeControlService : IRuntimeControlService
         LastChange = change;
         StatusChanged?.Invoke(this, change);
     }
+}
+
+public sealed class FakeWorkbenchService : IWorkbenchService
+{
+    private readonly WorkbenchProfileDraft _profile = new(
+        Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"),
+        "Elden Ring — JP main story",
+        "ja",
+        "zh-Hans",
+        "Elden Ring",
+        "Open-world action role-playing game",
+        6,
+        [
+            new WorkbenchTargetDraft(
+                Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001"),
+                "ELDEN RING™",
+                "Window",
+                true,
+                1920,
+                true,
+                1000,
+                [
+                    Region(
+                        "cccccccc-0000-0000-0000-000000000001",
+                        "Dialogue box",
+                        RegionPriorityLevel.P0,
+                        0.22,
+                        0.72,
+                        0.56,
+                        0.18),
+                    Region(
+                        "cccccccc-0000-0000-0000-000000000002",
+                        "HUD hint",
+                        RegionPriorityLevel.P2,
+                        0.7,
+                        0.08,
+                        0.24,
+                        0.12),
+                ])
+        ]);
+
+    public Task<WorkbenchProfileDraft?> LoadAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<WorkbenchProfileDraft?>(
+            profileId == _profile.ProfileId ? _profile : null);
+
+    public Task<ProfileRuntimeApplyResult> SaveAndApplyAsync(
+        WorkbenchProfileDraft profile,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProfileRuntimeApplyResult.HotApplied);
+
+    private static WorkbenchRegionDraft Region(
+        string id,
+        string name,
+        RegionPriorityLevel priority,
+        double x,
+        double y,
+        double width,
+        double height) => new(
+        Guid.Parse(id),
+        name,
+        true,
+        x,
+        y,
+        width,
+        height,
+        priority,
+        250,
+        "auto",
+        "auto",
+        1,
+        true,
+        false,
+        0,
+        true,
+        [
+            new WorkbenchChannelDraft(
+                Guid.NewGuid(),
+                "translation.deepl",
+                "DeepL",
+                true,
+                0),
+        ],
+        "PreserveLines",
+        null,
+        64,
+        "Auto",
+        RegionContextRole.Dialogue,
+        "Replace",
+        "AutomaticContrastBlur",
+        null,
+        null,
+        0.85,
+        12,
+        false);
 }
 
 public sealed class FakeHistoryService : IHistoryService
@@ -152,6 +275,16 @@ public sealed class FakeHistoryService : IHistoryService
 
     public Task<IReadOnlyList<HistoryEvent>> GetEventsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Seed);
+
+    public void SelectProfile(Guid? profileId)
+    {
+    }
+
+    public Task SaveCorrectionAsync(
+        HistoryEvent historyEvent,
+        string correctedText,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }
 
 public sealed class FakeDiagnosticsService : IDiagnosticsService
@@ -188,8 +321,23 @@ public sealed class FakeGlossaryService : IGlossaryService
         new("パリィ", "弹反", "Language pair · ja→zh-Hans", false, false, "Combat term"),
     ];
 
+    public void SelectProfile(Guid profileId)
+    {
+        if (profileId == Guid.Empty)
+        {
+            throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
+        }
+    }
+
+    private readonly List<StylePromptVersion> _prompts = [];
+
     public Task<GlossarySnapshot> GetEntriesAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new GlossarySnapshot(ProfileId, "Elden Ring — JP main story", _entries.ToArray()));
+        Task.FromResult(new GlossarySnapshot(
+            ProfileId,
+            "Elden Ring — JP main story",
+            _entries.ToArray(),
+            _prompts.ToArray(),
+            _prompts.LastOrDefault()?.Version ?? 0));
 
     public Task AddOrUpdateAsync(
         GlossaryEntry entry,
@@ -209,16 +357,75 @@ public sealed class FakeGlossaryService : IGlossaryService
         _entries.RemoveAll(existing => existing.SourceTerm == sourceTerm);
         return Task.CompletedTask;
     }
+
+    public Task ImportAsync(
+        IReadOnlyList<GlossaryEntry> entries,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (GlossaryEntry entry in entries)
+        {
+            int index = _entries.FindIndex(existing =>
+                string.Equals(existing.SourceTerm, entry.SourceTerm, StringComparison.Ordinal));
+            if (index >= 0) _entries[index] = entry;
+            else _entries.Add(entry);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task SaveStylePromptVersionAsync(
+        string name,
+        string template,
+        CancellationToken cancellationToken = default)
+    {
+        _prompts.Add(new StylePromptVersion(
+            _prompts.Count + 1,
+            name,
+            template,
+            DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
+
+    public Task ActivateStylePromptVersionAsync(
+        int version,
+        CancellationToken cancellationToken = default)
+    {
+        if (_prompts.All(item => item.Version != version))
+        {
+            throw new KeyNotFoundException();
+        }
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class FakeSettingsService : ISettingsService
 {
     private static readonly IReadOnlyList<ProviderRow> Providers =
     [
-        new("DeepL", "NMT · cloud", "Connected", StatusSeverity.Success, "API key stored in Windows Credential Manager"),
-        new("OpenAI compatible", "LLM · cloud", "Connected", StatusSeverity.Success, "Custom endpoint · streaming"),
-        new("Local MADLAD-400 3B", "NMT · local", "Not installed", StatusSeverity.Neutral, "4.1 GB download · Apache-2.0"),
-        new("Baidu Translate", "NMT · cloud", "Credential missing", StatusSeverity.Warning, "Add an API key to enable"),
+        new("DeepL", "NMT · cloud", "Connected", StatusSeverity.Success, "API key stored in Windows Credential Manager")
+        {
+            Id = "translation.deepl",
+            Credentials = [new("api-key", "API key", true)],
+        },
+        new("OpenAI compatible", "LLM · cloud", "Connected", StatusSeverity.Success, "Custom endpoint · streaming")
+        {
+            Id = "llm.openai",
+            Credentials = [new("openai-api-key", "API key", true)],
+        },
+        new("Local MADLAD-400 3B", "NMT · local", "Not installed", StatusSeverity.Neutral, "4.1 GB download · Apache-2.0")
+        {
+            IsSelectable = false,
+            IsLocalModel = true,
+            CanDownloadModel = false,
+        },
+        new("Baidu Translate", "NMT · cloud", "Credential missing", StatusSeverity.Warning, "Add credentials to enable")
+        {
+            Id = "translation.baidu",
+            Credentials =
+            [
+                new("translation.baidu.app-id", "APP ID", false),
+                new("translation.baidu.secret", "Secret", false),
+            ],
+        },
     ];
 
     private ApplicationSettings _settings = new(
@@ -239,6 +446,40 @@ public sealed class FakeSettingsService : ISettingsService
 
     public Task<IReadOnlyList<ProviderRow>> GetProvidersAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Providers);
+
+    public Task<ProviderRow> ImportRestAdapterAsync(
+        Stream source,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<ProviderRow>(
+            new NotSupportedException("Fake settings does not persist custom REST adapters."));
+
+    public Task RemoveCustomProviderAsync(
+        string providerId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException(
+            new NotSupportedException("Fake settings does not persist custom REST adapters."));
+}
+
+public sealed class FakeAppUpdateService : IAppUpdateService
+{
+    public AppUpdateSnapshot Snapshot { get; private set; } =
+        new(AppUpdateStatus.Idle, "0.9.0");
+
+    public event EventHandler? Changed;
+
+    public Task CheckAsync(
+        bool explicitUserAction,
+        bool mainUiVisible,
+        CancellationToken cancellationToken = default)
+    {
+        Snapshot = new AppUpdateSnapshot(AppUpdateStatus.UpToDate, Snapshot.CurrentVersion);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return Task.CompletedTask;
+    }
+
+    public Task DownloadInstallerAsync(
+        bool userApproved,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public sealed class FakeSecretReferenceService : ISecretReferenceService
@@ -275,10 +516,23 @@ public sealed class FakeSecretReferenceService : ISecretReferenceService
         return Task.CompletedTask;
     }
 
+    public Task SetSecretAsync(
+        string providerId,
+        string credentialReference,
+        string secret,
+        CancellationToken cancellationToken = default) =>
+        SetSecretAsync(providerId, secret, cancellationToken);
+
     public Task ClearSecretAsync(string providerId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
         _presence[providerId] = false;
         return Task.CompletedTask;
     }
+
+    public Task ClearSecretAsync(
+        string providerId,
+        string credentialReference,
+        CancellationToken cancellationToken = default) =>
+        ClearSecretAsync(providerId, cancellationToken);
 }

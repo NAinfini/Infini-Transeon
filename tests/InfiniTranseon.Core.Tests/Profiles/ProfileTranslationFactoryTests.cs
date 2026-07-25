@@ -78,6 +78,19 @@ public sealed class ProfileTranslationFactoryTests
                 GameDescription = "Game Description",
                 RecentLineCount = 2,
             },
+            StylePrompt = new ProfileStylePromptSettings
+            {
+                ActiveVersion = 3,
+                Versions =
+                [
+                    new ProfileStylePromptVersion
+                    {
+                        Version = 3,
+                        Name = "Concise dialogue",
+                        Template = "Keep dialogue brief and natural.",
+                    },
+                ],
+            },
         };
 
         var options = ProfileTranslationFactory.CreateRunOptions(
@@ -97,5 +110,7 @@ public sealed class ProfileTranslationFactoryTests
         Assert.Equal(["two", "three"], options.Context.RecentSource);
         Assert.Equal(["二", "三"], options.Context.RecentTranslation);
         Assert.Equal("Alice", options.Context.Speaker);
+        Assert.Equal("3", options.PromptVersion);
+        Assert.Equal("Keep dialogue brief and natural.", options.StylePrompt);
     }
 }

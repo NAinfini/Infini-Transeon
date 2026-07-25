@@ -5,10 +5,20 @@ project(InfiniTranseon LANGUAGES CXX)
 include(CTest)
 
 if(MSVC)
+    # Release artifacts must run on a clean supported Windows 11 installation without a
+    # separately installed Visual C++ Redistributable. Keep the CRT inside every native
+    # executable/library; sanitizer builds still copy their distinct ASan runtime below.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     add_compile_options(/EHsc)
 endif()
 
 option(INFINI_ENABLE_ADDRESS_SANITIZER "Enable AddressSanitizer for native test builds" OFF)
+option(INFINI_BUILD_SPIKES "Build development-only platform and capture spikes" OFF)
+option(
+    INFINI_ENABLE_LOCAL_MODEL_RUNTIME
+    "Build the optional CTranslate2/SentencePiece local translation runtime"
+    OFF
+)
 if(INFINI_ENABLE_ADDRESS_SANITIZER)
     if(NOT MSVC)
         message(FATAL_ERROR "The supported native sanitizer preset currently requires MSVC.")
@@ -53,7 +63,12 @@ endfunction()
 
 add_subdirectory(src/InfiniTranseon.Engine.Native)
 add_subdirectory(src/InfiniTranseon.EngineHost)
-add_subdirectory(spikes/InfiniTranseon.CaptureSpike)
+if(INFINI_ENABLE_LOCAL_MODEL_RUNTIME)
+    add_subdirectory(src/InfiniTranseon.ModelRuntime.Native)
+endif()
+if(INFINI_BUILD_SPIKES)
+    add_subdirectory(spikes/InfiniTranseon.CaptureSpike)
+endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests/InfiniTranseon.Engine.Tests)

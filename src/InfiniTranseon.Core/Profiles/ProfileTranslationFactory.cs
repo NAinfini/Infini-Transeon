@@ -85,7 +85,12 @@ public static class ProfileTranslationFactory
             maximumOutputTokens,
             profile.StrictOffline,
             SourceLanguage: profile.SourceLanguage,
-            TargetLanguage: profile.TargetLanguage);
+            TargetLanguage: profile.TargetLanguage,
+            StyleVersion: profile.StylePrompt.ActiveVersion.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            PromptVersion: profile.StylePrompt.ActiveVersion.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            StylePrompt: profile.StylePrompt.Active?.Template);
     }
 
     private static string? EmptyToNull(string? value) =>

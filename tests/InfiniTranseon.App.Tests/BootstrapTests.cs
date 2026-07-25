@@ -1,5 +1,6 @@
 using InfiniTranseon.App.Composition;
 using InfiniTranseon.App.Presentation;
+using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
 using InfiniTranseon.Contracts.Probes;
@@ -19,8 +20,9 @@ public sealed class BootstrapTests
         typeof(IDiagnosticsService),
         typeof(IGlossaryService),
         typeof(ISettingsService),
+        typeof(IAppUpdateService),
         typeof(ISecretReferenceService),
-        typeof(IRuntimeCapabilitiesService),
+        typeof(RuntimeCapabilitiesService),
         typeof(ICaptureProbe),
         typeof(IOcrProbe),
         typeof(ITranslationProbe),
@@ -64,7 +66,7 @@ public sealed class BootstrapTests
     public void Capabilities_service_exposes_protocol_ceilings()
     {
         using ServiceProvider provider = Build();
-        var capabilities = provider.GetRequiredService<IRuntimeCapabilitiesService>();
+        var capabilities = provider.GetRequiredService<RuntimeCapabilitiesService>();
 
         Assert.Equal(RuntimeCapabilities.VersionOne.MaxTargets, capabilities.Capabilities.MaxTargets);
         Assert.Equal(

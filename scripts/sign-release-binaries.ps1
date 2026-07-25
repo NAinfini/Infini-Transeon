@@ -15,7 +15,8 @@ foreach ($name in @('AUTHENTICODE_CERTIFICATE', 'AUTHENTICODE_PASSWORD', 'AUTHEN
 $required = @(
     'InfiniTranseon.App.exe',
     'InfiniTranseon.EngineHost.exe',
-    'InfiniTranseon.ModelWorker.exe'
+    'InfiniTranseon.ModelWorker.exe',
+    'InfiniTranseon.Identity.msix'
 )
 foreach ($name in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $publishPath $name) -PathType Leaf)) {
@@ -51,7 +52,7 @@ try {
     if ([string]::IsNullOrWhiteSpace($signTool)) { throw 'signtool.exe was not found.' }
 
     $binaries = @(Get-ChildItem -LiteralPath $publishPath -Recurse -File |
-        Where-Object { $_.Extension -in @('.exe', '.dll') })
+        Where-Object { $_.Extension -in @('.exe', '.dll', '.msix') })
     if ($binaries.Count -eq 0) { throw 'No release binaries were found to sign.' }
     foreach ($binary in $binaries) {
         & $signTool sign /sha1 $importedCertificate.Thumbprint /fd SHA256 /td SHA256 `

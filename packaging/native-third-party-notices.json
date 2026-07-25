@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "name": "CTranslate2",
+      "version": "4.8.1",
+      "licenses": ["MIT"],
+      "licenseFile": "licenses/native/CTranslate2-MIT.txt"
+    },
+    {
+      "name": "cpu_features",
+      "version": "8a494eb1e158ec2050e5f699a504fbc9b896a43b",
+      "licenses": ["Apache-2.0"],
+      "licenseFile": "licenses/native/cpu_features-Apache-2.0.txt"
+    },
+    {
+      "name": "ruy",
+      "version": "363f252289fb7a1fba1703d99196524698cb884d",
+      "licenses": ["Apache-2.0"],
+      "licenseFile": "licenses/native/ruy-Apache-2.0.txt"
+    },
+    {
+      "name": "spdlog",
+      "version": "76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "licenses": ["MIT"],
+      "licenseFile": "licenses/native/spdlog-MIT.txt"
+    },
+    {
+      "name": "SentencePiece",
+      "version": "0.2.1",
+      "licenses": ["Apache-2.0"],
+      "licenseFile": "licenses/native/SentencePiece-Apache-2.0.txt"
+    },
+    {
+      "name": "Abseil (SentencePiece bundled)",
+      "version": "SentencePiece-0.2.1",
+      "licenses": ["Apache-2.0"],
+      "licenseFile": "licenses/native/abseil-Apache-2.0.txt"
+    },
+    {
+      "name": "darts-clone (SentencePiece bundled)",
+      "version": "SentencePiece-0.2.1",
+      "licenses": ["BSD-3-Clause"],
+      "licenseFile": "licenses/native/darts-clone-BSD-3-Clause.txt"
+    },
+    {
+      "name": "esaxx (SentencePiece bundled)",
+      "version": "SentencePiece-0.2.1",
+      "licenses": ["MIT"],
+      "licenseFile": "licenses/native/esaxx-MIT.txt"
+    },
+    {
+      "name": "protobuf-lite (SentencePiece bundled)",
+      "version": "SentencePiece-0.2.1",
+      "licenses": ["BSD-3-Clause"],
+      "licenseFile": "licenses/native/protobuf-lite-BSD-3-Clause.txt"
+    }
+  ]
+}

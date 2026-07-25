@@ -50,14 +50,21 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
         _credentials = credentials;
     }
 
-    public CredentialBinding CreateCredentialBinding() => new(
-        ProviderId,
-        "api-key",
-        "https",
-        _options.Endpoint.IdnHost,
-        _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port,
-        "x-goog-api-key",
-        _options.ProxyPolicy);
+    public CredentialBinding CreateCredentialBinding() =>
+        CreateCredentialBinding(_options);
+
+    public static CredentialBinding CreateCredentialBinding(GeminiProviderOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new CredentialBinding(
+            ProviderId,
+            "api-key",
+            "https",
+            options.Endpoint.IdnHost,
+            options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port,
+            "x-goog-api-key",
+            options.ProxyPolicy);
+    }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(
         TranslationRequest request,
@@ -207,7 +214,7 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
             writer.WriteStartObject("systemInstruction");
             writer.WriteStartArray("parts");
             writer.WriteStartObject();
-            writer.WriteString("text", TranslationPromptPayload.SystemPrompt);
+            writer.WriteString("text", TranslationPromptPayload.CreateSystemPrompt(request));
             writer.WriteEndObject();
             writer.WriteEndArray();
             writer.WriteEndObject();

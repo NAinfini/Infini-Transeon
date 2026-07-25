@@ -11,7 +11,7 @@
         <StackPanel Orientation="Horizontal" Spacing="5">
             <FontIcon
                 x:Name="Glyph"
-                FontSize="11"
+                FontSize="{StaticResource TypeCaption}"
                 VerticalAlignment="Center"
                 Glyph="&#xEA3A;"
                 Foreground="{ThemeResource StatusNeutralBrush}" />

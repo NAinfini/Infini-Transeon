@@ -18,12 +18,14 @@
                 VerticalAlignment="Center" />
         </StackPanel>
         <TextBlock
+            x:Name="CompositionErrorBody"
             x:Uid="CompositionErrorBody"
             Grid.Row="1"
             TextWrapping="Wrap" />
         <ScrollViewer Grid.Row="2" Margin="0,4,0,0">
             <TextBox
                 x:Name="DetailsBox"
+                AutomationProperties.LabeledBy="{x:Bind CompositionErrorBody}"
                 IsReadOnly="True"
                 AcceptsReturn="True"
                 TextWrapping="Wrap"

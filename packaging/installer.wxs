@@ -1,11 +1,11 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="7.0.0">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="5.0.2">
   <Package
-      Id="InfiniTranseon.Windows"
       Name="Infini-Transeon"
       Manufacturer="Infini-Transeon contributors"
+      UpgradeCode="7B8B42BD-E465-44E6-ABBB-4A11354492BC"
       Version="$(Version)"
       Language="1033"
-      Scope="perUser"
+      Scope="perMachine"
       Compressed="yes">
     <SummaryInformation Description="Infini-Transeon Windows game translation overlay" />
     <MediaTemplate EmbedCab="yes" />
@@ -22,27 +22,62 @@
         Condition="Installed OR (VersionNT64 AND WINDOWSBUILDNUMBER &gt;= 22621)"
         Message="Infini-Transeon requires a supported 64-bit Windows 11 release (build 22621 or newer)." />
 
-    <StandardDirectory Id="LocalAppDataFolder">
+    <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="Infini-Transeon">
-        <Component Id="MainApplication" Bitness="always64">
+        <Component
+            Id="MainApplication"
+            Guid="5C2631CB-7C65-4CE6-835C-BE80C975588F"
+            Bitness="always64">
           <File Id="MainApplicationExe" Source="$(PublishDir)\InfiniTranseon.App.exe" KeyPath="yes">
             <Shortcut
                 Id="StartMenuShortcut"
                 Directory="ProgramMenuFolder"
                 Name="Infini-Transeon"
                 WorkingDirectory="INSTALLFOLDER"
-                Advertise="no" />
+                Advertise="yes" />
           </File>
+          <File
+              Id="SqliteNativeDll"
+              Source="$(PublishDir)\e_sqlite3.dll"
+              CompanionFile="MainApplicationExe" />
+        </Component>
+        <!-- Windows App SDK publishes the two XAML binaries with a language list longer
+             than MSI's Language column. Explicit components keep those known ICE03
+             warnings tied to stable IDs. The unversioned e_sqlite3.dll above companions
+             the versioned application executable, eliminating ICE60 and giving Windows
+             Installer deterministic repair semantics. -->
+        <Component Id="MicrosoftUiXamlRuntime" Bitness="always64">
+          <File
+              Id="MicrosoftUiXamlDll"
+              Source="$(PublishDir)\Microsoft.ui.xaml.dll"
+              DefaultLanguage="1033"
+              KeyPath="yes" />
+        </Component>
+        <Component Id="MicrosoftUiXamlPhoneRuntime" Bitness="always64">
+          <File
+              Id="MicrosoftUiXamlPhoneDll"
+              Source="$(PublishDir)\Microsoft.UI.Xaml.Phone.dll"
+              DefaultLanguage="1033"
+              KeyPath="yes" />
         </Component>
       </Directory>
     </StandardDirectory>
 
     <Feature Id="Complete" Title="Infini-Transeon" Level="1">
       <ComponentRef Id="MainApplication" />
-      <Files Include="$(PublishDir)\**" Directory="INSTALLFOLDER">
+      <ComponentRef Id="MicrosoftUiXamlRuntime" />
+      <ComponentRef Id="MicrosoftUiXamlPhoneRuntime" />
+      <Files Include="$(PublishDir)\**\*" Directory="INSTALLFOLDER">
         <Exclude Files="$(PublishDir)\InfiniTranseon.App.exe" />
-        <Exclude Files="$(PublishDir)\models\**" />
-        <Exclude Files="$(PublishDir)\*.pdb" />
+        <Exclude Files="$(PublishDir)\Microsoft.ui.xaml.dll" />
+        <Exclude Files="$(PublishDir)\Microsoft.UI.Xaml.Phone.dll" />
+        <Exclude Files="$(PublishDir)\e_sqlite3.dll" />
+        <!-- These Windows App SDK MUI resources contain language metadata that Windows
+             Installer rejects. The application supports en-US and zh-CN and falls back to
+             en-US on these unrelated system locales. -->
+        <Exclude Files="$(PublishDir)\gd-gb\**" />
+        <Exclude Files="$(PublishDir)\mi-NZ\**" />
+        <Exclude Files="$(PublishDir)\ug-CN\**" />
       </Files>
     </Feature>
   </Package>

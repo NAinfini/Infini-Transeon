@@ -1,4 +1,5 @@
 using InfiniTranseon.Core.Privacy;
+using InfiniTranseon.Core.Settings;
 
 namespace InfiniTranseon.App.Presentation.Services;
 
@@ -10,8 +11,9 @@ namespace InfiniTranseon.App.Presentation.Services;
 public sealed class RealSecretReferenceService : ISecretReferenceService
 {
     private const string StorageLocationName = "Windows Credential Manager";
-    private readonly IReadOnlyList<CatalogProvider> _providers;
+    private readonly Func<IReadOnlyList<CatalogProvider>> _providerSource;
     private readonly IBoundCredentialStore _store;
+    private readonly ApplicationSettingsRepository? _settings;
 
     public RealSecretReferenceService(IBoundCredentialStore store)
         : this(store, ProviderCatalog.Default)
@@ -25,26 +27,52 @@ public sealed class RealSecretReferenceService : ISecretReferenceService
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(providers);
         _store = store;
-        _providers = providers;
+        _settings = null;
+        _providerSource = () => providers;
+    }
+
+    public RealSecretReferenceService(
+        IBoundCredentialStore store,
+        Func<IReadOnlyList<CatalogProvider>> providerSource)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(providerSource);
+        _store = store;
+        _settings = null;
+        _providerSource = providerSource;
+    }
+
+    public RealSecretReferenceService(
+        IBoundCredentialStore store,
+        ApplicationSettingsRepository settings,
+        Func<IReadOnlyList<CatalogProvider>> providerSource)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(providerSource);
+        _store = store;
+        _settings = settings;
+        _providerSource = providerSource;
     }
 
     public async Task<IReadOnlyList<SecretReference>> GetReferencesAsync(
         CancellationToken cancellationToken = default)
     {
         var references = new List<SecretReference>();
-        foreach (CatalogProvider provider in _providers)
+        IReadOnlyDictionary<string, string> endpoints =
+            await LoadProviderEndpointsAsync(cancellationToken).ConfigureAwait(false);
+        foreach (CatalogProvider provider in _providerSource())
         {
-            if (!provider.RequiresCredential)
+            foreach (CatalogCredential credential in provider.Credentials)
             {
-                continue;
+                bool present = await ReadPresenceAsync(credential, endpoints, cancellationToken)
+                    .ConfigureAwait(false);
+                references.Add(new SecretReference(
+                    credential.Reference,
+                    $"{provider.DisplayName} · {credential.DisplayName}",
+                    StorageLocationName,
+                    present));
             }
-
-            bool present = await ReadPresenceAsync(provider, cancellationToken).ConfigureAwait(false);
-            references.Add(new SecretReference(
-                provider.CredentialReference!,
-                provider.DisplayName,
-                StorageLocationName,
-                present));
         }
 
         return references;
@@ -59,7 +87,14 @@ public sealed class RealSecretReferenceService : ISecretReferenceService
             return false;
         }
 
-        return await ReadPresenceAsync(provider, cancellationToken).ConfigureAwait(false);
+        IReadOnlyDictionary<string, string> endpoints =
+            await LoadProviderEndpointsAsync(cancellationToken).ConfigureAwait(false);
+        foreach (CatalogCredential credential in provider.Credentials)
+        {
+            if (!await ReadPresenceAsync(credential, endpoints, cancellationToken).ConfigureAwait(false))
+                return false;
+        }
+        return true;
     }
 
     public async Task SetSecretAsync(
@@ -69,24 +104,67 @@ public sealed class RealSecretReferenceService : ISecretReferenceService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
         ArgumentException.ThrowIfNullOrWhiteSpace(secret);
-        CatalogProvider provider = RequireCredentialProvider(providerId);
-        await _store.WriteAsync(provider.CredentialReference!, secret, provider.Binding!, cancellationToken)
+        CatalogCredential credential = RequireSingleCredential(providerId);
+        IReadOnlyDictionary<string, string> endpoints =
+            await LoadProviderEndpointsAsync(cancellationToken).ConfigureAwait(false);
+        await _store.WriteAsync(
+            credential.Reference,
+            secret,
+            credential.ResolveBinding(endpoints),
+            cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SetSecretAsync(
+        string providerId,
+        string credentialReference,
+        string secret,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialReference);
+        ArgumentException.ThrowIfNullOrWhiteSpace(secret);
+        CatalogCredential credential = RequireCredential(providerId, credentialReference);
+        IReadOnlyDictionary<string, string> endpoints =
+            await LoadProviderEndpointsAsync(cancellationToken).ConfigureAwait(false);
+        await _store.WriteAsync(
+            credential.Reference,
+            secret,
+            credential.ResolveBinding(endpoints),
+            cancellationToken)
             .ConfigureAwait(false);
     }
 
     public async Task ClearSecretAsync(string providerId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
-        CatalogProvider provider = RequireCredentialProvider(providerId);
-        await _store.DeleteAsync(provider.CredentialReference!, cancellationToken).ConfigureAwait(false);
+        CatalogCredential credential = RequireSingleCredential(providerId);
+        await _store.DeleteAsync(credential.Reference, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<bool> ReadPresenceAsync(CatalogProvider provider, CancellationToken cancellationToken)
+    public async Task ClearSecretAsync(
+        string providerId,
+        string credentialReference,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialReference);
+        CatalogCredential credential = RequireCredential(providerId, credentialReference);
+        await _store.DeleteAsync(credential.Reference, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ReadPresenceAsync(
+        CatalogCredential credential,
+        IReadOnlyDictionary<string, string> providerEndpoints,
+        CancellationToken cancellationToken)
     {
         try
         {
             string? secret = await _store
-                .ReadAsync(provider.CredentialReference!, provider.Binding!, cancellationToken)
+                .ReadAsync(
+                    credential.Reference,
+                    credential.ResolveBinding(providerEndpoints),
+                    cancellationToken)
                 .ConfigureAwait(false);
             return secret is not null;
         }
@@ -95,9 +173,21 @@ public sealed class RealSecretReferenceService : ISecretReferenceService
             // A credential exists but its origin binding changed; it is present and needs reconfirmation.
             return true;
         }
+        catch (InvalidDataException)
+        {
+            // A provider-specific endpoint has not been configured yet, so no bound credential can
+            // be considered usable.
+            return false;
+        }
     }
 
-    private CatalogProvider? ProviderById(string providerId) => _providers.FirstOrDefault(provider =>
+    private async Task<IReadOnlyDictionary<string, string>> LoadProviderEndpointsAsync(
+        CancellationToken cancellationToken) =>
+        _settings is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : (await _settings.LoadAsync(cancellationToken).ConfigureAwait(false)).ProviderEndpoints;
+
+    private CatalogProvider? ProviderById(string providerId) => _providerSource().FirstOrDefault(provider =>
         string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(provider.DisplayName, providerId, StringComparison.OrdinalIgnoreCase));
 
@@ -115,5 +205,23 @@ public sealed class RealSecretReferenceService : ISecretReferenceService
         }
 
         return provider;
+    }
+
+    private CatalogCredential RequireSingleCredential(string providerId)
+    {
+        CatalogProvider provider = RequireCredentialProvider(providerId);
+        if (provider.Credentials.Count != 1)
+            throw new InvalidOperationException(
+                $"Provider '{provider.DisplayName}' requires selecting one of its credential fields.");
+        return provider.Credentials[0];
+    }
+
+    private CatalogCredential RequireCredential(string providerId, string credentialReference)
+    {
+        CatalogProvider provider = RequireCredentialProvider(providerId);
+        CatalogCredential? credential = provider.Credentials.FirstOrDefault(item =>
+            string.Equals(item.Reference, credentialReference, StringComparison.OrdinalIgnoreCase));
+        return credential ?? throw new InvalidOperationException(
+            $"Provider '{provider.DisplayName}' has no credential field '{credentialReference}'.");
     }
 }

@@ -5,7 +5,7 @@
     <!-- Page title -->
     <Style x:Key="PageTitleStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource TypeTitle}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightStrong}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
@@ -13,8 +13,8 @@
     <!-- Section header -->
     <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource TypeSubtitle}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Margin" Value="0,0,0,12" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightStrong}" />
+        <Setter Property="Margin" Value="{StaticResource SectionHeaderMargin}" />
     </Style>
 
     <!-- Auxiliary/caption text: 12 epx minimum -->
@@ -32,8 +32,8 @@
 
     <!-- Card surface -->
     <Style x:Key="CardBorderStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="Background" Value="{ThemeResource SurfaceCard}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStroke}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource CardPadding}" />
@@ -41,13 +41,13 @@
 
     <!-- Settings row card -->
     <Style x:Key="SettingRowStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
-        <Setter Property="Padding" Value="16,12" />
-        <Setter Property="Margin" Value="0,0,0,4" />
+        <Setter Property="Padding" Value="{StaticResource SettingRowPadding}" />
+        <Setter Property="Margin" Value="{StaticResource SettingRowMargin}" />
     </Style>
 
     <!-- Tabular numbers for metrics -->
     <Style x:Key="MetricTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource TypeBody}" />
-        <Setter Property="FontFamily" Value="Cascadia Mono" />
+        <Setter Property="FontFamily" Value="{StaticResource FontMono}" />
     </Style>
 </ResourceDictionary>

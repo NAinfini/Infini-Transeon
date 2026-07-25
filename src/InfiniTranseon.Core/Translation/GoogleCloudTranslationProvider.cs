@@ -14,11 +14,12 @@ public sealed record GoogleCloudTranslationOptions(
     int MaximumRequestBytes = 1024 * 1024,
     int MaximumResponseBytes = 2 * 1024 * 1024);
 
-public sealed class GoogleCloudTranslationProvider : ITranslationProvider
+public sealed class GoogleCloudTranslationProvider : ITranslationProvider, IDisposable
 {
     private readonly GoogleCloudTranslationOptions _options;
     private readonly HttpClient _httpClient;
     private readonly IGoogleAccessTokenSource _tokenSource;
+    private readonly bool _dynamicProjectEndpoint;
 
     public GoogleCloudTranslationProvider(
         GoogleCloudTranslationOptions options,
@@ -40,6 +41,9 @@ public sealed class GoogleCloudTranslationProvider : ITranslationProvider
         _options = options;
         _httpClient = httpClient;
         _tokenSource = tokenSource;
+        _dynamicProjectEndpoint = options.Endpoint.AbsolutePath.Contains(
+            "/projects/_/locations/",
+            StringComparison.Ordinal);
     }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(
@@ -75,7 +79,26 @@ public sealed class GoogleCloudTranslationProvider : ITranslationProvider
         byte[] body = CreateBody(request);
         if (body.Length > _options.MaximumRequestBytes)
             return [new ProviderWireFailure("provider.requestLimit", false)];
-        using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
+        Uri endpoint = _options.Endpoint;
+        if (_dynamicProjectEndpoint)
+        {
+            string projectId;
+            try
+            {
+                projectId = await _tokenSource.GetProjectIdAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return [new ProviderWireFailure(exception.Message, false)];
+            }
+            endpoint = new Uri(
+                _options.Endpoint.AbsoluteUri.Replace(
+                    "/projects/_/",
+                    "/projects/" + Uri.EscapeDataString(projectId) + "/",
+                    StringComparison.Ordinal),
+                UriKind.Absolute);
+        }
+        using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new ByteArrayContent(body),
         };
@@ -122,6 +145,11 @@ public sealed class GoogleCloudTranslationProvider : ITranslationProvider
             }
             return Parse(responseBody, request);
         }
+    }
+
+    public void Dispose()
+    {
+        if (_tokenSource is IDisposable disposable) disposable.Dispose();
     }
 
     private byte[] CreateBody(TranslationRequest request)

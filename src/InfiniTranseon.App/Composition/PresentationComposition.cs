@@ -8,6 +8,7 @@ using InfiniTranseon.Core.Privacy;
 using InfiniTranseon.Core.Probes;
 using InfiniTranseon.Core.Settings;
 using InfiniTranseon.Core.Storage;
+using InfiniTranseon.Core.Updates;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace InfiniTranseon.App.Composition;
@@ -16,20 +17,19 @@ namespace InfiniTranseon.App.Composition;
 /// Composition root for the control application. Registration is kept free of WinUI types so the same
 /// graph is exercised by unit tests. View models are shared across both compositions; production
 /// startup wires the real backend-integrated services (<see cref="AddRealPresentationServices"/>)
-/// while tests and the not-yet-realizable seams use fakes (<see cref="AddFakePresentationServices"/>).
+/// while tests and design-time tooling use fakes (<see cref="AddFakePresentationServices"/>).
 /// </summary>
 public static class PresentationComposition
 {
     /// <summary>
-    /// View models, the runtime state store, capabilities service, and the seams still owned by WP6
-    /// (the four Contracts.Probes doubles and the runtime control service). These stay fake in BOTH
-    /// compositions until WP6 lands their real counterparts; the UI already codes against the interfaces.
+    /// View models, runtime state, capabilities, and replaceable default registrations. Production
+    /// composition replaces every runtime/probe double below with its real implementation.
     /// </summary>
     public static IServiceCollection AddPresentationViewModels(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<IRuntimeCapabilitiesService, RuntimeCapabilitiesService>();
+        services.AddSingleton<RuntimeCapabilitiesService>();
 
         // Deterministic doubles for the runtime seams; the real graph overrides every one of these
         // with the EngineHost-backed implementations in AddRealPresentationServices.
@@ -40,6 +40,8 @@ public static class PresentationComposition
         services.AddSingleton<IOverlayPreviewRenderer, FakeOverlayPreviewRenderer>();
 
         services.AddSingleton<RuntimeStateStore>();
+        services.AddSingleton<RuntimeEventHub>();
+        services.AddSingleton<AppNavigationState>();
 
         services.AddTransient<ProfileCenterViewModel>();
         services.AddTransient<RunningTargetsViewModel>();
@@ -49,6 +51,10 @@ public static class PresentationComposition
         services.AddTransient<ServicesModelsViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<SetupWizardViewModel>();
+        // One workspace, one draft: capture, channels, overlay and language all edit the same profile.
+        // A transient registration gave every section its own view model, so section switches silently
+        // dropped unsaved edits and the unsaved-changes guard could never observe them.
+        services.AddSingleton<WorkbenchViewModel>();
 
         return services;
     }
@@ -59,10 +65,12 @@ public static class PresentationComposition
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<IProfileService, FakeProfileService>();
+        services.AddSingleton<IWorkbenchService, FakeWorkbenchService>();
         services.AddSingleton<IHistoryService, FakeHistoryService>();
         services.AddSingleton<IDiagnosticsService, FakeDiagnosticsService>();
         services.AddSingleton<IGlossaryService, FakeGlossaryService>();
         services.AddSingleton<ISettingsService, FakeSettingsService>();
+        services.AddSingleton<IAppUpdateService, FakeAppUpdateService>();
         services.AddSingleton<ISecretReferenceService, FakeSecretReferenceService>();
 
         return services;
@@ -95,26 +103,56 @@ public static class PresentationComposition
         services.AddSingleton(_ =>
         {
             options.EnsureRootExists();
-            return new UiPreferencesStore(options.UiPreferencesPath);
+            return new CustomRestAdapterStore(options.CustomRestAdaptersPath);
         });
         services.AddSingleton<IBoundCredentialStore, GenericCredentialStore>();
+        services.AddSingleton<AppStatusLog>();
+        services.AddSingleton<AppCrashReporter>();
+        services.AddSingleton(provider => LocalModelManagementService.CreateProduction(
+            options,
+            provider.GetRequiredService<AppStatusLog>()));
 
         services.AddSingleton<ISecretReferenceService>(provider =>
-            new RealSecretReferenceService(provider.GetRequiredService<IBoundCredentialStore>()));
+        {
+            CustomRestAdapterStore customAdapters =
+                provider.GetRequiredService<CustomRestAdapterStore>();
+            return new RealSecretReferenceService(
+                provider.GetRequiredService<IBoundCredentialStore>(),
+                provider.GetRequiredService<ApplicationSettingsRepository>(),
+                () => ProviderCatalog.Default
+                    .Concat(customAdapters.GetCatalogProviders())
+                    .ToArray());
+        });
         services.AddSingleton<ISettingsService>(provider => new RealSettingsService(
             provider.GetRequiredService<ApplicationSettingsRepository>(),
-            provider.GetRequiredService<UiPreferencesStore>(),
-            provider.GetRequiredService<ISecretReferenceService>()));
+            provider.GetRequiredService<ISecretReferenceService>(),
+            provider.GetRequiredService<CustomRestAdapterStore>(),
+            provider.GetRequiredService<LocalModelManagementService>()));
+        services.AddSingleton<IReleaseUpdateClient>(_ =>
+            ReleaseUpdateComposition.CreateClient(options));
+        services.AddSingleton<IAppUpdateService>(provider => new RealAppUpdateService(
+            provider.GetRequiredService<IReleaseUpdateClient>(),
+            provider.GetRequiredService<ISettingsService>(),
+            provider.GetRequiredService<IRuntimeControlService>(),
+            options,
+            ReleaseUpdateComposition.CurrentApplicationVersion(),
+            provider.GetRequiredService<AppStatusLog>()));
         services.AddSingleton<IProfileService>(provider => new RealProfileService(
             provider.GetRequiredService<ProfileRepository>(),
             options.DatabasePath));
+        services.AddSingleton<IWorkbenchService>(provider => new RealWorkbenchService(
+            provider.GetRequiredService<ProfileRepository>(),
+            provider.GetRequiredService<IRuntimeControlService>(),
+            provider.GetRequiredService<RuntimeCapabilitiesService>(),
+            provider.GetRequiredService<CustomRestAdapterStore>()));
         services.AddSingleton<IHistoryService>(provider => new RealHistoryService(
             options,
             provider.GetRequiredService<ProfileRepository>(),
             provider.GetRequiredService<ISettingsService>()));
         services.AddSingleton<IDiagnosticsService>(_ => new RealDiagnosticsService(options));
         services.AddSingleton<IGlossaryService>(provider => new RealGlossaryService(
-            provider.GetRequiredService<ProfileRepository>()));
+            provider.GetRequiredService<ProfileRepository>(),
+            provider.GetRequiredService<IRuntimeControlService>()));
 
         // Real probes: capture enumerates live windows/monitors; OCR crop and overlay pixel preview
         // are not carried by protocol v1 and throw the typed unsupported exception; the translation
@@ -139,8 +177,13 @@ public static class PresentationComposition
             provider.GetRequiredService<ICaptureProbe>(),
             provider.GetRequiredService<ISettingsService>(),
             provider.GetRequiredService<IBoundCredentialStore>(),
-            provider.GetRequiredService<IRuntimeCapabilitiesService>(),
-            options));
+            provider.GetRequiredService<RuntimeCapabilitiesService>(),
+            provider.GetRequiredService<RuntimeStateStore>(),
+            provider.GetRequiredService<RuntimeEventHub>(),
+            options,
+            provider.GetRequiredService<AppStatusLog>(),
+            provider.GetRequiredService<CustomRestAdapterStore>(),
+            provider.GetRequiredService<LocalModelManagementService>()));
 
         return services;
     }

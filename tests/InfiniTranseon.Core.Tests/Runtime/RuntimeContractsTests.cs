@@ -97,6 +97,72 @@ public sealed class RuntimeContractsTests
             streamSequence: 1));
     }
 
+    [Fact]
+    public void ManualOcrPayloadRoundTripsAcceptedAndRejectedAcknowledgements()
+    {
+        byte[] request = RuntimeManualOcrPayloadCodec.EncodeRequest();
+        RuntimeManualOcrPayloadCodec.ValidateRequest(request);
+
+        var scheduled = new RuntimeManualOcrAcknowledgement(
+            true,
+            RuntimeManualOcrStatus.Scheduled,
+            targetCount: 2,
+            regionCount: 5,
+            errorCode: null);
+        Assert.Equal(
+            scheduled,
+            RuntimeManualOcrPayloadCodec.DecodeAcknowledgement(
+                RuntimeManualOcrPayloadCodec.EncodeAcknowledgement(scheduled)));
+
+        var rejected = new RuntimeManualOcrAcknowledgement(
+            false,
+            RuntimeManualOcrStatus.NoTargets,
+            targetCount: 0,
+            regionCount: 0,
+            errorCode: "ocr.manual.noTargets");
+        Assert.Equal(
+            rejected,
+            RuntimeManualOcrPayloadCodec.DecodeAcknowledgement(
+                RuntimeManualOcrPayloadCodec.EncodeAcknowledgement(rejected)));
+
+        var unavailable = new RuntimeManualOcrAcknowledgement(
+            false,
+            RuntimeManualOcrStatus.TargetUnavailable,
+            targetCount: 0,
+            regionCount: 0,
+            errorCode: "ocr.manual.targetUnavailable");
+        Assert.Equal(
+            unavailable,
+            RuntimeManualOcrPayloadCodec.DecodeAcknowledgement(
+                RuntimeManualOcrPayloadCodec.EncodeAcknowledgement(unavailable)));
+    }
+
+    [Fact]
+    public void ManualOcrPayloadRejectsMalformedOrInconsistentData()
+    {
+        byte[] request = RuntimeManualOcrPayloadCodec.EncodeRequest();
+        request[7] = 1;
+        Assert.Throws<InvalidDataException>(
+            () => RuntimeManualOcrPayloadCodec.ValidateRequest(request));
+        Assert.Throws<ArgumentException>(() => new RuntimeManualOcrAcknowledgement(
+            true,
+            RuntimeManualOcrStatus.Scheduled,
+            targetCount: 0,
+            regionCount: 1,
+            errorCode: null));
+
+        byte[] acknowledgement = RuntimeManualOcrPayloadCodec.EncodeAcknowledgement(
+            new RuntimeManualOcrAcknowledgement(
+                false,
+                RuntimeManualOcrStatus.Busy,
+                targetCount: 0,
+                regionCount: 0,
+                errorCode: "ocr.manual.busy"));
+        acknowledgement[6] = 1;
+        Assert.Throws<InvalidDataException>(
+            () => RuntimeManualOcrPayloadCodec.DecodeAcknowledgement(acknowledgement));
+    }
+
     private static SourceGenerationToken ValidSourceToken() => new(
         Guid.NewGuid(),
         new TargetInstanceId(Guid.NewGuid()),

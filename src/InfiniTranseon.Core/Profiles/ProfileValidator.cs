@@ -52,6 +52,35 @@ public sealed class ProfileValidator
         {
             Error("profile.schema.unsupported", "$.schemaVersion");
         }
+        if (document.StylePrompt.Versions.Count > 32)
+        {
+            Error("profile.stylePrompt.tooManyVersions", "$.stylePrompt.versions");
+        }
+        if (document.StylePrompt.Versions
+            .Select(version => version.Version)
+            .Any(version => version <= 0) ||
+            document.StylePrompt.Versions
+                .Select(version => version.Version)
+                .Distinct()
+                .Count() != document.StylePrompt.Versions.Count)
+        {
+            Error("profile.stylePrompt.versionInvalid", "$.stylePrompt.versions");
+        }
+        foreach (ProfileStylePromptVersion version in document.StylePrompt.Versions)
+        {
+            if (string.IsNullOrWhiteSpace(version.Name) || version.Name.Length > 128 ||
+                string.IsNullOrWhiteSpace(version.Template) || version.Template.Length > 8_192)
+            {
+                Error(
+                    "profile.stylePrompt.contentInvalid",
+                    $"$.stylePrompt.versions[{version.Version}]");
+            }
+        }
+        if (document.StylePrompt.ActiveVersion != 0 &&
+            document.StylePrompt.Active is null)
+        {
+            Error("profile.stylePrompt.activeVersionUnknown", "$.stylePrompt.activeVersion");
+        }
 
         for (int targetIndex = 0; targetIndex < document.Targets.Count; targetIndex++)
         {
@@ -70,6 +99,21 @@ public sealed class ProfileValidator
             if (target.DetectionLongEdge is < 320 or > 1920)
             {
                 Error("profile.target.detectionLongEdgeInvalid", targetPath + ".detectionLongEdge");
+            }
+            bool validDesktopRegion = target.DesktopRegion is
+            {
+                Width: > 0 and <= 16_384,
+                Height: > 0 and <= 16_384,
+            } desktopRegion &&
+                (long)desktopRegion.X + desktopRegion.Width <= int.MaxValue &&
+                (long)desktopRegion.Y + desktopRegion.Height <= int.MaxValue;
+            if (target.Kind == CaptureTargetKind.DesktopFixedRegion && !validDesktopRegion)
+            {
+                Error("profile.target.desktopRegionRequired", targetPath + ".desktopRegion");
+            }
+            if (target.Kind != CaptureTargetKind.DesktopFixedRegion && target.DesktopRegion is not null)
+            {
+                Error("profile.target.desktopRegionUnexpected", targetPath + ".desktopRegion");
             }
             if (target.RemainingAreaInterval.TotalMilliseconds > 3_600_000)
             {
@@ -151,6 +195,8 @@ public sealed class ProfileValidator
                     region.Overlay.BlurRadius is < 0 or > 64 ||
                     !double.IsFinite(region.Overlay.OutlineWidth) ||
                     region.Overlay.OutlineWidth is < 0 or > 8 ||
+                    !double.IsFinite(region.Overlay.PreferredFontSize) ||
+                    region.Overlay.PreferredFontSize is < 12 or > 36 ||
                     region.Overlay.MinimumDwell < TimeSpan.Zero ||
                     region.Overlay.MinimumDwell > TimeSpan.FromSeconds(3) ||
                     region.Overlay.CrossfadeDuration < TimeSpan.Zero ||

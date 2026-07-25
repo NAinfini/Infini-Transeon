@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "modelId": "madlad",
+      "version": "fd0b55729c074372eb84b52b9309a00dc65c40c4",
+      "displayName": "Local MADLAD-400 3B INT8",
+      "licenseSpdx": "Apache-2.0",
+      "runtime": "ctranslate2-madlad-v1",
+      "opset": 0,
+      "architectures": ["win-x64"],
+      "sourceLanguages": [
+        "auto", "de", "en", "es", "fr", "it", "ja", "ko", "pl", "pt", "ru",
+        "th", "tr", "vi", "zh", "zh-Hans", "zh-Hant"
+      ],
+      "targetLanguages": [
+        "de", "en", "es", "fr", "it", "ja", "ko", "pl", "pt", "ru", "th",
+        "tr", "vi", "zh", "zh-Hans", "zh-Hant"
+      ],
+      "downloadOrigins": [
+        "https://huggingface.co/cstr/madlad400-3b-ct2-int8/resolve/fd0b55729c074372eb84b52b9309a00dc65c40c4/"
+      ],
+      "files": [
+        {
+          "relativePath": "config.json",
+          "byteSize": 224,
+          "sha256": "90fb54962455a4e0a0bc7235c0f063d7e46d9c1a1ae003af8059809abd6aeece"
+        },
+        {
+          "relativePath": "model.bin",
+          "byteSize": 2950208290,
+          "sha256": "890ed3b7e4654dcf1b9e7f2ce6ce641447462e782881e81aac443568eb1ca702"
+        },
+        {
+          "relativePath": "shared_vocabulary.json",
+          "byteSize": 5477099,
+          "sha256": "c327551ce3ca6efc7b437e11a267f79979893332dda8a1d146e2c950815193f8"
+        },
+        {
+          "relativePath": "spiece.model",
+          "byteSize": 4427844,
+          "sha256": "ef11ac9a22c7503492f56d48dce53be20e339b63605983e9f27d2cd0e0f3922c"
+        }
+      ]
+    }
+  ]
+}

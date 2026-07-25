@@ -49,17 +49,23 @@ public sealed class TencentTranslationProvider : ITranslationProvider
     }
 
     public CredentialBinding CreateCredentialBinding(string purpose)
+        => CreateCredentialBinding(_options, purpose);
+
+    public static CredentialBinding CreateCredentialBinding(
+        TencentTranslationOptions options,
+        string purpose)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (purpose is not ("secret-id" or "secret-key" or "session-token"))
             throw new ArgumentOutOfRangeException(nameof(purpose));
         return new CredentialBinding(
             ProviderId,
             purpose,
             "https",
-            _options.Endpoint.IdnHost,
-            _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port,
+            options.Endpoint.IdnHost,
+            options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port,
             "tc3-hmac-sha256",
-            _options.ProxyPolicy);
+            options.ProxyPolicy);
     }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(

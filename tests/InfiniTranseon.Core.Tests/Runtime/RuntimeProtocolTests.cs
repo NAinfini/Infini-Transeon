@@ -17,7 +17,7 @@ public sealed class RuntimeProtocolTests
     public void MessageKindWireNumbersAreContiguousAndStable()
     {
         Assert.Equal(
-            Enumerable.Range(0, 26),
+            Enumerable.Range(0, 28),
             Enum.GetValues<RuntimeMessageKind>().Select(value => (int)value));
     }
 
@@ -354,7 +354,7 @@ public sealed class RuntimeProtocolTests
     public void CloudOcrCropPayloadRoundTripsCompleteConsentAndExecutionIdentity()
     {
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
-        OcrExecutionToken token = OcrToken(resultSequence: 2);
+        OcrExecutionToken token = OcrToken(resultSequence: 2, isManual: true);
         using var value = new CloudOcrCropRequest(
             token, "image/png", [1, 2, 3, 4], 640, 160, true,
             consentPolicyRevision: 7,
@@ -378,7 +378,7 @@ public sealed class RuntimeProtocolTests
     public void OcrResultPayloadRoundTripsUnicodeLinesAndStableMetadata()
     {
         var value = new OcrResultSnapshot(
-            OcrToken(resultSequence: 1),
+            OcrToken(resultSequence: 1, isManual: true),
             [new TextLine("攻撃：100", new NormalizedRect(0.1, 0.2, 0.3, 0.1), 0.98)
             {
                 OrientationDegrees = 90,
@@ -393,6 +393,7 @@ public sealed class RuntimeProtocolTests
             RuntimeOcrResultPayloadCodec.Encode(value));
 
         Assert.Equal(value.ExecutionToken, decoded.ExecutionToken);
+        Assert.True(decoded.ExecutionToken.IsManual);
         Assert.Equal(value.Lines, decoded.Lines);
         Assert.Equal(90, decoded.Lines[0].OrientationDegrees);
         Assert.True(decoded.Lines[0].IsVertical);
@@ -645,7 +646,9 @@ public sealed class RuntimeProtocolTests
         0,
         DateTimeOffset.UtcNow.AddMinutes(1));
 
-    private static OcrExecutionToken OcrToken(long resultSequence) => new(
+    private static OcrExecutionToken OcrToken(
+        long resultSequence,
+        bool isManual = false) => new(
         new SourceGenerationToken(
             Guid.NewGuid(),
             new TargetInstanceId(Guid.NewGuid()),
@@ -655,7 +658,8 @@ public sealed class RuntimeProtocolTests
             4),
         Guid.NewGuid(),
         1,
-        resultSequence);
+        resultSequence,
+        isManual);
 
     private static JsonDocument LoadProtocol() => JsonDocument.Parse(File.ReadAllText(Path.Combine(
         FindRepositoryRoot(),

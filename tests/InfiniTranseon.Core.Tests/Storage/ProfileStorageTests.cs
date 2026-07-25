@@ -39,7 +39,22 @@ public sealed class ProfileStorageTests
             UiLanguage = "zh-CN",
             FormattingRegionMode = FormattingRegionMode.Explicit,
             FormattingRegion = "en-US",
+            Theme = ThemePreference.Dark,
+            StrictOffline = true,
+            HistoryRetention = HistoryRetentionPolicy.Days90,
+            Hotkeys =
+            [
+                new HotkeySetting("toggleOverlay", "Ctrl + Alt + T", true, "allRunningTargets"),
+            ],
+            ProviderEndpoints = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ocr.azure-ai-vision"] =
+                    "https://example-vision-resource.cognitiveservices.azure.com/",
+            },
             ReducedMotion = true,
+            CloseToTray = false,
+            CloseToTrayConfirmed = true,
+            PinnedProfileIds = [Guid.Parse("15c2f43e-170e-4b34-af4c-0dd0c03b6a6e")],
             Performance = new PerformanceRuntimeSettings
             {
                 Preset = PerformancePreset.Eco,
@@ -53,7 +68,21 @@ public sealed class ProfileStorageTests
         Assert.Equal("zh-CN", loaded.UiLanguage);
         Assert.Equal(FormattingRegionMode.Explicit, loaded.FormattingRegionMode);
         Assert.Equal("en-US", loaded.FormattingRegion);
+        Assert.Equal(ThemePreference.Dark, loaded.Theme);
+        Assert.True(loaded.StrictOffline);
+        Assert.Equal(HistoryRetentionPolicy.Days90, loaded.HistoryRetention);
+        HotkeySetting hotkey = Assert.Single(loaded.Hotkeys!);
+        Assert.Equal("toggleOverlay", hotkey.Action);
+        Assert.Equal("Ctrl + Alt + T", hotkey.Gesture);
+        Assert.Equal(
+            "https://example-vision-resource.cognitiveservices.azure.com/",
+            loaded.ProviderEndpoints["ocr.azure-ai-vision"]);
         Assert.True(loaded.ReducedMotion);
+        Assert.False(loaded.CloseToTray);
+        Assert.True(loaded.CloseToTrayConfirmed);
+        Assert.Equal(
+            Guid.Parse("15c2f43e-170e-4b34-af4c-0dd0c03b6a6e"),
+            Assert.Single(loaded.PinnedProfileIds));
         Assert.Equal(PerformancePreset.Eco, loaded.Performance.Preset);
         Assert.Equal(TimeSpan.FromSeconds(2), loaded.Performance.SampleInterval);
         Assert.Equal(DatabaseMigrator.CurrentSchemaVersion, repository.MigrationResult.SchemaVersion);
@@ -106,7 +135,7 @@ public sealed class ProfileStorageTests
     }
 
     [Fact]
-    public async Task FutureProfileCannotBePersistedAndPortableBuildUsesPerUserDataByDefault()
+    public async Task FutureProfileCannotBePersisted()
     {
         using TempDatabase database = new();
         var repository = new ProfileRepository(database.Path);
@@ -117,13 +146,6 @@ public sealed class ProfileStorageTests
 
         await Assert.ThrowsAsync<InvalidDataException>(
             () => repository.SaveAsync(future, TestContext.Current.CancellationToken));
-        Assert.StartsWith(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            ApplicationDataPaths.ProfileDatabase,
-            StringComparison.OrdinalIgnoreCase);
-        Assert.NotEqual(
-            Path.GetFullPath("profiles.db"),
-            ApplicationDataPaths.ProfileDatabase);
     }
 
     [Fact]

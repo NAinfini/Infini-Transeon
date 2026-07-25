@@ -448,6 +448,37 @@ public sealed class CloudOcrRouterTests
     }
 
     [Fact]
+    public async Task RuntimeDispatcherAdoptsTheEngineOwnedOcrAttempt()
+    {
+        var router = CreateRouter(() => new StubProvider(CreateResult));
+        SourceGenerationToken source = CreateSource();
+        var token = new OcrExecutionToken(source, Guid.NewGuid(), attempt: 1, resultSequence: 1);
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
+        using var crop = new CloudOcrCropRequest(
+            token, "image/png", [1, 2, 3], 100, 40, true,
+            deadlineUtc: deadline,
+            providerId: "cloud");
+        using var runtimeEvent = new RuntimeEngineEvent(
+            RuntimeMessageKind.CloudOcrCropRequest,
+            Guid.NewGuid(),
+            source.RuntimeEpoch,
+            deadline,
+            RuntimeCloudOcrCropRequestPayloadCodec.Encode(crop));
+        OcrResultSnapshot? received = null;
+        var dispatcher = new RuntimeCloudOcrDispatcher(
+            router,
+            new StubResultSink(result => received = result),
+            _ => false);
+
+        await dispatcher.DispatchAsync(
+            runtimeEvent, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(received);
+        Assert.Equal(token, received.ExecutionToken);
+        Assert.Null(received.TerminalErrorCode);
+    }
+
+    [Fact]
     public async Task RuntimeDispatcherReturnsProviderFailureWithoutTerminatingEventPump()
     {
         var router = CreateRouter(() => new StubProvider((_, _) =>

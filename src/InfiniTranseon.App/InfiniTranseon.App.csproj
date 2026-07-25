@@ -12,6 +12,7 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DefaultLanguage>en-US</DefaultLanguage>
+    <SatelliteResourceLanguages>en-US;zh-CN</SatelliteResourceLanguages>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
@@ -23,4 +24,23 @@
     <ProjectReference Include="..\InfiniTranseon.Contracts\InfiniTranseon.Contracts.csproj" />
     <ProjectReference Include="..\InfiniTranseon.Core\InfiniTranseon.Core.csproj" />
   </ItemGroup>
+  <Target Name="GenerateUnpackagedPri" AfterTargets="Build" Condition="'$(WindowsPackageType)' == 'None'">
+    <Error
+      Condition="!Exists('$(MakePriExeFullPath)')"
+      Text="MakePri.exe was not found at '$(MakePriExeFullPath)'." />
+    <Error
+      Condition="!Exists('$(IntermediateOutputPath)priconfig.xml')"
+      Text="The generated PRI configuration is missing: '$(IntermediateOutputPath)priconfig.xml'." />
+    <Exec
+      Command="&quot;$(MakePriExeFullPath)&quot; new /pr &quot;$(MSBuildProjectDirectory)&quot; /cf &quot;$(IntermediateOutputPath)priconfig.xml&quot; /of &quot;$(TargetDir)resources.pri&quot; /o" />
+  </Target>
+  <Target
+    Name="PublishUnpackagedPri"
+    AfterTargets="Publish"
+    DependsOnTargets="GenerateUnpackagedPri"
+    Condition="'$(WindowsPackageType)' == 'None'">
+    <Copy
+      SourceFiles="$(TargetDir)resources.pri"
+      DestinationFiles="$(PublishDir)resources.pri" />
+  </Target>
 </Project>

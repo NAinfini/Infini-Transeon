@@ -37,6 +37,14 @@ public enum LineAlignment
     Right,
 }
 
+public enum ProfileRegionContextRole
+{
+    None,
+    Speaker,
+    Scene,
+    Dialogue,
+}
+
 public enum OverlayMode
 {
     Replace,
@@ -69,6 +77,23 @@ public sealed record ProfileContextSettings
     public string GameName { get; init; } = string.Empty;
     public string GameDescription { get; init; } = string.Empty;
     public int RecentLineCount { get; init; } = 6;
+}
+
+public sealed record ProfileStylePromptVersion
+{
+    public int Version { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Template { get; init; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record ProfileStylePromptSettings
+{
+    public int ActiveVersion { get; init; }
+    public List<ProfileStylePromptVersion> Versions { get; init; } = [];
+
+    public ProfileStylePromptVersion? Active =>
+        Versions.FirstOrDefault(version => version.Version == ActiveVersion);
 }
 
 public sealed record ProfileLayoutVariant
@@ -104,6 +129,7 @@ public sealed record ProfileOverlaySettings
     public double Opacity { get; init; } = 0.85;
     public double BlurRadius { get; init; } = 12;
     public double OutlineWidth { get; init; } = 1;
+    public double PreferredFontSize { get; init; } = 24;
     public TimeSpan MinimumDwell { get; init; } = TimeSpan.FromMilliseconds(500);
     public TimeSpan CrossfadeDuration { get; init; } = TimeSpan.FromMilliseconds(120);
     public NormalizedRect? OffsetDestination { get; init; }
@@ -173,6 +199,7 @@ public sealed record ProfileRegion
     public string? CustomLineSeparator { get; init; }
     public int MaximumLines { get; init; } = 64;
     public LineAlignment LineAlignment { get; init; } = LineAlignment.Auto;
+    public ProfileRegionContextRole ContextRole { get; init; }
     public ProfileOverlaySettings Overlay { get; init; } = new();
     public bool LockDegradation { get; init; }
 
@@ -191,6 +218,7 @@ public sealed record ProfileTarget
     public bool Enabled { get; set; } = true;
     public string? DisabledReasonCode { get; set; }
     public TargetMachineBinding? MachineBinding { get; init; }
+    public OverlayPixelRect? DesktopRegion { get; init; }
     public List<ProfileLayoutVariant> LayoutVariants { get; init; } = [];
     public int DetectionLongEdge { get; init; } = 1920;
     public List<ProfileRegion> Regions { get; init; } = [];
@@ -216,6 +244,7 @@ public sealed record ProfileDocument
     public string TargetLanguage { get; init; } = string.Empty;
     public bool StrictOffline { get; init; }
     public ProfileContextSettings Context { get; init; } = new();
+    public ProfileStylePromptSettings StylePrompt { get; init; } = new();
     public List<ProfileTarget> Targets { get; init; } = [];
     public List<ProfileHotkey> Hotkeys { get; init; } = [];
     public ProfileHistorySettings History { get; init; } = new();

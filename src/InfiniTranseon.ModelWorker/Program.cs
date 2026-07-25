@@ -34,7 +34,8 @@ internal static partial class WorkerMain
             await WriteHandshakeAsync(pipe, bootstrap.WorkerSessionEpoch, secret, CancellationToken.None);
             CryptographicOperations.ZeroMemory(secret);
             secret = null;
-            var runtime = new PhraseTableRuntime(bootstrap.ManagedModelDirectory);
+            using ILocalModelRuntime runtime =
+                LocalModelRuntimeFactory.Create(bootstrap.ManagedModelDirectory);
             while (pipe.IsConnected)
             {
                 LocalTranslationRequest request;
@@ -47,7 +48,8 @@ internal static partial class WorkerMain
             return 0;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-            JsonException or FormatException or InvalidDataException)
+            JsonException or FormatException or InvalidDataException or DllNotFoundException or
+            EntryPointNotFoundException or BadImageFormatException)
         {
             return 20;
         }
@@ -70,7 +72,7 @@ internal static partial class WorkerMain
     private static LocalTranslationResponse Translate(
         LocalTranslationRequest request,
         Guid epoch,
-        PhraseTableRuntime runtime)
+        ILocalModelRuntime runtime)
     {
         string? validationError = request.ProtocolVersion != LocalWorkerProtocol.Version ||
             request.WorkerSessionEpoch != epoch || request.RequestId == Guid.Empty

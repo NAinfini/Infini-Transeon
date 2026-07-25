@@ -8,7 +8,7 @@ namespace InfiniTranseon.App.Presentation.Services;
 /// them here and never invent their own limits. Reconnect revision increases on every accepted
 /// reconnect so the UI can revalidate over-limit selections without discarding user choices.
 /// </summary>
-public sealed class RuntimeCapabilitiesService : IRuntimeCapabilitiesService
+public sealed class RuntimeCapabilitiesService
 {
     private readonly object _gate = new();
     private RuntimeCapabilities _capabilities;

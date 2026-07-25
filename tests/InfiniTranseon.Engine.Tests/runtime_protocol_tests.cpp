@@ -325,6 +325,26 @@ int main()
     require(infini::runtime::runtime_capacity_available(7U, 1U, 8U));
     require(!infini::runtime::runtime_capacity_available(8U, 1U, 8U));
     require(!infini::runtime::runtime_capacity_available(7U, 2U, 8U));
+    require(!infini::runtime::manual_ocr_allows_region(
+        false, true, true, false));
+    require(!infini::runtime::manual_ocr_allows_region(
+        false, false, false, false));
+    require(!infini::runtime::manual_ocr_allows_region(
+        false, false, true, true));
+    require(infini::runtime::manual_ocr_allows_region(
+        true, true, false, false));
+    require(!infini::runtime::manual_ocr_allows_region(
+        true, true, false, true));
+    require(infini::runtime::manual_ocr_target_available(1U, true));
+    require(infini::runtime::manual_ocr_target_available(4U, true));
+    require(infini::runtime::manual_ocr_target_available(5U, true));
+    require(infini::runtime::manual_ocr_target_available(6U, true));
+    require(infini::runtime::manual_ocr_target_available(10U, true));
+    require(!infini::runtime::manual_ocr_target_available(1U, false));
+    require(!infini::runtime::manual_ocr_target_available(2U, true));
+    require(!infini::runtime::manual_ocr_target_available(7U, true));
+    require(!infini::runtime::manual_ocr_allows_signature(false, false));
+    require(infini::runtime::manual_ocr_allows_signature(true, false));
 
     std::vector<std::byte> bytes = valid_bootstrap();
     const auto parsed = infini::runtime::parse_bootstrap(bytes);
@@ -397,6 +417,33 @@ int main()
     write_u32(target_payload, 68U, 1080U);
     require(!infini::runtime::parse_capture_target_command(target_payload).has_value());
 
+    std::array<std::byte, 8U> manual_ocr_payload{};
+    write_u32(manual_ocr_payload, 0U, 1U);
+    manual_ocr_payload[4U] = std::byte{1};
+    require(infini::runtime::parse_manual_ocr_request(manual_ocr_payload));
+    manual_ocr_payload[7U] = std::byte{1};
+    require(!infini::runtime::parse_manual_ocr_request(manual_ocr_payload));
+
+    std::array<std::byte, 24U> thumbnail_payload{};
+    write_u32(thumbnail_payload, 0U, 1U);
+    write_u32(thumbnail_payload, 4U, 960U);
+    thumbnail_payload[8U] = std::byte{1};
+    const auto thumbnail =
+        infini::runtime::parse_thumbnail_request(thumbnail_payload);
+    require(thumbnail.has_value());
+    require(thumbnail->maximum_long_edge == 960U);
+    require(thumbnail->target_instance_id.front() == std::byte{1});
+    write_u32(thumbnail_payload, 4U, 319U);
+    require(!infini::runtime::parse_thumbnail_request(
+        thumbnail_payload).has_value());
+    write_u32(thumbnail_payload, 4U, 1'281U);
+    require(!infini::runtime::parse_thumbnail_request(
+        thumbnail_payload).has_value());
+    write_u32(thumbnail_payload, 4U, 960U);
+    thumbnail_payload[8U] = std::byte{};
+    require(!infini::runtime::parse_thumbnail_request(
+        thumbnail_payload).has_value());
+
     auto overlay_payload = valid_overlay_command();
     const auto overlay = infini::runtime::parse_overlay_desired_state(overlay_payload);
     require(overlay.has_value());
@@ -460,6 +507,14 @@ int main()
     require(reparsed_ocr->lines.front().text == u"attack 100");
     require(reparsed_ocr->lines.front().orientation_degrees == 90);
     require(reparsed_ocr->lines.front().vertical);
+    infini::runtime::OcrResultCommand manual_ocr = *ocr;
+    manual_ocr.token.manual = true;
+    const auto encoded_manual_ocr = infini::runtime::encode_ocr_result(manual_ocr);
+    require(encoded_manual_ocr.has_value());
+    const auto reparsed_manual_ocr =
+        infini::runtime::parse_ocr_result(*encoded_manual_ocr);
+    require(reparsed_manual_ocr.has_value());
+    require(reparsed_manual_ocr->token.manual);
     ocr_payload[121U] = std::byte{1};
     require(!infini::runtime::parse_ocr_result(ocr_payload).has_value());
 
@@ -467,6 +522,7 @@ int main()
     crop.token.runtime_epoch[0] = std::byte{1};
     crop.token.target_instance_id[0] = std::byte{2};
     crop.token.area_kind = 0U;
+    crop.token.manual = true;
     crop.token.region_id[0] = std::byte{3};
     crop.token.text_track_id[0] = std::byte{4};
     crop.token.source_generation = 5U;
@@ -485,6 +541,7 @@ int main()
     const auto encoded_crop = infini::runtime::encode_cloud_ocr_crop_request(crop);
     require(encoded_crop.has_value());
     require(read_u32(*encoded_crop, 0U) == 1U);
+    require((*encoded_crop)[37U] == std::byte{1});
     require(read_u64(*encoded_crop, 72U) == 5U);
     require(read_u64(*encoded_crop, 120U) == 9U);
     require(read_u32(*encoded_crop, 148U) == 4U);

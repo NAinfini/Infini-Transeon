@@ -65,11 +65,13 @@
     "shutdownRequest": "ShutdownRequest",
     "shutdownResponse": "ShutdownAcknowledgement",
     "supportedCommands": [
+      "ControlRequest(manualOcr)",
       "CaptureTargetCommand",
       "OverlayDesiredState",
       "PolicyRevision",
       "ProcessingConfiguration",
-      "OcrResult"
+      "OcrResult",
+      "ThumbnailRequest"
     ],
     "overlayAcknowledgement": "returned only after the native overlay owner thread applies or explicitly rejects the complete revision",
     "policyAcknowledgement": "returned only after profile identity validation and atomic replacement of every matching target policy, including an empty baseline snapshot",
@@ -135,7 +137,9 @@
     "ProcessingConfiguration",
     "ProcessingConfigurationAcknowledgement",
     "OcrResultAcknowledgement",
-    "RuntimeBudgetSnapshot"
+    "RuntimeBudgetSnapshot",
+    "ThumbnailRequest",
+    "ThumbnailAcknowledgement"
   ],
   "ordering": "request-scoped sequence and runtime epoch",
   "reconnect": "full state snapshot; never replay text or provider completions"

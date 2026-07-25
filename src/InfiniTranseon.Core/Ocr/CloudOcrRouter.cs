@@ -87,6 +87,33 @@ public sealed class CloudOcrRouter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Admits an attempt whose execution identity was created by EngineHost. Runtime cloud OCR
+    /// requests originate in the native capture scheduler, so the managed router must preserve
+    /// that exact run id instead of replacing it with one created by <see cref="BeginAttempt"/>.
+    /// </summary>
+    public void AdoptAttempt(OcrExecutionToken token)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        if (token.ResultSequence != 1)
+            throw new OcrRoutingException(
+                "ocr.sequence.externalAttemptMustStartAtOne",
+                "An EngineHost OCR attempt must begin with result sequence one.");
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (_attempts.TryGetValue(token.Source, out AttemptState? current))
+            {
+                if (current.RunId == token.OcrRunId && current.Attempt == token.Attempt)
+                    return;
+                if (token.Attempt <= current.Attempt)
+                    throw new OcrRoutingException(
+                        "ocr.sequence.attemptNotIncreasing", "OCR attempt must increase.");
+            }
+            _attempts[token.Source] = new AttemptState(token.OcrRunId, token.Attempt);
+        }
+    }
+
     public OcrExecutionToken NextToken(OcrExecutionToken previous)
     {
         ArgumentNullException.ThrowIfNull(previous);

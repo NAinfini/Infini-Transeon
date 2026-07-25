@@ -63,6 +63,59 @@ public static class BuiltInProviderDefinitions
             [504] = new("provider.deepl.timeout", true),
         });
 
+    public static DeclarativeRestAdapterDefinition NiuTrans() => new(
+        schemaVersion: 1,
+        id: "translation.niutrans",
+        displayName: "NiuTrans",
+        endpoint: new Uri("https://api.niutrans.com/NiuTransServer/translation"),
+        method: RestHttpMethod.Post,
+        headers: new Dictionary<string, string>(),
+        bodyTemplate:
+            "from={{sourceLanguage}}&to={{targetLanguage}}&" +
+            "apikey={{credential:translation.niutrans.api-key}}&src_text={{sourceText}}",
+        responseTextJsonPointer: "/tgt_text",
+        responseErrorJsonPointer: "/error_code",
+        credentialReferences: ["translation.niutrans.api-key"],
+        bodyFormat: RestBodyFormat.FormUrlEncodedUtf8,
+        statusMappings: new Dictionary<int, RestStatusMapping>
+        {
+            [429] = new("provider.niutrans.rateLimited", true),
+            [500] = new("provider.niutrans.server", true),
+            [502] = new("provider.niutrans.server", true),
+            [503] = new("provider.niutrans.unavailable", true),
+            [504] = new("provider.niutrans.timeout", true),
+        },
+        languageCodeStyle: RestLanguageCodeStyle.BaseLanguage);
+
+    public static DeclarativeRestAdapterDefinition Yandex() => new(
+        schemaVersion: 1,
+        id: "translation.yandex",
+        displayName: "Yandex Cloud Translate",
+        endpoint: new Uri("https://translate.api.cloud.yandex.net/translate/v2/translate"),
+        method: RestHttpMethod.Post,
+        headers: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Authorization"] = "Api-Key {{credential:translation.yandex.api-key}}",
+        },
+        bodyTemplate:
+            "{\"targetLanguageCode\":\"{{targetLanguage}}\",\"texts\":[\"{{sourceText}}\"]," +
+            "\"folderId\":\"{{credential:translation.yandex.folder-id}}\",\"format\":\"PLAIN_TEXT\"}",
+        responseTextJsonPointer: "/translations/0/text",
+        responseErrorJsonPointer: "/message",
+        credentialReferences:
+            ["translation.yandex.api-key", "translation.yandex.folder-id"],
+        statusMappings: new Dictionary<int, RestStatusMapping>
+        {
+            [401] = new("provider.yandex.authorization", false),
+            [403] = new("provider.yandex.forbidden", false),
+            [429] = new("provider.yandex.rateLimited", true),
+            [500] = new("provider.yandex.server", true),
+            [502] = new("provider.yandex.server", true),
+            [503] = new("provider.yandex.unavailable", true),
+            [504] = new("provider.yandex.timeout", true),
+        },
+        languageCodeStyle: RestLanguageCodeStyle.BaseLanguage);
+
     private static OpenAiCompatibleOptions OpenAiCompatible(
         string providerId,
         string endpoint,

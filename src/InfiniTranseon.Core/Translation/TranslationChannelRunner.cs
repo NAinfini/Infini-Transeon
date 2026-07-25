@@ -23,25 +23,29 @@ public sealed record TranslationRunOptions(
     string StyleVersion = "1",
     string PromptVersion = "1",
     string GlossaryVersion = "1",
-    string ProfilePolicyVersion = "1");
+    string ProfilePolicyVersion = "1",
+    string? StylePrompt = null);
 
 public sealed class TranslationChannelRunner
 {
     private readonly OnlineProviderService _providers;
     private readonly ProviderDispatchCoordinator _dispatch;
     private readonly TranslationMemory? _memory;
+    private readonly CorrectionStore? _corrections;
     private readonly IProviderRetryPolicy _retryPolicy;
 
     public TranslationChannelRunner(
         OnlineProviderService providers,
         ProviderDispatchCoordinator? dispatch = null,
         TranslationMemory? memory = null,
+        CorrectionStore? corrections = null,
         IProviderRetryPolicy? retryPolicy = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         _providers = providers;
         _dispatch = dispatch ?? new ProviderDispatchCoordinator();
         _memory = memory;
+        _corrections = corrections;
         _retryPolicy = retryPolicy ?? new ExponentialJitterRetryPolicy();
     }
 
@@ -58,6 +62,46 @@ public sealed class TranslationChannelRunner
             Guid.NewGuid(),
             channel.DisplaySlot.SlotId);
         TranslationContext context = ContextBuilder.ApplyPolicy(options.Context, channel.Context);
+        if (_corrections is not null)
+        {
+            var correctionScope = new CorrectionScope(
+                options.ProfileId,
+                source.SourceToken.Area.UserRegionId?.Value,
+                options.SourceLanguage,
+                options.TargetLanguage,
+                options.GlossaryVersion);
+            TranslationCorrection? correction = await _corrections.FindAsync(
+                correctionScope,
+                source.SourceText,
+                cancellationToken).ConfigureAwait(false);
+            if (correction is not null)
+            {
+                Guid stageId = Guid.NewGuid();
+                var execution = new StageExecutionToken(channelToken, stageId, 1, 1, 1);
+                yield return new TranslationOutput(
+                    channel.Id,
+                    execution,
+                    channel.DisplaySlot.SlotId,
+                    stageId,
+                    1,
+                    1,
+                    TranslationStage.Initial,
+                    correction.Corrected,
+                    "correction.manual",
+                    TimeSpan.Zero,
+                    0m,
+                    null,
+                    CacheHit: true,
+                    StreamCompleted: true,
+                    FallbackFromProviderId: null,
+                    TerminalErrorCode: null,
+                    SupersededReason: null)
+                {
+                    EstimateOnly = false,
+                };
+                yield break;
+            }
+        }
         string currentText = source.SourceText;
         int stageIndex = 0;
         string? fallbackFrom = null;
@@ -173,7 +217,9 @@ public sealed class TranslationChannelRunner
         }
         var request = new TranslationRequest(
             sourceText,
-            options.SourceLanguage,
+            stage == TranslationStage.Refinement
+                ? options.TargetLanguage
+                : options.SourceLanguage,
             options.TargetLanguage,
             context,
             options.Glossary,
@@ -187,7 +233,11 @@ public sealed class TranslationChannelRunner
                 sourceText.Length,
                 options.MaximumCostPerAttempt,
                 options.Currency),
-            options.StrictOffline);
+            options.StrictOffline,
+            stage == TranslationStage.Refinement
+                ? TranslationOperation.Refine
+                : TranslationOperation.Translate,
+            options.StylePrompt);
         ProviderDispatchCoordinator.ProviderDispatchLease? lease = null;
         string? dispatchError = null;
         try

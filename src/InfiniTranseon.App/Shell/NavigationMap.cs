@@ -19,14 +19,16 @@ public static class NavigationMap
 {
     public static IReadOnlyList<NavigationDestination> Destinations { get; } =
     [
-        new("profiles", typeof(ProfileCenterViewModel)),
-        new("running", typeof(RunningTargetsViewModel)),
+        new("home", null),
+        new("workspace-home", null),
+        new("overview", typeof(ProfileCenterViewModel)),
+        new("capture", typeof(WorkbenchViewModel)),
+        new("channels", typeof(WorkbenchViewModel)),
+        new("overlay", typeof(WorkbenchViewModel)),
+        new("language", typeof(GlossaryViewModel)),
         new("history", typeof(HistoryViewModel)),
-        new("services", typeof(ServicesModelsViewModel)),
-        new("glossary", typeof(GlossaryViewModel)),
-        new("overlaystyles", null),
-        new("workbench", null),
-        new("diagnostics", typeof(DiagnosticsViewModel)),
+        new("activity", typeof(DiagnosticsViewModel)),
+        new("providers", typeof(ServicesModelsViewModel)),
         new("settings", typeof(SettingsViewModel)),
     ];
 

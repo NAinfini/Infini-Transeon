@@ -1,0 +1,201 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.Workspace.OverlaySectionPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="OnLoaded"
+    IsTabStop="True">
+
+    <!--
+      THESIS: restore the overlay controls lost with the deleted OverlayStyles page and make them
+      what-you-see-is-what-you-get by pairing every control with a preview (spec 5.6).
+      The preview is a static mock, never a "live" claim: the real overlay renderer intentionally
+      cannot return pixels (see Core/Probes/OverlayPreviewRenderer.cs) — the layered, capture-
+      excluded overlay window is drawn by the runtime, not this UI.
+    -->
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource SpaceM}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="{StaticResource SpaceXS}">
+            <TextBlock x:Uid="WorkspaceOverlayTitle" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock
+                x:Uid="WorkspaceOverlaySubtitle"
+                Style="{StaticResource CaptionTextStyle}"
+                TextWrapping="Wrap"
+                MaxWidth="760"
+                HorizontalAlignment="Left" />
+        </StackPanel>
+
+        <InfoBar x:Name="PageInfoBar" Grid.Row="1" IsOpen="False" IsClosable="True" />
+
+        <Grid Grid.Row="2" ColumnSpacing="{StaticResource SpaceM}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox
+                x:Uid="WorkbenchTargetSelector"
+                x:Name="TargetSelector"
+                HorizontalAlignment="Stretch"
+                SelectionChanged="OnTargetSelectionChanged" />
+            <ComboBox
+                x:Uid="ChannelsRegionSelector"
+                x:Name="RegionSelector"
+                Grid.Column="1"
+                HorizontalAlignment="Stretch"
+                SelectionChanged="OnRegionSelectionChanged" />
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnSpacing="{StaticResource SpaceL}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="360" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer x:Name="ControlColumn">
+                <StackPanel Spacing="{StaticResource SpaceM}">
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="{StaticResource CardPadding}">
+                        <RadioButtons
+                            x:Uid="WorkbenchOverlayModeBox"
+                            x:Name="PlacementButtons"
+                            SelectionChanged="OnPlacementChanged">
+                            <RadioButton x:Uid="OverlayOptionReplace" />
+                            <RadioButton x:Uid="OverlayOptionTranslucent" />
+                            <RadioButton x:Uid="OverlayOptionOffset" />
+                            <RadioButton x:Uid="OverlayOptionFloating" />
+                            <RadioButton x:Uid="OverlayOptionNoCover" />
+                        </RadioButtons>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="{StaticResource CardPadding}">
+                        <StackPanel Spacing="{StaticResource SpaceM}">
+                            <ComboBox
+                                x:Name="BackgroundModeBox"
+                                x:Uid="WorkbenchOverlayBackgroundModeBox"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnBackgroundModeChanged">
+                                <ComboBoxItem x:Uid="BackgroundOptionAutomatic" Tag="AutomaticContrastBlur" />
+                                <ComboBoxItem x:Uid="BackgroundOptionSolid" Tag="Solid" />
+                                <ComboBoxItem x:Uid="BackgroundOptionTransparent" Tag="Transparent" />
+                                <ComboBoxItem x:Uid="BackgroundOptionTranslucent" Tag="Translucent" />
+                                <ComboBoxItem x:Uid="BackgroundOptionCached" Tag="CachedCleanBackground" />
+                            </ComboBox>
+                            <TextBox
+                                x:Name="BackgroundColorBox"
+                                x:Uid="WorkbenchBackgroundColorBox"
+                                PlaceholderText="#AARRGGBB"
+                                LostFocus="OnFieldChanged" />
+                            <TextBox
+                                x:Name="TextColorBox"
+                                x:Uid="WorkbenchTextColorBox"
+                                PlaceholderText="#AARRGGBB"
+                                LostFocus="OnFieldChanged" />
+                            <Slider
+                                x:Name="OpacitySlider"
+                                x:Uid="WorkbenchOverlayOpacitySlider"
+                                Minimum="0"
+                                Maximum="1"
+                                StepFrequency="0.05"
+                                ValueChanged="OnSliderChanged" />
+                            <Slider
+                                x:Name="BlurRadiusSlider"
+                                x:Uid="WorkbenchBlurRadiusSlider"
+                                Minimum="0"
+                                Maximum="64"
+                                StepFrequency="1"
+                                ValueChanged="OnSliderChanged" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="{StaticResource CardPadding}">
+                        <StackPanel Spacing="{StaticResource SpaceM}">
+                            <TextBlock x:Uid="OverlayTextGroupHeader" FontWeight="SemiBold" />
+                            <Slider
+                                x:Name="FontSizeSlider"
+                                x:Uid="OverlayFontSizeSlider"
+                                Minimum="12"
+                                Maximum="36"
+                                StepFrequency="1"
+                                ValueChanged="OnSliderChanged" />
+                            <ToggleSwitch x:Name="OutlineToggle" x:Uid="OverlayOutlineToggle" Toggled="OnFieldChanged" />
+                            <TextBox
+                                x:Name="OutlineColorBox"
+                                x:Uid="WorkbenchOutlineColorBox"
+                                PlaceholderText="#AARRGGBB"
+                                LostFocus="OnFieldChanged" />
+                            <ToggleSwitch
+                                x:Name="AutomaticContrastToggle"
+                                x:Uid="OverlayAutoContrastToggle"
+                                Toggled="OnAutomaticContrastToggled" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorderStyle}" Padding="{StaticResource CardPadding}">
+                        <StackPanel Spacing="{StaticResource SpaceS}">
+                            <TextBlock x:Uid="OverlayOverflowGroupHeader" FontWeight="SemiBold" />
+                            <TextBlock
+                                x:Uid="OverlayOverflowGapNote"
+                                Style="{StaticResource CaptionTextStyle}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Column="1" RowSpacing="{StaticResource SpaceM}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <ComboBox
+                    x:Uid="OverlayPreviewStateSelector"
+                    x:Name="PreviewStateBox"
+                    HorizontalAlignment="Left"
+                    SelectionChanged="OnPreviewStateChanged" />
+
+                <Border
+                    Grid.Row="1"
+                    Background="{ThemeResource OverlayPreviewGameBrush}"
+                    CornerRadius="{StaticResource CardCornerRadius}"
+                    MinHeight="360">
+                    <Grid Padding="{StaticResource InsetXL}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            x:Uid="OverlayPreviewHint"
+                            Style="{StaticResource CaptionTextStyle}"
+                            Foreground="#80FFFFFF"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+                        <Border
+                            x:Name="PreviewPanel"
+                            Grid.Row="1"
+                            Background="{ThemeResource OverlayPreviewPanelBrush}"
+                            Padding="{StaticResource CardPadding}"
+                            MaxWidth="560">
+                            <TextBlock
+                                x:Name="PreviewText"
+                                Foreground="{ThemeResource OverlayPreviewTextBrush}"
+                                TextWrapping="Wrap" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <InfoBar
+                    Grid.Row="2"
+                    x:Uid="OverlayTracelessDisclosure"
+                    IsOpen="True"
+                    IsClosable="False"
+                    Severity="Warning" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

@@ -23,6 +23,11 @@ target_link_libraries(InfiniTranseon.EngineHost PRIVATE
     InfiniTranseon.Engine.Native
     InfiniTranseon.EngineHost.Runtime
 )
+if(MSVC)
+    target_link_options(InfiniTranseon.EngineHost PRIVATE
+        "/MANIFESTINPUT:${PROJECT_SOURCE_DIR}/src/InfiniTranseon.Engine.Native/resources/infini_native.manifest"
+    )
+endif()
 
 if(MSVC)
     target_compile_options(InfiniTranseon.EngineHost.Runtime PRIVATE

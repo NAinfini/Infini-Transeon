@@ -8,7 +8,7 @@ public sealed record PhraseTableTranslationResult(
     string? Text,
     string? ErrorCode);
 
-public sealed class PhraseTableRuntime
+public sealed class PhraseTableRuntime : ILocalModelRuntime
 {
     private const long MaximumModelBytes = 64L * 1024 * 1024;
     private const int MaximumEntries = 100_000;
@@ -182,6 +182,10 @@ public sealed class PhraseTableRuntime
     private static bool IsIdentifier(string value) => value.Length is > 0 and <= 64 &&
         value.All(character => character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or
             >= '0' and <= '9' or '.' or '_' or '-');
+
+    public void Dispose()
+    {
+    }
 
     private sealed record PhraseTableModel(
         string SourceLanguage,

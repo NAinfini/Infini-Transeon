@@ -1,0 +1,120 @@
+<UserControl
+    x:Class="InfiniTranseon.App.Controls.HistoryEventCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
+    xmlns:data="using:InfiniTranseon.App.Presentation">
+    <Border Style="{StaticResource CardBorderStyle}">
+        <StackPanel Spacing="{StaticResource SpaceM}">
+            <Grid>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
+                    <TextBlock Text="{x:Bind Item.Timestamp, Mode=OneWay}" Style="{StaticResource MetricTextStyle}" />
+                    <TextBlock Text="{x:Bind Item.ProfileName, Mode=OneWay}" Style="{StaticResource CaptionTextStyle}" />
+                    <TextBlock Text="{x:Bind Item.Region, Mode=OneWay}" Style="{StaticResource CaptionTextStyle}" />
+                </StackPanel>
+                <Button
+                    x:Uid="CopySourceButton"
+                    HorizontalAlignment="Right"
+                    Tag="{x:Bind Item.SourceText, Mode=OneWay}"
+                    Click="OnCopyTextClick">
+                    <FontIcon Glyph="&#xE8C8;" />
+                </Button>
+            </Grid>
+            <TextBlock
+                Text="{x:Bind Item.SourceText, Mode=OneWay}"
+                FontSize="{StaticResource TypeBodyLarge}"
+                TextWrapping="Wrap" />
+            <ItemsRepeater ItemsSource="{x:Bind Item.Channels, Mode=OneWay}">
+                <ItemsRepeater.Layout>
+                    <UniformGridLayout
+                        MinItemWidth="300"
+                        MinColumnSpacing="{StaticResource SpaceS}"
+                        MinRowSpacing="{StaticResource SpaceS}"
+                        ItemsStretch="Fill" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="data:ChannelResult">
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="{StaticResource ControlCorner}"
+                            Padding="{StaticResource InsetM}">
+                            <StackPanel Spacing="{StaticResource SpaceS}">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
+                                        <TextBlock Text="{x:Bind ChannelLabel}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{x:Bind Provider}" Style="{StaticResource CaptionTextStyle}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{x:Bind Latency}" Style="{StaticResource CaptionTextStyle}" HorizontalAlignment="Right" />
+                                </Grid>
+                                <TextBlock Text="{x:Bind Text}" Style="{StaticResource BodyTextStyle}" TextWrapping="Wrap" />
+                                <Grid>
+                                    <controls:StatusBadge
+                                        Text="{x:Bind StateText}"
+                                        Severity="{x:Bind StateSeverity}"
+                                        HorizontalAlignment="Left" />
+                                    <StackPanel
+                                        HorizontalAlignment="Right"
+                                        Orientation="Horizontal"
+                                        Spacing="{StaticResource SpaceXS}">
+                                        <Button
+                                            x:Uid="HistoryCorrectButton"
+                                            Tag="{x:Bind}"
+                                            Click="OnBeginCorrectionClick">
+                                            <FontIcon Glyph="&#xE70F;" />
+                                        </Button>
+                                        <Button
+                                            x:Uid="CopyTranslationButton"
+                                            Tag="{x:Bind Text}"
+                                            Click="OnCopyTextClick">
+                                            <FontIcon Glyph="&#xE8C8;" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+
+            <Border
+                x:Name="CorrectionPanel"
+                Style="{StaticResource SettingRowStyle}"
+                Visibility="Collapsed">
+                <StackPanel Spacing="{StaticResource SpaceS}">
+                    <TextBlock
+                        x:Uid="HistoryCorrectionHeader"
+                        Style="{StaticResource SectionHeaderStyle}" />
+                    <TextBox
+                        x:Name="CorrectionTextBox"
+                        x:Uid="HistoryCorrectionTextBox"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        MinHeight="84" />
+                    <TextBlock
+                        x:Uid="HistoryCorrectionScopeHint"
+                        Style="{StaticResource CaptionTextStyle}"
+                        TextWrapping="Wrap" />
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="{StaticResource SpaceS}"
+                        HorizontalAlignment="Right">
+                        <Button
+                            x:Uid="HistoryCorrectionCancelButton"
+                            Click="OnCancelCorrectionClick" />
+                        <Button
+                            x:Uid="HistoryCorrectionGlossaryButton"
+                            Click="OnSaveCorrectionAndGlossaryClick" />
+                        <Button
+                            x:Uid="HistoryCorrectionSaveButton"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="OnSaveCorrectionClick" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <InfoBar
+                x:Name="CorrectionStatusBar"
+                IsOpen="False"
+                IsClosable="True" />
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -52,18 +52,22 @@ public sealed class BaiduOcrProvider : IOcrProvider, IDisposable
         _credentials = credentials;
     }
 
-    public CredentialBinding CreateCredentialBinding(string purpose)
+    public CredentialBinding CreateCredentialBinding(string purpose) =>
+        CreateCredentialBinding(_options, purpose);
+
+    public static CredentialBinding CreateCredentialBinding(BaiduOcrOptions options, string purpose)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (purpose is not ("client-id" or "client-secret"))
             throw new ArgumentOutOfRangeException(nameof(purpose));
         return new CredentialBinding(
             ProviderId,
             purpose,
             "https",
-            _options.TokenEndpoint.IdnHost,
-            _options.TokenEndpoint.IsDefaultPort ? 443 : _options.TokenEndpoint.Port,
+            options.TokenEndpoint.IdnHost,
+            options.TokenEndpoint.IsDefaultPort ? 443 : options.TokenEndpoint.Port,
             "oauth2-client-credentials",
-            _options.ProxyPolicy);
+            options.ProxyPolicy);
     }
 
     public async ValueTask<OcrResultSnapshot> RecognizeAsync(

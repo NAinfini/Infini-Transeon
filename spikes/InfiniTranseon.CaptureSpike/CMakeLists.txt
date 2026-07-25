@@ -6,6 +6,9 @@ target_compile_features(InfiniTranseon.CaptureSpike PRIVATE cxx_std_20)
 target_link_libraries(InfiniTranseon.CaptureSpike PRIVATE windowsapp user32 gdi32 dxgi)
 
 if(MSVC)
+    target_link_options(InfiniTranseon.CaptureSpike PRIVATE
+        "/MANIFESTINPUT:${PROJECT_SOURCE_DIR}/src/InfiniTranseon.Engine.Native/resources/infini_native.manifest"
+    )
     target_compile_options(InfiniTranseon.CaptureSpike PRIVATE
         /W4
         /WX

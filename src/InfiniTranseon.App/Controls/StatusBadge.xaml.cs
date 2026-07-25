@@ -17,6 +17,7 @@ public sealed partial class StatusBadge : UserControl
     public StatusBadge()
     {
         InitializeComponent();
+        ActualThemeChanged += (_, _) => UpdateVisual();
     }
 
     public string Text

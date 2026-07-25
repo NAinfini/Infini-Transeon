@@ -97,6 +97,8 @@ public sealed class RuntimePerformanceController : IRuntimePerformanceController
 
     public Task Completion => _loop ?? Task.CompletedTask;
 
+    public ITranslationDegradationPolicy DegradationPolicy => _coordinator;
+
     public void Start()
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);

@@ -41,6 +41,7 @@ constexpr std::size_t overlay_acknowledgement_fixed_payload_bytes = 48U;
 constexpr std::size_t policy_acknowledgement_fixed_payload_bytes = 24U;
 constexpr std::size_t processing_acknowledgement_fixed_payload_bytes = 40U;
 constexpr std::size_t ocr_result_acknowledgement_fixed_payload_bytes = 48U;
+constexpr std::size_t manual_ocr_acknowledgement_fixed_payload_bytes = 20U;
 constexpr std::uint64_t filetime_to_datetime_ticks = 504'911'232'000'000'000ULL;
 constexpr std::uint64_t response_lifetime_ticks = 300'000'000ULL;
 
@@ -362,6 +363,122 @@ bool write_empty_response(
     write_u32(response, 56U, 0U);
     std::scoped_lock lock(write_gate);
     return write_exact(pipe, response) && FlushFileBuffers(pipe) != FALSE;
+}
+
+bool write_manual_ocr_response(
+    HANDLE pipe,
+    const std::span<const std::byte> request,
+    const ManualOcrApplyResult& result,
+    std::mutex& write_gate) noexcept
+{
+    if ((result.accepted && !result.error_code.empty()) ||
+        (!result.accepted && result.error_code.empty()) ||
+        result.error_code.size() > 128U)
+        return false;
+    const std::size_t payload_bytes =
+        manual_ocr_acknowledgement_fixed_payload_bytes + result.error_code.size();
+    std::vector<std::byte> response(
+        sizeof(std::uint32_t) + wire_header_bytes + payload_bytes);
+    const auto bytes = std::span<std::byte>(response);
+    write_u32(bytes, 0U, static_cast<std::uint32_t>(wire_header_bytes + payload_bytes));
+    write_u32(bytes, 4U, wire_magic);
+    write_u32(bytes, 8U, protocol_version);
+    write_u32(bytes, 12U, control_response_kind);
+    std::ranges::copy(request.subspan(12U, 40U), response.begin() + 16U);
+    write_u64(bytes, 48U, utc_ticks() + response_lifetime_ticks);
+    write_u32(bytes, 56U, static_cast<std::uint32_t>(payload_bytes));
+    constexpr std::size_t payload_offset = sizeof(std::uint32_t) + wire_header_bytes;
+    write_u32(bytes, payload_offset, 1U);
+    response[payload_offset + 4U] = result.accepted ? std::byte{1} : std::byte{};
+    response[payload_offset + 5U] = static_cast<std::byte>(result.status);
+    write_u32(bytes, payload_offset + 8U, result.target_count);
+    write_u32(bytes, payload_offset + 12U, result.region_count);
+    write_u32(bytes, payload_offset + 16U,
+        static_cast<std::uint32_t>(result.error_code.size()));
+    std::ranges::transform(
+        result.error_code,
+        response.begin() + payload_offset + manual_ocr_acknowledgement_fixed_payload_bytes,
+        [](const char value) { return static_cast<std::byte>(value); });
+    std::scoped_lock lock(write_gate);
+    const bool written = write_exact(pipe, response) && FlushFileBuffers(pipe) != FALSE;
+    SecureZeroMemory(response.data(), response.size());
+    return written;
+}
+
+bool write_thumbnail_response(
+    HANDLE pipe,
+    const std::span<const std::byte> request,
+    const ThumbnailApplyResult& result,
+    std::mutex& write_gate) noexcept
+{
+    constexpr std::size_t fixed_payload_bytes = 52U;
+    constexpr std::size_t maximum_image_bytes = 4U * 1024U * 1024U;
+    const bool valid_accepted = result.accepted &&
+        result.frame_sequence > 0U &&
+        result.pixel_width > 0U && result.pixel_width <= 1280U &&
+        result.pixel_height > 0U && result.pixel_height <= 1280U &&
+        result.mime_type == "image/png" &&
+        !result.encoded_image.empty() &&
+        result.encoded_image.size() <= maximum_image_bytes &&
+        result.error_code.empty();
+    const bool valid_rejected = !result.accepted &&
+        result.frame_sequence == 0U &&
+        result.pixel_width == 0U &&
+        result.pixel_height == 0U &&
+        result.mime_type.empty() &&
+        result.encoded_image.empty() &&
+        !result.error_code.empty() &&
+        result.error_code.size() <= 128U;
+    if (!valid_accepted && !valid_rejected) return false;
+    const std::size_t payload_bytes = fixed_payload_bytes +
+        result.mime_type.size() + result.error_code.size() +
+        result.encoded_image.size();
+    if (payload_bytes > maximum_message_bytes - wire_header_bytes) return false;
+    std::vector<std::byte> response(
+        sizeof(std::uint32_t) + wire_header_bytes + payload_bytes);
+    const auto bytes = std::span<std::byte>(response);
+    write_u32(bytes, 0U, static_cast<std::uint32_t>(
+        wire_header_bytes + payload_bytes));
+    write_u32(bytes, 4U, wire_magic);
+    write_u32(bytes, 8U, protocol_version);
+    write_u32(bytes, 12U, thumbnail_acknowledgement_kind);
+    std::ranges::copy(request.subspan(12U, 40U), response.begin() + 16U);
+    write_u64(bytes, 48U, utc_ticks() + response_lifetime_ticks);
+    write_u32(bytes, 56U, static_cast<std::uint32_t>(payload_bytes));
+    constexpr std::size_t payload_offset =
+        sizeof(std::uint32_t) + wire_header_bytes;
+    write_u32(bytes, payload_offset, 1U);
+    response[payload_offset + 4U] =
+        result.accepted ? std::byte{1} : std::byte{};
+    write_u64(bytes, payload_offset + 8U, result.frame_sequence);
+    std::ranges::copy(
+        result.target_instance_id,
+        response.begin() + payload_offset + 16U);
+    write_u32(bytes, payload_offset + 32U, result.pixel_width);
+    write_u32(bytes, payload_offset + 36U, result.pixel_height);
+    write_u32(bytes, payload_offset + 40U,
+        static_cast<std::uint32_t>(result.mime_type.size()));
+    write_u32(bytes, payload_offset + 44U,
+        static_cast<std::uint32_t>(result.encoded_image.size()));
+    write_u32(bytes, payload_offset + 48U,
+        static_cast<std::uint32_t>(result.error_code.size()));
+    std::size_t offset = payload_offset + fixed_payload_bytes;
+    std::ranges::transform(
+        result.mime_type,
+        response.begin() + offset,
+        [](const char value) { return static_cast<std::byte>(value); });
+    offset += result.mime_type.size();
+    std::ranges::transform(
+        result.error_code,
+        response.begin() + offset,
+        [](const char value) { return static_cast<std::byte>(value); });
+    offset += result.error_code.size();
+    std::ranges::copy(result.encoded_image, response.begin() + offset);
+    std::scoped_lock lock(write_gate);
+    const bool written = write_exact(pipe, response) &&
+        FlushFileBuffers(pipe) != FALSE;
+    SecureZeroMemory(response.data(), response.size());
+    return written;
 }
 
 bool write_capture_target_response(
@@ -925,6 +1042,9 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
             payload_length == body_length - wire_header_bytes;
         const bool empty_control = (request_kind == control_request_kind ||
             request_kind == shutdown_request_kind) && payload_length == 0U;
+        const bool manual_ocr_request = request_kind == control_request_kind &&
+            valid_header &&
+            parse_manual_ocr_request(body_span.subspan(wire_header_bytes));
         const auto capture_command = request_kind == capture_target_command_kind &&
             valid_header
             ? parse_capture_target_command(body_span.subspan(wire_header_bytes))
@@ -941,13 +1061,19 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
         const auto ocr_result = request_kind == ocr_result_kind && valid_header
             ? parse_ocr_result(body_span.subspan(wire_header_bytes))
             : std::nullopt;
+        const auto thumbnail_request =
+            request_kind == thumbnail_request_kind && valid_header
+            ? parse_thumbnail_request(body_span.subspan(wire_header_bytes))
+            : std::nullopt;
         const bool overlay_epoch_valid = !overlay_command.has_value() ||
             std::ranges::equal(overlay_command->runtime_epoch, config.runtime_epoch);
         const bool ocr_epoch_valid = !ocr_result.has_value() ||
             std::ranges::equal(ocr_result->token.runtime_epoch, config.runtime_epoch);
-        const bool supported = empty_control || capture_command.has_value() ||
+        const bool supported = empty_control || manual_ocr_request ||
+            capture_command.has_value() ||
             overlay_command.has_value() || policy_command.has_value() ||
-            processing_command.has_value() || ocr_result.has_value();
+            processing_command.has_value() || ocr_result.has_value() ||
+            thumbnail_request.has_value();
         if (!valid_header || !supported || !overlay_epoch_valid || !ocr_epoch_valid)
         {
             SecureZeroMemory(body.data(), body.size());
@@ -955,7 +1081,14 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
         }
 
         bool sent{};
-        if (capture_command.has_value())
+        if (manual_ocr_request)
+        {
+            const ManualOcrApplyResult result =
+                capture_controller.request_manual_ocr();
+            sent = write_manual_ocr_response(
+                pipe, body_span, result, write_gate);
+        }
+        else if (capture_command.has_value())
         {
             const CaptureTargetApplyResult result = capture_controller.apply(*capture_command);
             sent = write_capture_target_response(
@@ -996,6 +1129,16 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
             if (sent && result.accepted)
                 sent = write_ocr_result_event(
                     pipe, config, body_span.subspan(wire_header_bytes), write_gate);
+        }
+        else if (thumbnail_request.has_value())
+        {
+            ThumbnailApplyResult result =
+                capture_controller.request_thumbnail(*thumbnail_request);
+            sent = write_thumbnail_response(
+                pipe, body_span, result, write_gate);
+            SecureZeroMemory(
+                result.encoded_image.data(),
+                result.encoded_image.size());
         }
         else
         {

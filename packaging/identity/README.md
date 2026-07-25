@@ -1,10 +1,27 @@
 # Package identity spike
 
-This directory contains the shared package-identity manifest prototype for the installer and portable distribution paths. It is not yet a release package.
+This directory contains the external-location package-identity template for a future
+certificate-signed distribution. It is deliberately excluded from the current unsigned GitHub
+MSI and portable archive.
 
-The identity and publisher values are development placeholders. Release packaging must replace them with the stable signed identity without changing the capability contract.
+Windows requires an external-location identity package used on end-user computers to be signed
+by a certificate trusted on that computer. The executable side-by-side manifest must also use the
+same certificate subject. An unsigned identity package is therefore not a production substitute
+for Authenticode or trusted MSIX signing.
 
-M0 remains blocked until an ordinary non-admin account proves all of the following on every supported Windows 11 release:
+`prepare-release-identity.ps1` accepts the exact certificate subject through `-Publisher`, writes
+that value to the identity package, and injects matching `msix` metadata into a generated
+application manifest. The checked-in application manifest intentionally has no `msix` element, so
+the current unsigned build starts normally and explicitly reports that borderless capture is
+unavailable without package identity. It retains the Windows capture border instead of failing
+startup or silently claiming borderless support.
+
+Once trusted signing is configured, the signed release pipeline must build and sign
+`InfiniTranseon.Identity.msix`, publish the generated application manifest, register the identity
+package from the installer, and validate that the package `Name`, `Publisher`, and application
+`Id` match the executable manifest exactly.
+
+Release hardware acceptance must still prove all of the following on every supported Windows 11 release:
 
 - installer registration, update, repair and uninstall;
 - portable external-location or sparse-package registration on first run;

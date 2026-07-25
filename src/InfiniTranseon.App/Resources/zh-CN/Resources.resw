@@ -5,35 +5,14 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
 
-  <data name="NavProfiles.Content" xml:space="preserve"><value>档案</value></data>
-  <data name="NavRunningTargets.Content" xml:space="preserve"><value>运行中的目标</value></data>
-  <data name="NavHistory.Content" xml:space="preserve"><value>历史记录</value></data>
-  <data name="NavServicesModels.Content" xml:space="preserve"><value>服务与模型</value></data>
-  <data name="NavGlossary.Content" xml:space="preserve"><value>术语表与风格</value></data>
-  <data name="NavOverlayStyles.Content" xml:space="preserve"><value>覆盖层样式</value></data>
-  <data name="NavWorkbench.Content" xml:space="preserve"><value>光学工作台</value></data>
-  <data name="NavDiagnostics.Content" xml:space="preserve"><value>诊断</value></data>
   <data name="NavSettings.Content" xml:space="preserve"><value>设置</value></data>
 
-  <data name="ProfilesTitle.Text" xml:space="preserve"><value>档案</value></data>
-  <data name="ProfilesSubtitle.Text" xml:space="preserve"><value>配置一次，然后专心游戏——档案绑定捕获目标、语言、区域与翻译通道。</value></data>
   <data name="NewProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>新建档案</value></data>
-  <data name="NewProfileButtonLabel.Text" xml:space="preserve"><value>新建档案</value></data>
-  <data name="EditProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>编辑档案</value></data>
-  <data name="MoreProfileActionsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>更多档案操作</value></data>
+  <data name="ProfileMoreButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>更多档案操作</value></data>
+  <data name="ExportProfileMenuItem.Text" xml:space="preserve"><value>导出档案</value></data>
+  <data name="DeleteProfileMenuItem.Text" xml:space="preserve"><value>删除档案</value></data>
 
-  <data name="RunningTargetsTitle.Text" xml:space="preserve"><value>运行中的目标</value></data>
-  <data name="RunningTargetsSubtitle.Text" xml:space="preserve"><value>实时捕获目标的健康度、延迟与逐目标控制。此处任何操作都不会抢占游戏焦点。</value></data>
-  <data name="PauseAllButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>暂停全部目标</value></data>
-  <data name="PauseAllButtonLabel.Text" xml:space="preserve"><value>全部暂停</value></data>
-  <data name="ToggleOverlayButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>切换覆盖层</value></data>
-  <data name="ToggleOverlayButtonLabel.Text" xml:space="preserve"><value>切换覆盖层</value></data>
   <data name="ManualOcrButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>立即手动识别</value></data>
-  <data name="ManualOcrButtonLabel.Text" xml:space="preserve"><value>手动识别</value></data>
-  <data name="EngineStartButtonLabel.Text" xml:space="preserve"><value>启动引擎</value></data>
-  <data name="EngineStopButtonLabel.Text" xml:space="preserve"><value>停止引擎</value></data>
-  <data name="ManualOcrUnsupportedText.Text" xml:space="preserve"><value>引擎协议 v1 不支持手动识别</value></data>
-  <data name="RunningTargetsEmptyText.Text" xml:space="preserve"><value>暂无运行中的目标。请选择配置档案并启动引擎。</value></data>
   <data name="EngineStatusStopped" xml:space="preserve"><value>引擎已停止</value></data>
   <data name="EngineStatusLocating" xml:space="preserve"><value>正在定位引擎…</value></data>
   <data name="EngineStatusStarting" xml:space="preserve"><value>正在启动引擎…</value></data>
@@ -46,30 +25,63 @@
   <data name="ResumeAllLabel" xml:space="preserve"><value>全部恢复</value></data>
   <data name="HideOverlayLabel" xml:space="preserve"><value>隐藏覆盖层</value></data>
   <data name="ShowOverlayLabel" xml:space="preserve"><value>显示覆盖层</value></data>
-  <data name="LatencyP95Label.Text" xml:space="preserve"><value>延迟 P95</value></data>
-  <data name="ActiveRegionsLabel.Text" xml:space="preserve"><value>活跃区域</value></data>
 
   <data name="HistoryTitle.Text" xml:space="preserve"><value>历史记录</value></data>
   <data name="HistorySubtitle.Text" xml:space="preserve"><value>按档案分组的翻译事件，同一来源代次的所有通道结果并列展示。</value></data>
   <data name="HistorySearchBox.PlaceholderText" xml:space="preserve"><value>搜索原文或译文</value></data>
-  <data name="HistoryProfileFilter.PlaceholderText" xml:space="preserve"><value>档案</value></data>
   <data name="HistoryDateFilter.PlaceholderText" xml:space="preserve"><value>时间范围</value></data>
   <data name="HistoryDateToday.Content" xml:space="preserve"><value>今天</value></data>
+  <data name="HistoryGroupToday" xml:space="preserve"><value>今天</value></data>
+  <data name="HistoryGroupYesterday" xml:space="preserve"><value>昨天</value></data>
+  <data name="HistoryDateAll.Content" xml:space="preserve"><value>全部时间</value></data>
   <data name="HistoryDate7Days.Content" xml:space="preserve"><value>近 7 天</value></data>
   <data name="HistoryDate30Days.Content" xml:space="preserve"><value>近 30 天</value></data>
   <data name="CopySourceButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>复制原文</value></data>
+  <data name="CopyTranslationButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>复制译文</value></data>
 
-  <data name="ServicesModelsTitle.Text" xml:space="preserve"><value>服务与模型</value></data>
-  <data name="ServicesModelsSubtitle.Text" xml:space="preserve"><value>翻译与 OCR 提供商、凭据及可选本地模型。密钥仅存于 Windows 凭据管理器。</value></data>
-  <data name="AddProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加提供商</value></data>
-  <data name="AddProviderButtonLabel.Text" xml:space="preserve"><value>添加提供商</value></data>
   <data name="AddRestAdapterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加 REST 适配器</value></data>
-  <data name="AddRestAdapterButtonLabel.Text" xml:space="preserve"><value>添加 REST 适配器</value></data>
+  <data name="AddRestAdapterButtonLabel.Text" xml:space="preserve"><value>导入 REST 适配器</value></data>
+  <data name="RemoveCustomProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>移除自定义 REST 适配器</value></data>
+  <data name="RestAdapterImportedTitle" xml:space="preserve"><value>REST 适配器已导入</value></data>
+  <data name="RestAdapterImportedMessage" xml:space="preserve"><value>请先在下方配置凭据，再把它用于档案。</value></data>
+  <data name="RemoveRestAdapterTitle" xml:space="preserve"><value>移除 REST 适配器？</value></data>
+  <data name="RemoveRestAdapterBody" xml:space="preserve"><value>移除后，档案将无法再使用 {0}。已保存的凭据会保留在 Windows 凭据管理器中，直到你主动清除。</value></data>
+  <data name="RemoveRestAdapterConfirm" xml:space="preserve"><value>移除</value></data>
+  <data name="RemoveRestAdapterCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="RestAdapterRemovedTitle" xml:space="preserve"><value>REST 适配器已移除</value></data>
   <data name="ConfigureProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>配置提供商</value></data>
   <data name="ConfigureProviderButtonLabel.Text" xml:space="preserve"><value>配置</value></data>
+  <data name="InstallLocalModelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>下载并安装本地模型</value></data>
+  <data name="InstallLocalModelButton.Content" xml:space="preserve"><value>安装</value></data>
+  <data name="RemoveLocalModelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>移除本地模型</value></data>
+  <data name="RemoveLocalModelButton.Content" xml:space="preserve"><value>移除</value></data>
+  <data name="InstallLocalModelTitle" xml:space="preserve"><value>安装本地模型？</value></data>
+  <data name="InstallLocalModelBody" xml:space="preserve"><value>现在下载 {0}（{1}）吗？许可证：{2}。运行时：{3}。未经本次确认，应用绝不会下载本地模型。</value></data>
+  <data name="InstallLocalModelConfirm" xml:space="preserve"><value>下载并安装</value></data>
+  <data name="InstallLocalModelCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="LocalModelInstalledTitle" xml:space="preserve"><value>模型包已安装</value></data>
+  <data name="RemoveLocalModelTitle" xml:space="preserve"><value>移除本地模型？</value></data>
+  <data name="RemoveLocalModelBody" xml:space="preserve"><value>要从 {1} 移除 {0} 吗？模型包文件将从应用管理的存储中删除。</value></data>
+  <data name="RemoveLocalModelConfirm" xml:space="preserve"><value>移除</value></data>
+  <data name="RemoveLocalModelCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="LocalModelRemovedTitle" xml:space="preserve"><value>模型包已移除</value></data>
+  <data name="CancelLocalModelOperationButton.Content" xml:space="preserve"><value>取消</value></data>
+  <data name="CancelLocalModelOperationButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>取消本地模型操作</value></data>
 
   <data name="GlossaryTitle.Text" xml:space="preserve"><value>术语表与风格提示词</value></data>
   <data name="GlossarySubtitle.Text" xml:space="preserve"><value>受保护术语永不被自动纠正。编辑术语表或提示词版本会使受影响的翻译缓存失效。</value></data>
+  <data name="GlossaryTableHeader.Text" xml:space="preserve"><value>术语表</value></data>
+  <data name="GlossaryEmptyState.Title" xml:space="preserve"><value>暂无术语</value></data>
+  <data name="GlossaryEmptyState.Body" xml:space="preserve"><value>添加术语、导入术语表，或从历史记录中提升一条纠正。</value></data>
+  <data name="GlossaryPromoteFromHistoryButton.Content" xml:space="preserve"><value>打开历史记录以提升纠正</value></data>
+  <data name="GlossaryEditHeader.Text" xml:space="preserve"><value>编辑术语</value></data>
+  <data name="GlossaryEditSourceBox.Header" xml:space="preserve"><value>源术语</value></data>
+  <data name="GlossaryEditTargetBox.Header" xml:space="preserve"><value>目标术语</value></data>
+  <data name="GlossaryEditNotesBox.Header" xml:space="preserve"><value>备注</value></data>
+  <data name="GlossaryEditProtectedCheck.Content" xml:space="preserve"><value>受保护（永不自动更正）</value></data>
+  <data name="GlossaryEditCancelButton.Content" xml:space="preserve"><value>取消</value></data>
+  <data name="GlossaryEditSaveButton.Content" xml:space="preserve"><value>保存修改</value></data>
+  <data name="GlossaryEditRequiredError" xml:space="preserve"><value>请同时填写源术语和目标术语。</value></data>
   <data name="GlossarySearchBox.PlaceholderText" xml:space="preserve"><value>搜索术语</value></data>
   <data name="AddTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加术语</value></data>
   <data name="AddTermButtonLabel.Text" xml:space="preserve"><value>添加术语</value></data>
@@ -77,60 +89,168 @@
   <data name="ImportGlossaryButtonLabel.Text" xml:space="preserve"><value>导入</value></data>
   <data name="ExportGlossaryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>导出术语表</value></data>
   <data name="ExportGlossaryButtonLabel.Text" xml:space="preserve"><value>导出</value></data>
+  <data name="GlossaryArchiveFileType" xml:space="preserve"><value>InfiniTranseon 术语表</value></data>
+  <data name="GlossaryArchiveTooLarge" xml:space="preserve"><value>术语表文件超过 5 MB。</value></data>
+  <data name="GlossaryArchiveInvalid" xml:space="preserve"><value>术语表文件无效或版本不受支持。</value></data>
+  <data name="GlossaryTransferErrorTitle" xml:space="preserve"><value>术语表传输失败</value></data>
+  <data name="GlossaryTransferErrorClose" xml:space="preserve"><value>关闭</value></data>
   <data name="GlossarySourceColumn.Text" xml:space="preserve"><value>源术语</value></data>
   <data name="GlossaryTargetColumn.Text" xml:space="preserve"><value>目标术语</value></data>
   <data name="GlossaryScopeColumn.Text" xml:space="preserve"><value>作用域</value></data>
   <data name="GlossaryProtectedColumn.Text" xml:space="preserve"><value>受保护</value></data>
+  <data name="GlossaryProtectedValue.Text" xml:space="preserve"><value>已保护</value></data>
+  <data name="DeleteTermDialogTitle" xml:space="preserve"><value>删除术语？</value></data>
+  <data name="DeleteTermDialogBody" xml:space="preserve"><value>“{0}”将从当前档案移除，并热应用到正在运行的目标。</value></data>
+  <data name="DeleteTermDialogConfirm" xml:space="preserve"><value>删除术语</value></data>
+  <data name="DeleteTermDialogCancel" xml:space="preserve"><value>取消</value></data>
   <data name="GlossaryNotesColumn.Text" xml:space="preserve"><value>备注</value></data>
   <data name="StylePromptHeader.Text" xml:space="preserve"><value>风格提示词</value></data>
   <data name="StylePromptVersionLabel.Text" xml:space="preserve"><value>版本</value></data>
+  <data name="StylePromptNameBox.Header" xml:space="preserve"><value>版本名称</value></data>
+  <data name="StylePromptRequiredError" xml:space="preserve"><value>保存前请填写版本名称与风格提示词。</value></data>
   <data name="SavePromptVersionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存为新版本</value></data>
   <data name="SavePromptVersionButtonLabel.Text" xml:space="preserve"><value>保存为新版本</value></data>
   <data name="StylePromptEditor.Header" xml:space="preserve"><value>提示词模板</value></data>
   <data name="StylePromptCacheWarning.Title" xml:space="preserve"><value>缓存影响</value></data>
-  <data name="StylePromptCacheWarning.Message" xml:space="preserve"><value>保存新版本会使该档案的翻译缓存失效；运行中的目标仅在确认应用后才会采用。</value></data>
+  <data name="StylePromptCacheWarning.Message" xml:space="preserve"><value>保存或启用版本会更改提示词缓存键；运行中的档案会通过配置热应用或下次启动采用它。</value></data>
 
-  <data name="OverlayStylesTitle.Text" xml:space="preserve"><value>覆盖层样式</value></data>
-  <data name="OverlayStylesSubtitle.Text" xml:space="preserve"><value>逐区域的覆盖层外观，实时预览最多 4 个固定翻译槽位。</value></data>
-  <data name="OverlayModeHeader.Text" xml:space="preserve"><value>覆盖模式</value></data>
-  <data name="OverlayModeReplace.Content" xml:space="preserve"><value>完全替换</value></data>
-  <data name="OverlayModeTranslucent.Content" xml:space="preserve"><value>半透明背景</value></data>
-  <data name="OverlayModeOffset.Content" xml:space="preserve"><value>偏移区域</value></data>
-  <data name="OverlayModeFloating.Content" xml:space="preserve"><value>浮动面板</value></data>
-  <data name="OverlayTextHeader.Text" xml:space="preserve"><value>文字与对比度</value></data>
-  <data name="OverlayOpacitySlider.Header" xml:space="preserve"><value>背景不透明度</value></data>
   <data name="OverlayFontSizeSlider.Header" xml:space="preserve"><value>字号</value></data>
   <data name="OverlayOutlineToggle.Header" xml:space="preserve"><value>文字描边</value></data>
   <data name="OverlayAutoContrastToggle.Header" xml:space="preserve"><value>自动对比度</value></data>
-  <data name="OverlayContrastWarning.Title" xml:space="preserve"><value>对比度检查</value></data>
-  <data name="OverlayContrastWarning.Message" xml:space="preserve"><value>预览背景无法反映文字后方的真实像素；所选回退（描边）始终可用。</value></data>
   <data name="OverlayPreviewHint.Text" xml:space="preserve"><value>游戏画面区域——仅为预览，非真实捕获</value></data>
 
-  <data name="WorkbenchTitle.Text" xml:space="preserve"><value>光学工作台</value></data>
-  <data name="WorkbenchSubtitle.Text" xml:space="preserve"><value>高级区域编辑。区域树是画布的完整键盘与读屏替代方案。</value></data>
   <data name="RegionTreeHeader.Text" xml:space="preserve"><value>目标与区域</value></data>
-  <data name="CanvasPlaceholderHint.Text" xml:space="preserve"><value>捕获画布——缩略图将随后端集成到位</value></data>
+  <data name="WorkbenchTargetSelector.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>捕获目标</value></data>
+  <data name="WorkbenchRegionList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>翻译区域</value></data>
+  <data name="CanvasPlaceholderHint.Text" xml:space="preserve"><value>启动此档案后可显示低分辨率实时预览；没有预览时仍可编辑区域。</value></data>
   <data name="InspectorHeader.Text" xml:space="preserve"><value>区域检查器</value></data>
   <data name="InspectorBasic.Header" xml:space="preserve"><value>基础</value></data>
   <data name="InspectorOcr.Header" xml:space="preserve"><value>OCR</value></data>
-  <data name="InspectorChannels.Header" xml:space="preserve"><value>翻译通道</value></data>
-  <data name="InspectorOverlay.Header" xml:space="preserve"><value>覆盖层</value></data>
   <data name="InspectorLayout.Header" xml:space="preserve"><value>排版与换行</value></data>
-  <data name="InspectorPerformance.Header" xml:space="preserve"><value>性能与降级</value></data>
   <data name="RegionNameBox.Header" xml:space="preserve"><value>区域名称</value></data>
   <data name="RegionPriorityBox.Header" xml:space="preserve"><value>优先级</value></data>
   <data name="RegionLockToggle.Header" xml:space="preserve"><value>锁定设置（禁止自动降级）</value></data>
-  <data name="HealthStripCapture.Text" xml:space="preserve"><value>捕获</value></data>
-  <data name="HealthStripOcr.Text" xml:space="preserve"><value>OCR</value></data>
-  <data name="HealthStripPipeline.Text" xml:space="preserve"><value>管线</value></data>
-  <data name="HealthStripMemory.Text" xml:space="preserve"><value>内存</value></data>
+  <data name="WorkbenchUndoButton.Label" xml:space="preserve"><value>撤销</value></data>
+  <data name="WorkbenchRedoButton.Label" xml:space="preserve"><value>重做</value></data>
+  <data name="WorkspaceSaveBarSaveButton.Content" xml:space="preserve"><value>保存并应用</value></data>
+  <data name="WorkspaceSaveBarDiscardButton.Content" xml:space="preserve"><value>放弃修改</value></data>
+  <data name="WorkspaceSaveBarDismissButton.Content" xml:space="preserve"><value>知道了</value></data>
+  <data name="WorkspaceSaveBarSaving" xml:space="preserve"><value>正在保存…</value></data>
+  <data name="WorkbenchAddRegionButton.Label" xml:space="preserve"><value>添加区域</value></data>
+  <data name="WorkbenchDuplicateRegionButton.Label" xml:space="preserve"><value>复制区域</value></data>
+  <data name="WorkbenchDeleteRegionButton.Label" xml:space="preserve"><value>删除区域</value></data>
+  <data name="WorkbenchMoveRegionUpButton.Label" xml:space="preserve"><value>上移</value></data>
+  <data name="WorkbenchMoveRegionDownButton.Label" xml:space="preserve"><value>下移</value></data>
+  <data name="WorkbenchDrawRegionButton.Label" xml:space="preserve"><value>绘制区域</value></data>
+  <data name="WorkbenchRefreshPreviewButton.Label" xml:space="preserve"><value>刷新预览</value></data>
+  <data name="WorkbenchZoomFitButton.Label" xml:space="preserve"><value>适应预览</value></data>
+  <data name="WorkbenchRegionEnabledToggle.Header" xml:space="preserve"><value>启用此区域</value></data>
+  <data name="WorkbenchContextRoleBox.Header" xml:space="preserve"><value>上下文角色</value></data>
+  <data name="WorkbenchPriorityHint.Text" xml:space="preserve"><value>P0 立即更新；系统繁忙时，P1–P3 可逐级降低调度频率。若该区域绝不能降速，请锁定性能降级。</value></data>
+  <data name="WorkbenchRoleNone.Content" xml:space="preserve"><value>无上下文角色</value></data>
+  <data name="WorkbenchRoleSpeaker.Content" xml:space="preserve"><value>说话者名称</value></data>
+  <data name="WorkbenchRoleScene.Content" xml:space="preserve"><value>场景或地点</value></data>
+  <data name="WorkbenchRoleDialogue.Content" xml:space="preserve"><value>对话正文</value></data>
+  <data name="WorkbenchContextRoleHint.Text" xml:space="preserve"><value>说话者与场景区域会为其他翻译区域提供上下文；对话正文作为主要语句翻译。</value></data>
+  <data name="WorkbenchOcrProviderBox.Header" xml:space="preserve"><value>OCR 服务</value></data>
+  <data name="WorkbenchRecognitionLanguageBox.Header" xml:space="preserve"><value>识别语言</value></data>
+  <data name="WorkbenchDetectOrientationToggle.Header" xml:space="preserve"><value>检测文字方向</value></data>
+  <data name="WorkbenchCloudOcrToggle.Header" xml:space="preserve"><value>此区域使用云端 OCR</value></data>
+  <data name="WorkbenchTranslationEnabledToggle.Header" xml:space="preserve"><value>翻译识别文本</value></data>
+  <data name="WorkbenchLineBreakModeBox.Header" xml:space="preserve"><value>换行策略</value></data>
+  <data name="LineBreakPreserve.Content" xml:space="preserve"><value>保留检测到的行</value></data>
+  <data name="LineBreakJoin.Content" xml:space="preserve"><value>合并为一个段落</value></data>
+  <data name="LineBreakKeyValue.Content" xml:space="preserve"><value>保留键值行</value></data>
+  <data name="LineBreakCustom.Content" xml:space="preserve"><value>使用自定义分隔符</value></data>
+  <data name="LineBreakPerBox.Content" xml:space="preserve"><value>每个检测框一行</value></data>
+  <data name="LineAlignmentAuto.Content" xml:space="preserve"><value>自动对齐</value></data>
+  <data name="LineAlignmentLeft.Content" xml:space="preserve"><value>左对齐</value></data>
+  <data name="LineAlignmentCenter.Content" xml:space="preserve"><value>居中</value></data>
+  <data name="LineAlignmentRight.Content" xml:space="preserve"><value>右对齐</value></data>
+  <data name="WorkbenchCustomSeparatorBox.Header" xml:space="preserve"><value>自定义分隔符</value></data>
+  <data name="WorkbenchLineAlignmentBox.Header" xml:space="preserve"><value>文字对齐</value></data>
+  <data name="WorkbenchMaximumLinesBox.Header" xml:space="preserve"><value>最大 OCR 行数</value></data>
+  <data name="WorkbenchOverlayModeBox.Header" xml:space="preserve"><value>覆盖层位置</value></data>
+  <data name="OverlayOptionReplace.Content" xml:space="preserve"><value>原位覆盖原文</value></data>
+  <data name="OverlayOptionTranslucent.Content" xml:space="preserve"><value>半透明或模糊面板</value></data>
+  <data name="OverlayOptionOffset.Content" xml:space="preserve"><value>将译文放到其他区域</value></data>
+  <data name="OverlayOptionFloating.Content" xml:space="preserve"><value>悬浮翻译面板</value></data>
+  <data name="OverlayOptionNoCover.Content" xml:space="preserve"><value>保留原文可见</value></data>
+  <data name="BackgroundOptionAutomatic.Content" xml:space="preserve"><value>自动模糊与对比色</value></data>
+  <data name="BackgroundOptionSolid.Content" xml:space="preserve"><value>纯色背景</value></data>
+  <data name="BackgroundOptionTransparent.Content" xml:space="preserve"><value>透明背景</value></data>
+  <data name="BackgroundOptionTranslucent.Content" xml:space="preserve"><value>半透明背景</value></data>
+  <data name="BackgroundOptionCached.Content" xml:space="preserve"><value>缓存干净背景</value></data>
+  <data name="WorkbenchOverlayBackgroundModeBox.Header" xml:space="preserve"><value>背景处理</value></data>
+  <data name="WorkbenchBackgroundColorBox.Header" xml:space="preserve"><value>背景颜色（可选）</value></data>
+  <data name="WorkbenchTextColorBox.Header" xml:space="preserve"><value>文字颜色（可选）</value></data>
+  <data name="WorkbenchOutlineColorBox.Header" xml:space="preserve"><value>描边颜色（可选）</value></data>
+  <data name="WorkbenchOverlayOpacitySlider.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>覆盖层不透明度</value></data>
+  <data name="WorkbenchBlurRadiusSlider.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>背景模糊半径</value></data>
+  <data name="WorkbenchRecognitionIntervalBox.Header" xml:space="preserve"><value>识别间隔（毫秒）</value></data>
+  <data name="WorkbenchDetectionScaleBox.Header" xml:space="preserve"><value>OCR 检测缩放</value></data>
+  <data name="WorkbenchDetectionLongEdgeBox.Header" xml:space="preserve"><value>目标检测长边</value></data>
+  <data name="WorkbenchScanRemainingAreaToggle.Header" xml:space="preserve"><value>扫描目标剩余区域</value></data>
+  <data name="WorkbenchRemainingAreaIntervalBox.Header" xml:space="preserve"><value>剩余区域扫描间隔（毫秒）</value></data>
+  <data name="WorkbenchRemainingAreaIntervalBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>剩余区域扫描间隔（毫秒）</value></data>
+  <data name="WorkbenchPreviewIdle.Text" xml:space="preserve"><value>正在等待运行中的捕获目标</value></data>
+  <data name="WorkbenchNoProfileTitle" xml:space="preserve"><value>没有可编辑的档案</value></data>
+  <data name="WorkbenchNoProfileMessage" xml:space="preserve"><value>请先创建档案，再打开其工作台。</value></data>
+  <data name="WorkbenchLoadErrorTitle" xml:space="preserve"><value>无法加载工作台</value></data>
+  <data name="WorkbenchSaveErrorTitle" xml:space="preserve"><value>档案未保存</value></data>
+  <data name="WorkbenchSaveSuccessTitle" xml:space="preserve"><value>档案已保存</value></data>
+  <data name="WorkbenchApplySavedOnly" xml:space="preserve"><value>新配置将在下次运行时生效。</value></data>
+  <data name="WorkbenchApplyHotApplied" xml:space="preserve"><value>运行中的目标已收到新配置，捕获未重启。</value></data>
+  <data name="WorkbenchApplyRestarted" xml:space="preserve"><value>目标绑定发生变化，运行时已使用保存的配置重启。</value></data>
+  <data name="WorkbenchUnsavedTitle" xml:space="preserve"><value>放弃未保存的区域修改？</value></data>
+  <data name="WorkbenchUnsavedMessage" xml:space="preserve"><value>这些修改尚未写入档案，也未应用到运行中的目标。</value></data>
+  <data name="WorkbenchDiscard" xml:space="preserve"><value>放弃修改</value></data>
+  <data name="WorkbenchKeepEditing" xml:space="preserve"><value>继续编辑</value></data>
+  <data name="WorkbenchUnsavedStatus" xml:space="preserve"><value>有未保存修改</value></data>
+  <data name="WorkbenchSavedStatus" xml:space="preserve"><value>已保存</value></data>
+  <data name="WorkbenchPreviewRuntimeStopped" xml:space="preserve"><value>启动此档案以启用实时预览</value></data>
+  <data name="WorkbenchPreviewLive" xml:space="preserve"><value>实时预览 · {0}×{1} · 第 {2} 帧</value></data>
+  <data name="WorkbenchCloudConsentTitle" xml:space="preserve"><value>将此区域发送到云端 OCR？</value></data>
+  <data name="WorkbenchCloudConsentMessage" xml:space="preserve"><value>此区域运行时，裁剪后的游戏像素可能发送给所选云端 OCR 服务。不会包含完整画面、其他区域、API 密钥或历史记录。</value></data>
+  <data name="WorkbenchCloudConsentConfirm" xml:space="preserve"><value>允许此区域</value></data>
+  <data name="WorkbenchCloudConsentCancel" xml:space="preserve"><value>保持本地 OCR</value></data>
 
-  <data name="DiagnosticsTitle.Text" xml:space="preserve"><value>诊断</value></data>
-  <data name="DiagnosticsSubtitle.Text" xml:space="preserve"><value>每个故障与降级都标明影响范围、当前行为与直接恢复操作。无隐藏遥测。</value></data>
-  <data name="ExportDiagnosticsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>导出脱敏诊断包</value></data>
-  <data name="ExportDiagnosticsButtonLabel.Text" xml:space="preserve"><value>导出脱敏诊断包</value></data>
-  <data name="CrashReportsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>查看本地崩溃报告</value></data>
-  <data name="CrashReportsButtonLabel.Text" xml:space="preserve"><value>本地崩溃报告</value></data>
+  <data name="TargetSettingsExpander.Header" xml:space="preserve"><value>目标设置</value></data>
+  <data name="InspectorOcrAdvanced.Header" xml:space="preserve"><value>高级</value></data>
+
+  <data name="ChannelsRegionSelector.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>区域</value></data>
+  <data name="ChannelsQuotaLabel" xml:space="preserve"><value>已使用 {0}/{1} 个翻译通道</value></data>
+  <data name="ChannelsQuotaLimitReached.Text" xml:space="preserve"><value>已达到通道上限</value></data>
+  <data name="ChannelsEmptyNoRegionTitle" xml:space="preserve"><value>未选择区域</value></data>
+  <data name="ChannelsEmptyNoRegionBody" xml:space="preserve"><value>请先在上方选择目标和区域，以编辑其翻译通道。</value></data>
+  <data name="ChannelsEmptyDisabledTitle" xml:space="preserve"><value>此区域未启用翻译</value></data>
+  <data name="ChannelsEmptyDisabledBody" xml:space="preserve"><value>打开“翻译识别文本”后即可配置翻译通道。</value></data>
+  <data name="ChannelsEmptyNoChannelsTitle" xml:space="preserve"><value>尚无翻译通道</value></data>
+  <data name="ChannelsEmptyNoChannelsBody" xml:space="preserve"><value>添加一个通道，为此区域配置翻译服务商和可选的精修步骤。</value></data>
+  <data name="ChannelsProviderUnavailableBadge" xml:space="preserve"><value>服务商不可用 — 请选择其他服务商以继续</value></data>
+  <data name="ChannelsAdvancedHeader" xml:space="preserve"><value>高级</value></data>
+  <data name="ChannelsDisplayLabelHeader" xml:space="preserve"><value>显示标签</value></data>
+  <data name="ChannelsAdvancedGapNote" xml:space="preserve"><value>超时、重试、回退、上下文权限与缓存策略目前尚不支持按通道单独配置。</value></data>
+  <data name="WorkbenchMoveChannelUpButtonName" xml:space="preserve"><value>上移翻译通道</value></data>
+  <data name="WorkbenchMoveChannelDownButtonName" xml:space="preserve"><value>下移翻译通道</value></data>
+  <data name="WorkbenchRemoveChannelButtonName" xml:space="preserve"><value>移除翻译通道</value></data>
+
+  <data name="OverlayTextGroupHeader.Text" xml:space="preserve"><value>文字与对比度</value></data>
+  <data name="OverlayOverflowGroupHeader.Text" xml:space="preserve"><value>溢出处理</value></data>
+  <data name="OverlayOverflowGapNote.Text" xml:space="preserve"><value>最大行数、自动缩小与禁止滚动等溢出策略尚未在区域上存储，此处暂不可配置。</value></data>
+  <data name="OverlayPreviewStateSelector.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>预览结果状态</value></data>
+  <data name="OverlayTracelessDisclosure.Title" xml:space="preserve"><value>动态背景无法保证无痕还原</value></data>
+  <data name="OverlayTracelessDisclosure.Message" xml:space="preserve"><value>缓存背景与自动对比度背景只是对文字后方游戏画面的近似，覆盖层隐藏时无法保证像素级精确还原。</value></data>
+  <data name="OverlayPreviewStateWaiting" xml:space="preserve"><value>等待识别文本……</value></data>
+  <data name="OverlayPreviewStateStreaming" xml:space="preserve"><value>翻译中……</value></data>
+  <data name="OverlayPreviewStateSuccess" xml:space="preserve"><value>翻译结果显示在此处。</value></data>
+  <data name="OverlayPreviewStateFallback" xml:space="preserve"><value>某个通道失败后，显示回退结果。</value></data>
+  <data name="OverlayPreviewStateTimeout" xml:space="preserve"><value>翻译超时。</value></data>
+  <data name="OverlayPreviewStateFailed" xml:space="preserve"><value>翻译失败。</value></data>
+
+  <data name="DiagnosticsActionErrorTitle" xml:space="preserve"><value>诊断操作失败</value></data>
+  <data name="DiagnosticsActionErrorClose" xml:space="preserve"><value>关闭</value></data>
+  <data name="DiagnosticsOpenFolderFailed" xml:space="preserve"><value>Windows 无法打开崩溃报告文件夹。</value></data>
 
   <data name="SettingsTitle.Text" xml:space="preserve"><value>设置</value></data>
   <data name="SettingsSubtitle.Text" xml:space="preserve"><value>应用外观、隐私、热键与更新。</value></data>
@@ -142,18 +262,43 @@
   <data name="ThemeDark.Content" xml:space="preserve"><value>深色</value></data>
   <data name="LanguageSettingLabel.Text" xml:space="preserve"><value>界面语言</value></data>
   <data name="LanguageSettingHint.Text" xml:space="preserve"><value>数字与日期格式默认跟随系统</value></data>
+  <data name="LanguageRestartBar.Title" xml:space="preserve"><value>界面语言已切换</value></data>
+  <data name="LanguageRestartBar.Message" xml:space="preserve"><value>已经打开的页面仍显示切换前的语言，重启应用后全部生效。</value></data>
   <data name="PrivacyHeader.Text" xml:space="preserve"><value>隐私与历史</value></data>
   <data name="OfflineModeLabel.Text" xml:space="preserve"><value>严格离线模式</value></data>
-  <data name="OfflineModeHint.Text" xml:space="preserve"><value>阻止全部网络请求；仅本地 OCR 与本地模型可用</value></data>
+  <data name="OfflineModeHint.Text" xml:space="preserve"><value>禁用云翻译提供商、模型下载与更新检查；仅本地 OCR 与本地模型仍可使用。</value></data>
   <data name="HistoryRetentionLabel.Text" xml:space="preserve"><value>历史保留</value></data>
   <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>纯文本历史，按档案单独开启</value></data>
   <data name="HistoryOff.Content" xml:space="preserve"><value>关闭</value></data>
   <data name="History30Days.Content" xml:space="preserve"><value>30 天</value></data>
   <data name="History90Days.Content" xml:space="preserve"><value>90 天</value></data>
   <data name="HotkeysHeader.Text" xml:space="preserve"><value>热键</value></data>
-  <data name="ToggleOverlayHotkeyLabel.Text" xml:space="preserve"><value>切换覆盖层</value></data>
-  <data name="PauseAllHotkeyLabel.Text" xml:space="preserve"><value>全部暂停 / 恢复</value></data>
-  <data name="HotkeyRegisteredHint.Text" xml:space="preserve"><value>已注册——显示真实的系统注册状态</value></data>
+  <data name="RestoreHotkeysButton.Content" xml:space="preserve"><value>恢复默认热键</value></data>
+  <data name="HotkeyAction_ToggleOverlay" xml:space="preserve"><value>显示或隐藏覆盖层</value></data>
+  <data name="HotkeyAction_PauseAll" xml:space="preserve"><value>暂停或继续翻译</value></data>
+  <data name="HotkeyAction_ManualOcr" xml:space="preserve"><value>立即识别当前文字</value></data>
+  <data name="HotkeyAction_RetranslateCurrent" xml:space="preserve"><value>重新翻译当前文字</value></data>
+  <data name="HotkeyAction_EmergencyStop" xml:space="preserve"><value>紧急停止运行时</value></data>
+  <data name="HotkeyScope_AllRunningTargets" xml:space="preserve"><value>所有运行中的目标</value></data>
+  <data name="HotkeyStatus_registered" xml:space="preserve"><value>已注册</value></data>
+  <data name="HotkeyStatus_disabled" xml:space="preserve"><value>已禁用</value></data>
+  <data name="HotkeyStatus_conflict" xml:space="preserve"><value>与其他应用冲突</value></data>
+  <data name="HotkeyStatus_invalid" xml:space="preserve"><value>热键无效</value></data>
+  <data name="HotkeyStatus_unavailable" xml:space="preserve"><value>注册服务不可用</value></data>
+  <data name="HotkeyCaptureFieldHeader" xml:space="preserve"><value>热键</value></data>
+  <data name="HotkeyCapturePlaceholder" xml:space="preserve"><value>按下组合键</value></data>
+  <data name="HotkeyCaptureHelp" xml:space="preserve"><value>请同时按下至少一个修饰键（Ctrl、Alt、Shift 或 Win）和另一个按键。</value></data>
+  <data name="HotkeyCaptureModifierRequired" xml:space="preserve"><value>请加入 Ctrl、Alt、Shift 或 Win，避免拦截普通输入。</value></data>
+  <data name="HotkeyCaptureReady" xml:space="preserve"><value>热键已就绪。保存后会进行系统级注册。</value></data>
+  <data name="HotkeyCaptureSave" xml:space="preserve"><value>保存热键</value></data>
+  <data name="HotkeyCaptureCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="HotkeySaveFailedTitle" xml:space="preserve"><value>热键未保存</value></data>
+  <data name="HotkeyRegistrationFailedTitle" xml:space="preserve"><value>热键注册失败</value></data>
+  <data name="HotkeyServiceUnavailable" xml:space="preserve"><value>全局热键服务不可用。请重启应用；若仍存在，请查看诊断。</value></data>
+  <data name="HotkeyAttentionTitle" xml:space="preserve"><value>部分热键需要处理</value></data>
+  <data name="HotkeyAttentionMessage" xml:space="preserve"><value>请修改冲突或无效的热键，或将其禁用；其他已注册热键会继续工作。</value></data>
+  <data name="HotkeyReadyTitle" xml:space="preserve"><value>游戏内控制已就绪</value></data>
+  <data name="HotkeyReadyMessage" xml:space="preserve"><value>启用的热键在游戏获得焦点时仍然有效，无需切回应用。</value></data>
   <data name="AboutHeader.Text" xml:space="preserve"><value>关于</value></data>
   <data name="UpdatePolicyHint.Text" xml:space="preserve"><value>更新仅检查提示，绝不自动安装。</value></data>
 
@@ -166,9 +311,7 @@
   <data name="SetupStep1Heading.Text" xml:space="preserve"><value>选择捕获目标</value></data>
   <data name="SetupStep1Body.Text" xml:space="preserve"><value>选择要翻译的窗口、显示器或桌面区域。每个目标保留真实分辨率与缩放；第 9 个目标会以禁用状态留在草稿中并标明原因。</value></data>
   <data name="SetupStep2Heading.Text" xml:space="preserve"><value>语言与服务</value></data>
-  <data name="SetupStep2Body.Text" xml:space="preserve"><value>选择源语言与目标语言、本地或云端 OCR，以及一条初始翻译通道。持久翻译记忆与历史记录始终为可选项。</value></data>
   <data name="SetupStep3Heading.Text" xml:space="preserve"><value>区域</value></data>
-  <data name="SetupStep3Body.Text" xml:space="preserve"><value>绘制区域、翻译整个目标，或扫描剩余区域。高级区域编辑稍后可在光学工作台中进行。</value></data>
   <data name="SetupStep4Heading.Text" xml:space="preserve"><value>测试并保存</value></data>
   <data name="SetupStep4Body.Text" xml:space="preserve"><value>运行捕获、OCR、翻译与覆盖层检查，查看关闭到托盘的行为与热键状态，然后保存档案。</value></data>
   <data name="SetupBackButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>上一步</value></data>
@@ -180,11 +323,8 @@
   <data name="CompositionErrorBody.Text" xml:space="preserve"><value>某个必需服务初始化失败，应用已停止运行，而非以降级状态继续。请将下方详细信息提供给支持人员。</value></data>
 
   <data name="LoadErrorBar.Title" xml:space="preserve"><value>无法加载此页面</value></data>
+  <data name="PageLoadingIndicator.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>正在加载页面内容</value></data>
 
-  <data name="ProfilesEmptyTitle.Text" xml:space="preserve"><value>暂无档案</value></data>
-  <data name="ProfilesEmptyBody.Text" xml:space="preserve"><value>创建第一个档案，以绑定捕获目标、语言、区域与翻译通道。</value></data>
-  <data name="ProfilesEmptyCreateButton.Content" xml:space="preserve"><value>创建档案</value></data>
-  <data name="DeleteProfileButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>删除档案</value></data>
   <data name="DeleteProfileTitle" xml:space="preserve"><value>删除此档案？</value></data>
   <data name="DeleteProfileBody" xml:space="preserve"><value>这将永久删除该档案及其区域、术语表与风格提示。此操作无法撤销。</value></data>
   <data name="DeleteProfileConfirm" xml:space="preserve"><value>删除</value></data>
@@ -195,8 +335,6 @@
   <data name="HistoryDisabledBar.Title" xml:space="preserve"><value>历史记录已关闭</value></data>
   <data name="HistoryDisabledBar.Message" xml:space="preserve"><value>历史保留已设置为“关闭”，因此不会记录任何翻译事件。可在“设置”中启用以保留纯文本历史。</value></data>
 
-  <data name="DiagnosticsEmptyTitle.Text" xml:space="preserve"><value>暂无诊断信息</value></data>
-  <data name="DiagnosticsEmptyBody.Text" xml:space="preserve"><value>故障与降级会显示在这里，并附带直接的恢复操作。不会向外部上报任何内容。</value></data>
 
   <data name="GlossaryNoProfileTitle.Text" xml:space="preserve"><value>未选择档案</value></data>
   <data name="GlossaryNoProfileBody.Text" xml:space="preserve"><value>请先创建档案——术语表与风格提示会保存在当前档案中。</value></data>
@@ -211,16 +349,317 @@
 
   <data name="SetupProfileNameBox.Header" xml:space="preserve"><value>档案名称</value></data>
   <data name="SetupSourceLanguageBox.Header" xml:space="preserve"><value>源语言</value></data>
+  <data name="SetupSourceLanguageBox.PlaceholderText" xml:space="preserve"><value>搜索语言或选择自动检测</value></data>
   <data name="SetupTargetLanguageBox.Header" xml:space="preserve"><value>目标语言</value></data>
+  <data name="SetupTargetLanguageBox.PlaceholderText" xml:space="preserve"><value>搜索目标语言</value></data>
   <data name="SetupProviderSelector.Header" xml:space="preserve"><value>翻译通道</value></data>
-  <data name="SetupSecretHint.Text" xml:space="preserve"><value>输入服务商 API 密钥。它仅存储在 Windows 凭据管理器中，不会写入档案或日志。</value></data>
-  <data name="SetupSecretBox.Header" xml:space="preserve"><value>API 密钥</value></data>
-  <data name="SetupSaveSecretButton.Content" xml:space="preserve"><value>保存密钥</value></data>
+  <data name="SetupSecretHint.Text" xml:space="preserve"><value>配置该服务商要求的全部凭据。凭据仅存储在 Windows 凭据管理器中，不会写入档案或日志。</value></data>
+  <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>配置凭据</value></data>
+  <data name="ProviderCredentialsTitle" xml:space="preserve"><value>配置 {0}</value></data>
+  <data name="ProviderCredentialsPrivacy" xml:space="preserve"><value>现有凭据不会显示。已配置字段留空即可保持不变。</value></data>
+  <data name="ProviderCredentialKeepPlaceholder" xml:space="preserve"><value>已配置——留空保持不变</value></data>
+  <data name="ProviderCredentialRequiredPlaceholder" xml:space="preserve"><value>必填</value></data>
+  <data name="ProviderCredentialsSave" xml:space="preserve"><value>保存凭据</value></data>
+  <data name="ProviderCredentialsCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>请至少输入一个需要保存的值。</value></data>
+  <data name="ProviderCredentialImportServiceAccount" xml:space="preserve"><value>选择服务账号 JSON…</value></data>
+  <data name="ProviderCredentialServiceAccountTooLarge" xml:space="preserve"><value>服务账号文件超过 256 KB。</value></data>
+  <data name="ProviderCredentialServiceAccountInvalid" xml:space="preserve"><value>这不是有效的 Google 服务账号 JSON 文件。</value></data>
+  <data name="ProviderCredentialServiceAccountReady" xml:space="preserve"><value>验证完成，可以保存。</value></data>
+  <data name="ProviderEndpointRequired" xml:space="preserve"><value>必须填写有效的 HTTPS 服务终结点。</value></data>
   <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>区域名称</value></data>
+  <data name="SetupRegionContextRoleSelector.Header" xml:space="preserve"><value>上下文角色</value></data>
+  <data name="SetupRegionRoleNone.Content" xml:space="preserve"><value>无</value></data>
+  <data name="SetupRegionRoleSpeaker.Content" xml:space="preserve"><value>说话者</value></data>
+  <data name="SetupRegionRoleScene.Content" xml:space="preserve"><value>场景</value></data>
+  <data name="SetupRegionRoleDialogue.Content" xml:space="preserve"><value>对话</value></data>
   <data name="SetupAddRegionButton.Content" xml:space="preserve"><value>添加区域</value></data>
   <data name="SetupRemoveRegionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>移除区域</value></data>
   <data name="SetupSummaryProfileLabel.Text" xml:space="preserve"><value>档案</value></data>
   <data name="SetupSummaryRegionsLabel.Text" xml:space="preserve"><value>区域数：</value></data>
+  <data name="SetupReadinessHeader.Text" xml:space="preserve"><value>配置就绪检查</value></data>
+  <data name="SetupCaptureReady.Content" xml:space="preserve"><value>捕获目标当前可用</value></data>
+  <data name="SetupLanguagesReady.Content" xml:space="preserve"><value>源语言与目标语言有效</value></data>
+  <data name="SetupRegionsReady.Content" xml:space="preserve"><value>至少配置了一个有效翻译区域</value></data>
+  <data name="SetupProviderReady.Content" xml:space="preserve"><value>已选择翻译器，且所需凭据完整</value></data>
+  <data name="SetupSaveDraftExitButton.Content" xml:space="preserve"><value>存草稿并退出</value></data>
+  <data name="SetupSaveDraftExitButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存档案草稿并退出，不启动运行时</value></data>
+  <data name="SetupSaveButton.Content" xml:space="preserve"><value>保存并启动测试</value></data>
+  <data name="SetupSaveOnlyButton.Content" xml:space="preserve"><value>仅保存</value></data>
+  <data name="SetupSaveOnlyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存档案但不启动运行时</value></data>
   <data name="SetupSaveErrorBar.Title" xml:space="preserve"><value>无法保存档案</value></data>
-  <data name="SetupSaveButton.Content" xml:space="preserve"><value>保存档案</value></data>
+  <data name="SetupTargetPreviewHeader.Text" xml:space="preserve"><value>目标预览</value></data>
+  <data name="SetupTargetPreviewUnavailable.Text" xml:space="preserve"><value>档案启动运行后即可查看预览。</value></data>
+  <data name="SetupTestTranslationButton.Content" xml:space="preserve"><value>测试翻译</value></data>
+  <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>将通过所选翻译服务商发送示例句子 “Hello, adventurer.”：</value></data>
+  <data name="SetupTestTranslationErrorTitle.Title" xml:space="preserve"><value>翻译测试失败</value></data>
+  <data name="SetupTestTranslationLatencyFormat" xml:space="preserve"><value>{0} 毫秒</value></data>
+  <data name="SetupRegionListHeader.Text" xml:space="preserve"><value>区域</value></data>
+  <data name="SetupRegionPriorityBox.Header" xml:space="preserve"><value>优先级</value></data>
+  <data name="SetupDrawRegionButton.Label" xml:space="preserve"><value>绘制</value></data>
+  <data name="SetupDrawRegionButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>绘制新区域</value></data>
+  <data name="SetupRegionCanvas.AccessibleName" xml:space="preserve"><value>区域编辑画布</value></data>
+  <data name="SetupInspectorHeader.Text" xml:space="preserve"><value>所选区域</value></data>
+  <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>试跑 OCR</value></data>
+  <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>识别文本：</value></data>
+  <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>OCR 试跑需要该目标处于正在捕获的运行状态。请先保存并启动一次档案，或稍后在工作台中验证 OCR。</value></data>
+  <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 1 步：捕获目标</value></data>
+  <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>
+  <data name="SetupProviderReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>
+  <data name="SetupRegionsReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 3 步：区域</value></data>
+  <data name="SetupOverlayPreviewHeader.Text" xml:space="preserve"><value>覆盖层预览</value></data>
+  <data name="SetupOverlayPreviewSampleText.Text" xml:space="preserve"><value>译文会显示在这里</value></data>
+  <data name="SetupOverlayPreviewDisclaimer.Text" xml:space="preserve"><value>仅为示意模拟图，非实时渲染。引擎捕获协议不返回覆盖层像素，因此无法在此预览真实渲染效果。</value></data>
+  <data name="SetupCompactStepperFormat" xml:space="preserve"><value>第 {0}/{1} 步 · {2}</value></data>
+  <data name="SetupGateNeedsProfileName" xml:space="preserve"><value>请先填写档案名称。</value></data>
+  <data name="SetupGateNeedsCaptureTarget" xml:space="preserve"><value>请先选择至少一个可捕获的目标。</value></data>
+  <data name="SetupGateNeedsLanguages" xml:space="preserve"><value>请先选择两种不同且有效的语言。</value></data>
+  <data name="SetupGateNeedsProvider" xml:space="preserve"><value>请先选择凭据齐全的翻译服务商。</value></data>
+  <data name="SetupGateNeedsRegions" xml:space="preserve"><value>请先添加至少一个有效区域。</value></data>
+  <data name="CheckUpdateButton.Content" xml:space="preserve"><value>检查更新</value></data>
+  <data name="DownloadUpdateButton.Content" xml:space="preserve"><value>下载更新</value></data>
+  <data name="OpenInstallerButton.Content" xml:space="preserve"><value>打开安装程序</value></data>
+  <data name="UpdateCurrentVersion" xml:space="preserve"><value>版本 {0} · Windows 11 x64</value></data>
+  <data name="UpdateStatusIdle" xml:space="preserve"><value>尚未检查更新。</value></data>
+  <data name="UpdateStatusUpToDate" xml:space="preserve"><value>当前已是最新正式版本。</value></data>
+  <data name="UpdateStatusAvailable" xml:space="preserve"><value>发现版本 {0}。未经确认不会下载任何文件。</value></data>
+  <data name="UpdateStatusAvailableUnsigned" xml:space="preserve"><value>发现版本 {0}，但 Windows 安装程序没有 Authenticode 签名。下载前仍会验证签名发布清单。</value></data>
+  <data name="UpdateStatusReady" xml:space="preserve"><value>版本 {0} 已下载并验证。准备好后可打开安装程序。</value></data>
+  <data name="UpdateStatusReadyUnsigned" xml:space="preserve"><value>版本 {0} 已通过签名清单、文件大小和 SHA-256 校验，但安装程序仍未签名，Windows 将显示“未知发布者”。</value></data>
+  <data name="UpdateStatusOffline" xml:space="preserve"><value>严格离线模式已禁用更新检查。</value></data>
+  <data name="UpdateStatusFailed" xml:space="preserve"><value>无法检查或验证更新，未安装任何文件。</value></data>
+  <data name="UpdateDownloadDialogTitle" xml:space="preserve"><value>下载并验证更新？</value></data>
+  <data name="UpdateDownloadDialogBody" xml:space="preserve"><value>是否从官方 GitHub Release 下载版本 {0}？提供安装程序前会验证签名清单、文件哈希、大小和发布者。</value></data>
+  <data name="UpdateDownloadDialogBodyUnsigned" xml:space="preserve"><value>是否从官方 GitHub Release 下载版本 {0}？将验证 Ed25519 签名清单、文件大小和 SHA-256 哈希。安装程序没有 Authenticode 签名，Windows 将显示“未知发布者”。</value></data>
+  <data name="UpdateDownloadDialogConfirm" xml:space="preserve"><value>下载并验证</value></data>
+  <data name="UpdateDownloadDialogCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="UpdateInstallerMissing" xml:space="preserve"><value>已验证的安装程序已不存在，请重新检查更新。</value></data>
+  <data name="UpdateInstallerOpenFailed" xml:space="preserve"><value>无法打开安装程序</value></data>
+  <data name="UpdateOpenUnsignedDialogTitle" xml:space="preserve"><value>打开未签名的安装程序？</value></data>
+  <data name="UpdateOpenUnsignedDialogBody" xml:space="preserve"><value>该文件已通过 Infini-Transeon 的签名清单和 SHA-256 校验，但 Windows 无法验证发布者。仅在你确定此更新来自官方项目时继续。</value></data>
+  <data name="UpdateOpenUnsignedDialogConfirm" xml:space="preserve"><value>仍然打开</value></data>
+  <data name="UpdateDialogClose" xml:space="preserve"><value>关闭</value></data>
+  <data name="UpdateAvailableNotice.Title" xml:space="preserve"><value>发现更新</value></data>
+  <data name="UpdateAvailableNotice.Message" xml:space="preserve"><value>Infini-Transeon {0} 可以下载。</value></data>
+  <data name="UpdateAvailableUnsignedNotice" xml:space="preserve"><value>Infini-Transeon {0} 可以下载，但 Windows 安装程序未签名。</value></data>
+  <data name="UpdateAvailableNoticeButton.Content" xml:space="preserve"><value>查看更新</value></data>
+  <data name="SetupDesktopRegionToggle.Header" xml:space="preserve"><value>仅捕获桌面固定区域</value></data>
+  <data name="SetupDesktopRegionToggle.OffContent" xml:space="preserve"><value>整个显示器</value></data>
+  <data name="SetupDesktopRegionToggle.OnContent" xml:space="preserve"><value>固定区域</value></data>
+  <data name="SetupDesktopRegionHint.Text" xml:space="preserve"><value>坐标使用 Windows 虚拟桌面的物理像素。显示器位于主屏左侧或上方时，X 或 Y 可以为负数。</value></data>
+  <data name="SetupDesktopRegionX.Header" xml:space="preserve"><value>X</value></data>
+  <data name="SetupDesktopRegionX.AutomationProperties.Name" xml:space="preserve"><value>桌面区域 X 坐标</value></data>
+  <data name="SetupDesktopRegionY.Header" xml:space="preserve"><value>Y</value></data>
+  <data name="SetupDesktopRegionY.AutomationProperties.Name" xml:space="preserve"><value>桌面区域 Y 坐标</value></data>
+  <data name="SetupDesktopRegionWidth.Header" xml:space="preserve"><value>宽度</value></data>
+  <data name="SetupDesktopRegionWidth.AutomationProperties.Name" xml:space="preserve"><value>桌面区域宽度</value></data>
+  <data name="SetupDesktopRegionHeight.Header" xml:space="preserve"><value>高度</value></data>
+  <data name="SetupDesktopRegionHeight.AutomationProperties.Name" xml:space="preserve"><value>桌面区域高度</value></data>
+  <data name="RuntimeStatusText.AutomationProperties.Name" xml:space="preserve"><value>翻译运行状态</value></data>
+  <data name="RuntimeStatusStopped" xml:space="preserve"><value>运行时已停止</value></data>
+  <data name="RuntimeStatusRunning" xml:space="preserve"><value>正在翻译</value></data>
+  <data name="RuntimeStatusPaused" xml:space="preserve"><value>已暂停</value></data>
+  <data name="RuntimeStatusTransitioning" xml:space="preserve"><value>正在切换状态</value></data>
+  <data name="RuntimeStatusNeedsAttention" xml:space="preserve"><value>需要处理</value></data>
+  <data name="ReducedMotionLabel.Text" xml:space="preserve"><value>减少覆盖层动态效果</value></data>
+  <data name="ReducedMotionHint.Text" xml:space="preserve"><value>关闭覆盖层淡入淡出等非必要动画，提高舒适度并降低渲染开销。</value></data>
+  <data name="PerformanceHeader.Text" xml:space="preserve"><value>性能治理</value></data>
+  <data name="PerformancePresetLabel.Text" xml:space="preserve"><value>运行时性能方案</value></data>
+  <data name="PerformancePresetHint.Text" xml:space="preserve"><value>在下次运行时设置全局默认值。任何区域自身的性能设置都会覆盖此默认值，锁定区域永不受预设变更影响。每次调整都会显示在诊断中。</value></data>
+  <data name="PerformanceEco.Content" xml:space="preserve"><value>节能</value></data>
+  <data name="PerformanceBalanced.Content" xml:space="preserve"><value>均衡</value></data>
+  <data name="PerformanceHigh.Content" xml:space="preserve"><value>高性能</value></data>
+  <data name="SetupSummaryTargetsLabel.Text" xml:space="preserve"><value>捕获目标：</value></data>
+  <data name="WorkbenchAddChannelButton.Content" xml:space="preserve"><value>添加翻译通道</value></data>
+  <data name="WorkbenchNoRefinerOption" xml:space="preserve"><value>无</value></data>
+  <data name="WorkbenchUnavailableProviderOption" xml:space="preserve"><value>{0}（当前不可用，请选择其他服务）</value></data>
+  <data name="WorkbenchInitialTranslatorBox.Header" xml:space="preserve"><value>初始翻译器</value></data>
+  <data name="WorkbenchFirstRefinerBox.Header" xml:space="preserve"><value>可选第一 LLM 润色器</value></data>
+  <data name="WorkbenchSecondRefinerBox.Header" xml:space="preserve"><value>可选第二 LLM 润色器</value></data>
+  <data name="WorkbenchNoProvidersTitle" xml:space="preserve"><value>没有可用翻译器</value></data>
+  <data name="WorkbenchNoProvidersMessage" xml:space="preserve"><value>请先在“服务与模型”中配置翻译服务，然后返回此区域。</value></data>
+
+  <data name="ErrorBarRetryButton.Content" xml:space="preserve"><value>重试</value></data>
+  <data name="ErrorBarDetailsToggle.Content" xml:space="preserve"><value>详情</value></data>
+  <data name="PageShellLoading.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>正在加载页面内容</value></data>
+  <data name="HomeTitle" xml:space="preserve"><value>启动台</value></data>
+  <data name="HomeSubtitle" xml:space="preserve"><value>启动已就绪的档案，确认运行状态，然后回到游戏。</value></data>
+  <data name="HomeEmptyTitle" xml:space="preserve"><value>还没有档案</value></data>
+  <data name="HomeEmptyBody" xml:space="preserve"><value>创建档案来连接捕获目标、翻译区域、服务和覆盖层行为。</value></data>
+  <data name="HomeImportButton.Content" xml:space="preserve"><value>导入</value></data>
+  <data name="HomeNewProfileButton.Content" xml:space="preserve"><value>新建档案</value></data>
+  <data name="HomeEmptyCreateButton.Content" xml:space="preserve"><value>创建第一个档案</value></data>
+  <data name="HomeRunningHeader.Text" xml:space="preserve"><value>正在运行</value></data>
+  <data name="HomeProfilesHeader.Text" xml:space="preserve"><value>档案</value></data>
+  <data name="HomeActivityHeader.Text" xml:space="preserve"><value>最近活动</value></data>
+  <data name="HomeViewActivityButton.Content" xml:space="preserve"><value>查看全部</value></data>
+  <data name="HomeOpenWorkspaceButton.Content" xml:space="preserve"><value>打开工作区</value></data>
+  <data name="HomePauseButton.Label" xml:space="preserve"><value>暂停</value></data>
+  <data name="HomeOverlayButton.Label" xml:space="preserve"><value>覆盖层</value></data>
+  <data name="HomeManualOcrButton.Label" xml:space="preserve"><value>立即识别</value></data>
+  <data name="HomeStopButton.Label" xml:space="preserve"><value>停止</value></data>
+  <data name="HomeRunningMetrics" xml:space="preserve"><value>{0} 个活动区域 · p95 {1}</value></data>
+  <data name="NavHome.Content" xml:space="preserve"><value>启动台</value></data>
+  <data name="NavActivity.Content" xml:space="preserve"><value>活动</value></data>
+  <data name="NavProviders.Content" xml:space="preserve"><value>提供商</value></data>
+  <data name="NavWorkspaceHome.Content" xml:space="preserve"><value>返回启动台</value></data>
+  <data name="NavWorkspaceOverview.Content" xml:space="preserve"><value>概览</value></data>
+  <data name="NavWorkspaceCapture.Content" xml:space="preserve"><value>捕获与区域</value></data>
+  <data name="NavWorkspaceChannels.Content" xml:space="preserve"><value>翻译通道</value></data>
+  <data name="NavWorkspaceOverlay.Content" xml:space="preserve"><value>覆盖样式</value></data>
+  <data name="NavWorkspaceLanguage.Content" xml:space="preserve"><value>语言与语境</value></data>
+  <data name="NavWorkspaceHistory.Content" xml:space="preserve"><value>历史</value></data>
+  <data name="WorkspaceStartButton.Content" xml:space="preserve"><value>启动</value></data>
+  <data name="WorkspaceReadinessHeader.Text" xml:space="preserve"><value>就绪状态</value></data>
+  <data name="WorkspaceTargetsHeader.Text" xml:space="preserve"><value>捕获目标</value></data>
+  <data name="WorkspaceEditCaptureButton.Content" xml:space="preserve"><value>编辑捕获</value></data>
+  <data name="WorkspaceProfileMissing" xml:space="preserve"><value>此档案已不存在。请返回启动台并选择其他档案。</value></data>
+  <data name="WorkspaceOverviewSubtitle" xml:space="preserve"><value>进入游戏前检查就绪状态、捕获目标和运行控制。</value></data>
+  <data name="WorkspaceTargetReady" xml:space="preserve"><value>捕获目标：{0}</value></data>
+  <data name="WorkspaceLanguageReady" xml:space="preserve"><value>语言：{0}</value></data>
+  <data name="WorkspaceRegionsReady" xml:space="preserve"><value>{0} 个区域 · {1} 条翻译通道</value></data>
+  <data name="ContextSourceLanguageBox.Header" xml:space="preserve"><value>源语言</value></data>
+  <data name="ContextTargetLanguageBox.Header" xml:space="preserve"><value>目标语言</value></data>
+  <data name="ContextLanguagePairInvalid" xml:space="preserve"><value>请分别填写源语言与目标语言,且两者不能相同。</value></data>
+  <data name="HomeStartUnavailable" xml:space="preserve"><value>引擎当前无法启动此档案:{0}</value></data>
+  <data name="HomePinUnavailable" xml:space="preserve"><value>设置未能加载,置顶无法保存。</value></data>
+  <data name="HomeProfileFileType" xml:space="preserve"><value>Infini-Transeon 档案</value></data>
+  <data name="HomeExportProfileMenuItem.Text" xml:space="preserve"><value>导出…</value></data>
+  <data name="HomeDeleteProfileMenuItem.Text" xml:space="preserve"><value>删除…</value></data>
+  <data name="HomeDeleteProfileTitle" xml:space="preserve"><value>删除此档案?</value></data>
+  <data name="HomeDeleteProfileBody" xml:space="preserve"><value>“{0}”及其区域、通道与覆盖层设置将被永久删除。为它保存的历史与术语表记录将无法再访问。</value></data>
+  <data name="HomeDeleteProfileConfirm" xml:space="preserve"><value>删除</value></data>
+  <data name="HomeDeleteProfileCancel" xml:space="preserve"><value>保留</value></data>
+  <data name="WorkspaceTargetNotReady" xml:space="preserve"><value>捕获目标未就绪:{0}</value></data>
+  <data name="WorkspaceLanguageNotReady" xml:space="preserve"><value>尚未设置源语言与目标语言</value></data>
+  <data name="WorkspaceRegionsNotReady" xml:space="preserve"><value>{0} 个区域 · {1} 条翻译通道 —— 两者至少各需一个</value></data>
+  <data name="WorkspaceStartBlocked" xml:space="preserve"><value>完成就绪清单后才能启动。</value></data>
+  <data name="WorkspaceStartUnavailable" xml:space="preserve"><value>引擎当前无法启动此档案:{0}</value></data>
+  <data name="TrayTooltip" xml:space="preserve"><value>Infini-Transeon 游戏翻译</value></data>
+  <data name="TrayPauseAll" xml:space="preserve"><value>暂停全部</value></data>
+  <data name="TrayResumeAll" xml:space="preserve"><value>恢复全部</value></data>
+  <data name="TrayHideOverlay" xml:space="preserve"><value>隐藏覆盖层</value></data>
+  <data name="TrayShowOverlay" xml:space="preserve"><value>显示覆盖层</value></data>
+  <data name="TrayManualOcr" xml:space="preserve"><value>立即识别</value></data>
+  <data name="TrayOpen" xml:space="preserve"><value>打开 Infini-Transeon</value></data>
+  <data name="TrayExit" xml:space="preserve"><value>退出</value></data>
+  <data name="CloseToTrayTitle" xml:space="preserve"><value>是否继续在后台翻译？</value></data>
+  <data name="CloseToTrayBody" xml:space="preserve"><value>关闭主窗口后，Infini-Transeon 可以留在通知区域继续运行，让翻译和热键保持可用。之后可在设置中更改。</value></data>
+  <data name="CloseToTrayKeepRunning" xml:space="preserve"><value>继续运行</value></data>
+  <data name="CloseToTrayExit" xml:space="preserve"><value>退出应用</value></data>
+  <data name="CloseToTrayCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="HomeProfileMoreButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>更多档案操作</value></data>
+  <data name="HomeTogglePinMenuItem.Text" xml:space="preserve"><value>置顶或取消置顶档案</value></data>
+  <data name="WorkspaceCaptureTitle" xml:space="preserve"><value>捕获与区域</value></data>
+  <data name="WorkspaceCaptureSubtitle" xml:space="preserve"><value>选择目标、绘制归一化翻译区域，并调整 OCR 与换行布局。</value></data>
+  <data name="WorkspaceChannelsTitle" xml:space="preserve"><value>翻译通道</value></data>
+  <data name="WorkspaceChannelsSubtitle" xml:space="preserve"><value>为每个区域配置一至四个固定结果槽位，以及可选的顺序 LLM 润色步骤。</value></data>
+  <data name="WorkspaceOverlayTitle" xml:space="preserve"><value>覆盖样式</value></data>
+  <data name="WorkspaceOverlaySubtitle" xml:space="preserve"><value>决定每个区域如何覆盖、偏移或悬浮显示游戏译文。</value></data>
+  <data name="BudgetPreviewSummary" xml:space="preserve"><value>已用 {0}/{1} 个槽位 · 每行最多 {2} 次请求</value></data>
+  <data name="BudgetPreviewHint.Text" xml:space="preserve"><value>并行槽位会增加覆盖范围、费用、延迟和覆盖层空间；润色步骤在各自槽位内依次执行。</value></data>
+  <data name="ActivityTitle" xml:space="preserve"><value>活动</value></data>
+  <data name="ActivitySubtitle" xml:space="preserve"><value>集中查看实时 OCR、翻译、诊断、历史记录与本地报告。</value></data>
+  <data name="ActivityLiveTab.Text" xml:space="preserve"><value>实时事件</value></data>
+  <data name="ActivityHistoryTab.Text" xml:space="preserve"><value>历史</value></data>
+  <data name="ActivityReportsTab.Text" xml:space="preserve"><value>报告</value></data>
+  <data name="ActivitySearchBox.PlaceholderText" xml:space="preserve"><value>搜索事件</value></data>
+  <data name="ActivityKindFilter.Header" xml:space="preserve"><value>事件类型</value></data>
+  <data name="ActivityKindAll.Content" xml:space="preserve"><value>全部事件</value></data>
+  <data name="ActivityKindOcr.Content" xml:space="preserve"><value>OCR</value></data>
+  <data name="ActivityKindTranslation.Content" xml:space="preserve"><value>翻译</value></data>
+  <data name="ActivityKindDiagnostic.Content" xml:space="preserve"><value>诊断</value></data>
+  <data name="ActivityEmptyState.Title" xml:space="preserve"><value>一切正常</value></data>
+  <data name="ActivityEmptyState.Body" xml:space="preserve"><value>没有符合当前筛选条件的事件。</value></data>
+  <data name="ActivityReportsHeader.Text" xml:space="preserve"><value>本地报告</value></data>
+  <data name="ActivityReportsBody.Text" xml:space="preserve"><value>导出当前活动记录，或打开本地崩溃报告目录；应用不会自动上传任何内容。</value></data>
+  <data name="ActivityExportButton.Content" xml:space="preserve"><value>导出活动 JSON</value></data>
+  <data name="ActivityCrashFolderButton.Content" xml:space="preserve"><value>打开崩溃报告目录</value></data>
+  <data name="ActivityKindOcrLabel" xml:space="preserve"><value>OCR</value></data>
+  <data name="ActivityKindTranslationLabel" xml:space="preserve"><value>翻译</value></data>
+  <data name="ActivityKindDiagnosticLabel" xml:space="preserve"><value>诊断</value></data>
+  <data name="ActivityOcrTitle" xml:space="preserve"><value>已识别文字</value></data>
+  <data name="ActivityOcrDetail" xml:space="preserve"><value>{0} 行 · 模型 {1}</value></data>
+  <data name="ActivityTranslationDetail" xml:space="preserve"><value>{0} · {1:0} 毫秒 · {2}</value></data>
+  <data name="ActivityCacheHit" xml:space="preserve"><value>命中缓存</value></data>
+  <data name="ActivityCacheMiss" xml:space="preserve"><value>实时请求</value></data>
+  <data name="ProvidersTitle" xml:space="preserve"><value>提供商与模型</value></data>
+  <data name="ProvidersSubtitle" xml:space="preserve"><value>配置云翻译、云 OCR、本地模型与自定义 REST 适配器。</value></data>
+  <data name="ProvidersOfflineModeBar.Title" xml:space="preserve"><value>严格离线模式已开启</value></data>
+  <data name="ProvidersOfflineModeBar.Message" xml:space="preserve"><value>云提供商、模型下载与更新检查均已禁用。</value></data>
+  <data name="ProviderSearchBox.PlaceholderText" xml:space="preserve"><value>搜索提供商与模型</value></data>
+  <data name="ProviderCloudTranslationHeader.Text" xml:space="preserve"><value>云翻译</value></data>
+  <data name="ProviderCloudOcrHeader.Text" xml:space="preserve"><value>云 OCR</value></data>
+  <data name="ProviderLocalModelHeader.Text" xml:space="preserve"><value>本地模型</value></data>
+  <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>自定义 REST 适配器</value></data>
+  <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>尚无自定义适配器</value></data>
+  <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>内置提供商不足时，可导入版本化 REST 适配器定义。</value></data>
+  <data name="ProviderInlineEndpointBox.Header" xml:space="preserve"><value>端点</value></data>
+  <data name="ProviderSaveEndpointButton.Content" xml:space="preserve"><value>保存端点</value></data>
+  <data name="ProviderEndpointSavedTitle" xml:space="preserve"><value>端点已保存</value></data>
+  <data name="ProviderEndpointSaveFailedTitle" xml:space="preserve"><value>端点未保存</value></data>
+  <data name="ProviderOtherHeader.Text" xml:space="preserve"><value>其他</value></data>
+  <data name="ProvidersEmptyTitle" xml:space="preserve"><value>尚未配置任何提供商</value></data>
+  <data name="ProvidersEmptyBody" xml:space="preserve"><value>配置云提供商的凭据、安装本地模型或导入 REST 适配器以开始使用。</value></data>
+  <data name="ProvidersOfflineModeGoToSettingsButton.Content" xml:space="preserve"><value>打开隐私设置</value></data>
+  <data name="ProvidersOfflineModeGoToSettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>打开隐私设置</value></data>
+  <data name="SettingsSectionList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>设置分区</value></data>
+  <data name="LanguageOptionEnUs.Content" xml:space="preserve"><value>English (US)</value></data>
+  <data name="LanguageOptionZhCn.Content" xml:space="preserve"><value>简体中文</value></data>
+  <data name="ReducedMotionToggle.OnContent" xml:space="preserve"><value>开</value></data>
+  <data name="ReducedMotionToggle.OffContent" xml:space="preserve"><value>关</value></data>
+  <data name="ReducedMotionToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>减少覆盖层动态效果</value></data>
+  <data name="CloseToTrayToggle.OnContent" xml:space="preserve"><value>开</value></data>
+  <data name="CloseToTrayToggle.OffContent" xml:space="preserve"><value>关</value></data>
+  <data name="CloseToTrayToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>关闭窗口后留在通知区域</value></data>
+  <data name="OfflineToggle.OnContent" xml:space="preserve"><value>开</value></data>
+  <data name="OfflineToggle.OffContent" xml:space="preserve"><value>关</value></data>
+  <data name="OfflineToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>严格离线模式</value></data>
+  <data name="HotkeyEnabledToggle.OnContent" xml:space="preserve"><value>开</value></data>
+  <data name="HotkeyEnabledToggle.OffContent" xml:space="preserve"><value>关</value></data>
+  <data name="HotkeyColumnAction.Text" xml:space="preserve"><value>操作</value></data>
+  <data name="HotkeyColumnGesture.Text" xml:space="preserve"><value>按键组合</value></data>
+  <data name="HotkeyColumnScope.Text" xml:space="preserve"><value>作用范围</value></data>
+  <data name="HotkeyColumnStatus.Text" xml:space="preserve"><value>状态</value></data>
+  <data name="HotkeyColumnEnabled.Text" xml:space="preserve"><value>启用</value></data>
+  <data name="HotkeyScopeSelector.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>快捷键作用范围</value></data>
+  <data name="HotkeyScopeAllTargets.Content" xml:space="preserve"><value>全部目标</value></data>
+  <data name="HotkeyScopeForeground.Content" xml:space="preserve"><value>前台匹配目标</value></data>
+  <data name="HotkeyScopeSpecificGroup.Content" xml:space="preserve"><value>指定目标组</value></data>
+  <data name="HotkeyScopeLimitationHint.Text" xml:space="preserve"><value>前台匹配目标与指定目标组作用范围需要多会话支持，目前尚未提供。当前每个快捷键均作用于全部正在运行的目标。</value></data>
+  <data name="SettingsSearchBox.PlaceholderText" xml:space="preserve"><value>搜索设置</value></data>
+  <data name="SettingsAppearanceTab.Text" xml:space="preserve"><value>外观与语言</value></data>
+  <data name="SettingsPrivacyTab.Text" xml:space="preserve"><value>隐私与数据</value></data>
+  <data name="SettingsPerformanceTab.Text" xml:space="preserve"><value>性能</value></data>
+  <data name="SettingsHotkeysTab.Text" xml:space="preserve"><value>热键</value></data>
+  <data name="SettingsAboutTab.Text" xml:space="preserve"><value>关于与更新</value></data>
+  <data name="SettingsSearchEmptyState.Title" xml:space="preserve"><value>没有匹配的设置</value></data>
+  <data name="SettingsSearchEmptyState.Body" xml:space="preserve"><value>请尝试更宽泛的关键词，或清空搜索。</value></data>
+  <data name="CloseToTraySettingLabel.Text" xml:space="preserve"><value>关闭窗口后留在通知区域</value></data>
+  <data name="CloseToTraySettingHint.Text" xml:space="preserve"><value>关闭主窗口后仍保持翻译与热键可用；需从托盘菜单退出应用。</value></data>
+  <data name="UpdateSignaturePolicyText.Text" xml:space="preserve"><value>当前发布包未进行代码签名；下载仍会验证哈希，安装前也始终要求用户确认。</value></data>
+  <data name="HistoryCorrectButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>修正此译文</value></data>
+  <data name="HistoryCorrectionHeader.Text" xml:space="preserve"><value>保存修正</value></data>
+  <data name="HistoryCorrectionTextBox.Header" xml:space="preserve"><value>修正后的译文</value></data>
+  <data name="HistoryCorrectionScopeHint.Text" xml:space="preserve"><value>修正仅作用于此档案中的完全相同原文，不会改写历史中已经显示的结果。</value></data>
+  <data name="HistoryCorrectionCancelButton.Content" xml:space="preserve"><value>取消</value></data>
+  <data name="HistoryCorrectionGlossaryButton.Content" xml:space="preserve"><value>保存并加入术语表</value></data>
+  <data name="HistoryCorrectionSaveButton.Content" xml:space="preserve"><value>保存修正</value></data>
+  <data name="HistoryCorrectionEmptyTitle" xml:space="preserve"><value>修正内容为空</value></data>
+  <data name="HistoryCorrectionEmptyMessage" xml:space="preserve"><value>请输入下次应复用的译文。</value></data>
+  <data name="HistoryCorrectionGlossaryScope" xml:space="preserve"><value>档案</value></data>
+  <data name="HistoryCorrectionGlossaryNote" xml:space="preserve"><value>从翻译历史保存。</value></data>
+  <data name="HistoryCorrectionSavedTitle" xml:space="preserve"><value>修正已保存</value></data>
+  <data name="HistoryCorrectionAndGlossarySavedTitle" xml:space="preserve"><value>修正与术语表词条已保存</value></data>
+  <data name="HistoryCorrectionSavedMessage" xml:space="preserve"><value>以后遇到完全相同的原文时可复用此译文。</value></data>
+  <data name="HistoryCorrectionSaveFailedTitle" xml:space="preserve"><value>修正未保存</value></data>
+  <data name="LanguageContextHeader.Text" xml:space="preserve"><value>游戏语境</value></data>
+  <data name="ContextGameNameBox.Header" xml:space="preserve"><value>游戏名称</value></data>
+  <data name="ContextGameDescriptionBox.Header" xml:space="preserve"><value>游戏说明与翻译语境</value></data>
+  <data name="ContextRecentLinesBox.Header" xml:space="preserve"><value>作为语境发送的最近译文行数</value></data>
+  <data name="SaveGameContextButton.Content" xml:space="preserve"><value>保存游戏语境</value></data>
+  <data name="GameContextSavedTitle" xml:space="preserve"><value>游戏语境已保存</value></data>
+  <data name="GameContextSavedMessage" xml:space="preserve"><value>运行中的档案会通过配置应用接收更新后的语境。</value></data>
+  <data name="GameContextSaveFailedTitle" xml:space="preserve"><value>游戏语境未保存</value></data>
+  <data name="EditTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>编辑术语</value></data>
 </root>

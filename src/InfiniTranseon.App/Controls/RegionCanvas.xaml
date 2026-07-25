@@ -1,0 +1,45 @@
+<!--
+  THESIS: the region canvas is the visual editing surface — a fixed-aspect normalized coordinate
+  space over a live (or placeholder) preview, with draw/drag/resize interaction.
+  Extracted from Features/Workbench/OpticalWorkbenchPage.xaml so it can be shared by the capture
+  section page and (later) the profile setup wizard.
+-->
+<UserControl
+    x:Class="InfiniTranseon.App.Controls.RegionCanvas"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:automation="using:Microsoft.UI.Xaml.Automation"
+    IsTabStop="False">
+    <Border
+        Background="{ThemeResource ThumbLetterboxBrush}"
+        CornerRadius="{StaticResource CardCornerRadius}">
+        <Viewbox
+            x:Name="PreviewViewbox"
+            Margin="{StaticResource InsetM}"
+            Stretch="Uniform">
+            <Grid
+                x:Name="PreviewCoordinateSpace"
+                Width="1600"
+                Height="900"
+                Background="{ThemeResource ThumbPlaceholderBrush}"
+                automation:AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}">
+                <Image
+                    x:Name="PreviewImage"
+                    Stretch="Fill" />
+                <TextBlock
+                    x:Name="CanvasPlaceholder"
+                    x:Uid="CanvasPlaceholderHint"
+                    Style="{StaticResource CaptionTextStyle}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center" />
+                <Canvas
+                    x:Name="RegionCanvasInternal"
+                    Background="Transparent"
+                    PointerPressed="OnCanvasPointerPressed"
+                    PointerMoved="OnCanvasPointerMoved"
+                    PointerReleased="OnCanvasPointerReleased"
+                    PointerCanceled="OnCanvasPointerReleased" />
+            </Grid>
+        </Viewbox>
+    </Border>
+</UserControl>

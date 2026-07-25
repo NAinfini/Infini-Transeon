@@ -73,11 +73,16 @@ public sealed class EngineRuntimePipelineWiringTests
     }
 
     [Fact]
-    public async Task DefaultControlDrivesDecoratorsAndRejectsManualOcr()
+    public async Task DefaultControlDrivesDecoratorsAndSchedulesManualOcr()
     {
         var pausePipeline = new PausableRuntimeTranslationPipeline(new RecordingPipeline());
         var overlaySink = new VisibilityGatingOverlaySink(new RecordingOverlaySink());
-        var control = new DefaultEngineRuntimeControl(pausePipeline, overlaySink);
+        var session = new RecordingSession();
+        var control = new DefaultEngineRuntimeControl(
+            pausePipeline,
+            overlaySink,
+            session,
+            TimeSpan.FromSeconds(2));
 
         await control.PauseAllAsync(TestContext.Current.CancellationToken);
         Assert.True(pausePipeline.IsPaused);
@@ -85,12 +90,34 @@ public sealed class EngineRuntimePipelineWiringTests
         Assert.False(pausePipeline.IsPaused);
         await control.SetOverlayVisibleAsync(false, TestContext.Current.CancellationToken);
         Assert.False(overlaySink.IsVisible);
+        await control.RequestManualOcrAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, session.ManualOcrRequests);
+    }
 
-        EngineRuntimeUnsupportedOperationException exception =
-            await Assert.ThrowsAsync<EngineRuntimeUnsupportedOperationException>(
+    [Fact]
+    public async Task DefaultControlSurfacesManualOcrRejection()
+    {
+        var session = new RecordingSession
+        {
+            ManualOcrAcknowledgement = new RuntimeManualOcrAcknowledgement(
+                false,
+                RuntimeManualOcrStatus.Busy,
+                0,
+                0,
+                "ocr.manual.busy"),
+        };
+        var control = new DefaultEngineRuntimeControl(
+            new PausableRuntimeTranslationPipeline(new RecordingPipeline()),
+            new VisibilityGatingOverlaySink(new RecordingOverlaySink()),
+            session,
+            TimeSpan.FromSeconds(2));
+
+        EngineRuntimeCommandRejectedException exception =
+            await Assert.ThrowsAsync<EngineRuntimeCommandRejectedException>(
                 async () => await control.RequestManualOcrAsync(
                     TestContext.Current.CancellationToken));
         Assert.Equal("manualOcr", exception.OperationKey);
+        Assert.Equal("ocr.manual.busy", exception.ErrorCode);
     }
 
     private static OcrResultSnapshot OcrResult()
@@ -188,5 +215,48 @@ public sealed class EngineRuntimePipelineWiringTests
         public void PublishTargetLifecycle(TargetLifecycleEvent lifecycle) { }
         public void PublishBudget(RuntimeBudgetSnapshot snapshot) { }
         public void PublishDiagnostic(EngineDiagnostic diagnostic) { }
+    }
+
+    private sealed class RecordingSession : IRuntimeEngineHostSession
+    {
+        public Guid RuntimeEpoch { get; } = Guid.NewGuid();
+        public int ManualOcrRequests { get; private set; }
+        public RuntimeManualOcrAcknowledgement ManualOcrAcknowledgement { get; init; } =
+            new(true, RuntimeManualOcrStatus.Scheduled, 1, 1, null);
+
+        public async IAsyncEnumerable<RuntimeEngineEvent> ReadEventsAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        public ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ManualOcrRequests++;
+            return ValueTask.FromResult(ManualOcrAcknowledgement);
+        }
+
+        public ValueTask<RuntimeCaptureTargetAcknowledgement> ApplyCaptureTargetAsync(
+            RuntimeCaptureTargetCommand command, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeOverlayAcknowledgement> ApplyOverlayAsync(
+            OverlayDesiredState state, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<PolicyAcknowledgement> ApplyPolicyAsync(
+            PolicyRevision revision, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeProcessingConfigurationAcknowledgement>
+            ApplyProcessingConfigurationAsync(
+                RuntimeProcessingConfiguration configuration, TimeSpan timeout,
+                CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
+            OcrResultSnapshot result, TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

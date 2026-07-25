@@ -27,6 +27,24 @@ public interface IEngineRuntimeControl
     ValueTask ResumeAllAsync(CancellationToken cancellationToken);
     ValueTask SetOverlayVisibleAsync(bool visible, CancellationToken cancellationToken);
     ValueTask RequestManualOcrAsync(CancellationToken cancellationToken);
+    ValueTask<RuntimeThumbnail> RequestThumbnailAsync(
+        TargetInstanceId targetInstanceId,
+        int maximumLongEdge,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromException<RuntimeThumbnail>(
+            new EngineRuntimeUnsupportedOperationException("thumbnail"));
+    ValueTask ApplyProfileAsync(
+        RuntimeProfileBinding binding,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromException(
+            new EngineRuntimeUnsupportedOperationException("applyProfile"));
+}
+
+public interface IHotConfigurableEngineRuntime
+{
+    ValueTask ApplyProfileAsync(
+        RuntimeProfileBinding binding,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>A live backend paired with its control surface.</summary>
@@ -62,19 +80,40 @@ public sealed class EngineRuntimeUnsupportedOperationException : Exception
     public string LocalizationKey => $"engine.runtime.unsupported.{OperationKey}";
 }
 
+/// <summary>A runtime command reached EngineHost but was explicitly rejected.</summary>
+public sealed class EngineRuntimeCommandRejectedException : Exception
+{
+    public EngineRuntimeCommandRejectedException(string operationKey, string errorCode)
+        : base(errorCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
+        OperationKey = operationKey;
+        ErrorCode = errorCode;
+    }
+
+    public string OperationKey { get; }
+    public string ErrorCode { get; }
+    public string LocalizationKey => $"engine.runtime.rejected.{OperationKey}";
+}
+
 /// <summary>
 /// Facade over the EngineHost launch/handshake/restart machinery. Owns the process
 /// lifecycle, surfaces an explicit status state machine (including a distinct
 /// executable-not-found state that carries the searched paths), fans backend events out
 /// to UI subscribers, and guarantees the native process is torn down on disposal.
 /// </summary>
-public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPublisher
+public sealed class EngineRuntimeService :
+    IEngineRuntime,
+    IEngineRuntimeEventPublisher,
+    IHotConfigurableEngineRuntime
 {
     private readonly EngineHostLocateResult _locateResult;
     private readonly EngineRuntimeSessionFactory _sessionFactory;
     private readonly EngineRuntimeBackendFactory _backendFactory;
     private readonly RuntimeRestartBudget _restartBudget;
     private readonly TimeProvider _timeProvider;
+    private readonly IDisposable? _lifetimeResource;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly object _stateLock = new();
     private readonly Dictionary<Guid, TargetSnapshot> _targets = [];
@@ -91,7 +130,8 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
         EngineRuntimeSessionFactory sessionFactory,
         EngineRuntimeBackendFactory backendFactory,
         RuntimeEngineHostRestartPolicy restartPolicy,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IDisposable? lifetimeResource = null)
     {
         ArgumentNullException.ThrowIfNull(locateResult);
         ArgumentNullException.ThrowIfNull(sessionFactory);
@@ -102,6 +142,7 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
         _backendFactory = backendFactory;
         _restartBudget = new RuntimeRestartBudget(restartPolicy);
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _lifetimeResource = lifetimeResource;
     }
 
     /// <summary>
@@ -114,7 +155,8 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
         TimeSpan handshakeTimeout,
         EngineRuntimeBackendFactory backendFactory,
         RuntimeEngineHostRestartPolicy restartPolicy,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IDisposable? lifetimeResource = null)
     {
         ArgumentNullException.ThrowIfNull(locateResult);
         if (handshakeTimeout <= TimeSpan.Zero)
@@ -130,7 +172,8 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
                 cancellationToken).ConfigureAwait(false),
             backendFactory,
             restartPolicy,
-            timeProvider);
+            timeProvider,
+            lifetimeResource);
     }
 
     public event EventHandler<EngineRuntimeStatusChange>? StatusChanged;
@@ -236,6 +279,27 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
     public ValueTask RequestManualOcrAsync(CancellationToken cancellationToken) =>
         WithControlAsync(control => control.RequestManualOcrAsync(cancellationToken));
 
+    public ValueTask<RuntimeThumbnail> RequestThumbnailAsync(
+        TargetInstanceId targetInstanceId,
+        int maximumLongEdge,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(targetInstanceId);
+        return WithControlAsync(control => control.RequestThumbnailAsync(
+            targetInstanceId,
+            maximumLongEdge,
+            cancellationToken));
+    }
+
+    public ValueTask ApplyProfileAsync(
+        RuntimeProfileBinding binding,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+        return WithControlAsync(control =>
+            control.ApplyProfileAsync(binding, cancellationToken));
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -251,6 +315,7 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
             catch (Exception) { /* teardown must not throw from the supervise loop */ }
         }
         await DisposeCurrentAsync().ConfigureAwait(false);
+        _lifetimeResource?.Dispose();
         _lifecycleGate.Dispose();
         _stop.Dispose();
     }
@@ -405,6 +470,20 @@ public sealed class EngineRuntimeService : IEngineRuntime, IEngineRuntimeEventPu
         {
             throw new InvalidOperationException("engine.runtime.notRunning");
         }
+        return operation(control);
+    }
+
+    private ValueTask<T> WithControlAsync<T>(
+        Func<IEngineRuntimeControl, ValueTask<T>> operation)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        IEngineRuntimeControl? control;
+        lock (_stateLock)
+        {
+            control = _current?.Control;
+        }
+        if (control is null)
+            throw new InvalidOperationException("engine.runtime.notRunning");
         return operation(control);
     }
 

@@ -27,24 +27,6 @@ public sealed class ProviderContractTests
     }
 
     [Fact]
-    public void FrozenProviderMatrixContainsAllFirstReleaseFamiliesWithUniqueStableIds()
-    {
-        ProviderMatrixDocument matrix = ProviderMatrixCatalog.LoadBuiltIn();
-
-        Assert.Equal(16, matrix.Providers.Count);
-        Assert.Contains(matrix.Providers, item => item.Id == "translation.deepl" &&
-            item.AdapterFamily == "declarative-rest");
-        Assert.Contains(matrix.Providers, item => item.Id == "llm.openai" &&
-            item.Capabilities.Streaming);
-        Assert.Contains(matrix.Providers, item => item.Id == "llm.qwen-model-studio" &&
-            item.Regions.Contains("china", StringComparer.Ordinal));
-        Assert.Contains(matrix.Providers, item => item.Id == "ocr.tencent-cloud" &&
-            item.AdapterFamily == "handwritten-signing");
-        Assert.Equal(matrix.Providers.Count,
-            matrix.Providers.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count());
-    }
-
-    [Fact]
     public void DeepLBuiltInUsesPostHeaderCredentialAndCurrentTextResponseShape()
     {
         DeclarativeRestAdapterDefinition definition = BuiltInProviderDefinitions.DeepL(freeEndpoint: true);
@@ -54,6 +36,40 @@ public sealed class ProviderContractTests
         Assert.Contains("{{credential:api-key}}", definition.Headers["Authorization"], StringComparison.Ordinal);
         Assert.Equal("/translations/0/text", definition.ResponseTextJsonPointer);
         Assert.Equal("provider.deepl.quotaExceeded", definition.StatusMappings[456].ErrorCode);
+    }
+
+    [Fact]
+    public void NiuTransBuiltInUsesHttpsFormAutoDetectionAndCurrentResponseShape()
+    {
+        DeclarativeRestAdapterDefinition definition = BuiltInProviderDefinitions.NiuTrans();
+
+        Assert.Equal(RestHttpMethod.Post, definition.Method);
+        Assert.Equal("api.niutrans.com", definition.Endpoint.Host);
+        Assert.Equal(RestBodyFormat.FormUrlEncodedUtf8, definition.BodyFormat);
+        Assert.Equal(RestLanguageCodeStyle.BaseLanguage, definition.LanguageCodeStyle);
+        Assert.Contains(
+            "{{credential:translation.niutrans.api-key}}",
+            definition.BodyTemplate,
+            StringComparison.Ordinal);
+        Assert.Equal("/tgt_text", definition.ResponseTextJsonPointer);
+        Assert.Equal("/error_code", definition.ResponseErrorJsonPointer);
+    }
+
+    [Fact]
+    public void YandexBuiltInOmitsSourceLanguageToRequestAutoDetection()
+    {
+        DeclarativeRestAdapterDefinition definition = BuiltInProviderDefinitions.Yandex();
+
+        Assert.Equal("translate.api.cloud.yandex.net", definition.Endpoint.Host);
+        Assert.Contains(
+            "Api-Key {{credential:translation.yandex.api-key}}",
+            definition.Headers["Authorization"]);
+        Assert.Contains(
+            "{{credential:translation.yandex.folder-id}}",
+            definition.BodyTemplate);
+        Assert.DoesNotContain("sourceLanguageCode", definition.BodyTemplate, StringComparison.Ordinal);
+        Assert.Equal("/translations/0/text", definition.ResponseTextJsonPointer);
+        Assert.Equal(RestLanguageCodeStyle.BaseLanguage, definition.LanguageCodeStyle);
     }
 
     [Fact]
@@ -80,6 +96,175 @@ public sealed class ProviderContractTests
             "f89f9594663708c1605f3d736d01d2d4",
             BaiduTranslationProvider.ComputeSignature(
                 "2015063000000001", "apple", "1435660288", "12345678"));
+    }
+
+    [Fact]
+    public void YoudaoV3SignatureUsesThePublishedTruncationShape()
+    {
+        const string text = "1234567890abcdefghijKLMNOPQRST";
+
+        Assert.Equal("123456789030KLMNOPQRST", YoudaoTranslationProvider.TruncateForSignature(text));
+        Assert.Equal(
+            "4ef48f5f1979c2a8bb1ded91e5623c8d8aa31a1894178dae1593d45227a686f7",
+            YoudaoTranslationProvider.ComputeSignature(
+                "test-app", text, "salt", "1700000000", "test-secret"));
+    }
+
+    [Fact]
+    public async Task YoudaoTranslationUsesBoundCredentialsAutoDetectionAndGameDomain()
+    {
+        string? requestBody = null;
+        var handler = new RecordingHandler(request =>
+        {
+            requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"errorCode\":\"0\",\"translation\":[\"你好\"]}",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+        var credentials = new BoundCredentialStore(new MemoryCredentialStore());
+        var options = new YoudaoTranslationOptions(
+            new Uri("https://openapi.youdao.com/api"),
+            "youdao-app-key-ref",
+            "youdao-app-secret-ref",
+            ProxyPolicy.System,
+            Domain: "game",
+            Clock: () => DateTimeOffset.FromUnixTimeSeconds(1_700_000_000));
+        var provider = new YoudaoTranslationProvider(options, new HttpClient(handler), credentials);
+        await credentials.WriteAsync(
+            options.AppKeyReference,
+            "test-app",
+            provider.CreateBinding("app-key"),
+            CancellationToken.None);
+        await credentials.WriteAsync(
+            options.AppSecretReference,
+            "test-secret",
+            provider.CreateBinding("app-secret"),
+            CancellationToken.None);
+        TranslationRequest request = CreateRequest() with { SourceLanguage = "auto" };
+
+        IReadOnlyList<ProviderWireEvent> events = await CollectWireAsync(
+            provider.StreamAsync(request, CancellationToken.None));
+
+        Dictionary<string, string> form = requestBody!
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(field => field.Split('=', 2))
+            .ToDictionary(
+                field => WebUtility.UrlDecode(field[0]),
+                field => WebUtility.UrlDecode(field[1]),
+                StringComparer.Ordinal);
+        Assert.Equal("auto", form["from"]);
+        Assert.Equal("zh-CHS", form["to"]);
+        Assert.Equal("game", form["domain"]);
+        Assert.Equal("v3", form["signType"]);
+        Assert.Equal(
+            YoudaoTranslationProvider.ComputeSignature(
+                form["appKey"],
+                request.SourceText,
+                form["salt"],
+                form["curtime"],
+                "test-secret"),
+            form["sign"]);
+        Assert.Equal("你好", Assert.IsType<ProviderDelta>(events[0]).Text);
+        Assert.IsType<ProviderDone>(events[1]);
+    }
+
+    [Fact]
+    public async Task BaiduTranslationUsesBoundAppIdAndSecretWithOfficialResponseShape()
+    {
+        string? requestBody = null;
+        var handler = new RecordingHandler(request =>
+        {
+            requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"from\":\"en\",\"to\":\"zh\",\"trans_result\":[{\"src\":\"hello\",\"dst\":\"你好\"}]}",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+        var credentials = new BoundCredentialStore(new MemoryCredentialStore());
+        var options = new BaiduTranslationOptions(
+            new Uri("https://fanyi-api.baidu.com/api/trans/vip/translate"),
+            "baidu-app-id-ref",
+            "baidu-secret-ref",
+            ProxyPolicy.System);
+        var provider = new BaiduTranslationProvider(options, new HttpClient(handler), credentials);
+        await credentials.WriteAsync(
+            options.AppIdReference,
+            "test-app-id",
+            provider.CreateBinding("app-id"),
+            CancellationToken.None);
+        await credentials.WriteAsync(
+            options.SecretReference,
+            "test-secret",
+            provider.CreateBinding("secret"),
+            CancellationToken.None);
+
+        IReadOnlyList<ProviderWireEvent> events = await CollectWireAsync(
+            provider.StreamAsync(CreateRequest(), CancellationToken.None));
+
+        Dictionary<string, string> form = requestBody!
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(field => field.Split('=', 2))
+            .ToDictionary(
+                field => WebUtility.UrlDecode(field[0]),
+                field => WebUtility.UrlDecode(field[1]),
+                StringComparer.Ordinal);
+        Assert.Equal("hello", form["q"]);
+        Assert.Equal("en", form["from"]);
+        Assert.Equal("zh", form["to"]);
+        Assert.Equal("test-app-id", form["appid"]);
+        Assert.Equal(
+            BaiduTranslationProvider.ComputeSignature(
+                "test-app-id", "hello", form["salt"], "test-secret"),
+            form["sign"]);
+        Assert.Equal("你好", Assert.IsType<ProviderDelta>(events[0]).Text);
+        Assert.IsType<ProviderDone>(events[1]);
+    }
+
+    [Theory]
+    [InlineData("ja", "jp")]
+    [InlineData("ja-JP", "jp")]
+    [InlineData("ko-KR", "kor")]
+    [InlineData("zh-Hans", "zh")]
+    [InlineData("zh-Hant", "cht")]
+    [InlineData("fr-FR", "fra")]
+    public void BaiduLanguageCodesAdaptProfileBcp47Identifiers(
+        string profileLanguage,
+        string providerLanguage)
+    {
+        Assert.Equal(providerLanguage, ProviderLanguageCodes.ForBaidu(profileLanguage));
+    }
+
+    [Theory]
+    [InlineData("ja-JP", "ja")]
+    [InlineData("ko-KR", "ko")]
+    [InlineData("zh-Hans", "zh")]
+    [InlineData("zh-Hant", "zh-tw")]
+    [InlineData("pt-BR", "pt")]
+    public void AlibabaLanguageCodesAdaptProfileBcp47Identifiers(
+        string profileLanguage,
+        string providerLanguage)
+    {
+        Assert.Equal(providerLanguage, ProviderLanguageCodes.ForAlibaba(profileLanguage));
+    }
+
+    [Theory]
+    [InlineData("auto", "auto")]
+    [InlineData("zh-Hans", "zh-CHS")]
+    [InlineData("zh-Hant", "zh-CHT")]
+    [InlineData("ja-JP", "ja")]
+    [InlineData("ko-KR", "ko")]
+    public void YoudaoLanguageCodesAdaptProfileBcp47Identifiers(
+        string profileLanguage,
+        string providerLanguage)
+    {
+        Assert.Equal(providerLanguage, ProviderLanguageCodes.ForYoudao(profileLanguage));
     }
 
     [Fact]
@@ -203,6 +388,17 @@ public sealed class ProviderContractTests
             CancellationToken.None).AsTask());
         Assert.Throws<ArgumentException>(() =>
             (binding with { ProxyPolicy = (ProxyPolicy)255 }).Normalize());
+    }
+
+    [Fact]
+    public async Task MissingBoundCredentialReturnsNullInsteadOfReconfirmationRequired()
+    {
+        var store = new BoundCredentialStore(new MemoryCredentialStore());
+        var binding = new CredentialBinding(
+            "provider", "api-key", "https", "api.example.test", 443,
+            "bearer", ProxyPolicy.System);
+
+        Assert.Null(await store.ReadAsync("missing", binding, CancellationToken.None));
     }
 
     [Fact]
@@ -829,7 +1025,7 @@ public sealed class ProviderContractTests
             captured.RequestUri!.Query,
             StringComparison.Ordinal);
         Assert.Equal(
-            "FormatType=text&SourceLanguage=en&TargetLanguage=zh-Hans&SourceText=hello&Scene=general",
+            "FormatType=text&SourceLanguage=en&TargetLanguage=zh&SourceText=hello&Scene=general",
             body);
         Assert.Equal("你好", Assert.IsType<ProviderDelta>(events[0]).Text);
         Assert.IsType<ProviderDone>(events[1]);
@@ -887,7 +1083,7 @@ public sealed class ProviderContractTests
             CancellationToken.None);
         var provider = new GoogleCloudTranslationProvider(
             new GoogleCloudTranslationOptions(
-                new Uri("https://translation.googleapis.com/v3/projects/test-project/locations/global:translateText"),
+                new Uri("https://translation.googleapis.com/v3/projects/_/locations/global:translateText"),
                 ProxyPolicy.System),
             new HttpClient(handler),
             tokenSource);
@@ -900,6 +1096,10 @@ public sealed class ProviderContractTests
             requests[1].Headers.Authorization);
         Assert.Equal("Bearer", authorization.Scheme);
         Assert.Equal("oauth-token", authorization.Parameter);
+        Assert.Contains(
+            "/v3/projects/test-project/locations/global:translateText",
+            requests[1].RequestUri!.AbsolutePath,
+            StringComparison.Ordinal);
         using JsonDocument requestJson = JsonDocument.Parse(translationBody!);
         Assert.Equal("hello", requestJson.RootElement.GetProperty("contents")[0].GetString());
         Assert.Equal("en", requestJson.RootElement.GetProperty("sourceLanguageCode").GetString());

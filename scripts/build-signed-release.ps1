@@ -14,9 +14,6 @@ if ($versionText -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
 if ($ReleaseSequence -lt 1) { throw 'Release sequence must be positive.' }
 
 $requiredSecrets = @(
-    'AUTHENTICODE_CERTIFICATE',
-    'AUTHENTICODE_PASSWORD',
-    'AUTHENTICODE_PUBLISHER',
     'RELEASE_ED25519_PRIVATE_KEY',
     'RELEASE_ED25519_KEY_ID'
 )
@@ -28,31 +25,15 @@ foreach ($name in $requiredSecrets) {
 
 $tempRoot = Join-Path $env:RUNNER_TEMP ("infini-release-signing-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
-$certificatePath = Join-Path $tempRoot 'codesign.pfx'
 $privateKeyPath = Join-Path $tempRoot 'release-ed25519.pem'
 $unsignedManifestPath = Join-Path $tempRoot 'manifest-unsigned.json'
 $signaturePath = Join-Path $tempRoot 'manifest.sig'
-$importedCertificate = $null
 
 try {
-    [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:AUTHENTICODE_CERTIFICATE))
     [IO.File]::WriteAllText(
         $privateKeyPath,
         [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:RELEASE_ED25519_PRIVATE_KEY)),
         [Text.UTF8Encoding]::new($false))
-    $securePassword = ConvertTo-SecureString $env:AUTHENTICODE_PASSWORD -AsPlainText -Force
-    $importedCertificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
-    if (-not [String]::Equals(
-            $importedCertificate.Subject,
-            $env:AUTHENTICODE_PUBLISHER,
-            [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Authenticode certificate subject does not match AUTHENTICODE_PUBLISHER.'
-    }
-    $signTool = (Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
-        Where-Object { $_.FullName -like '*\x64\signtool.exe' } |
-        Sort-Object FullName -Descending |
-        Select-Object -First 1).FullName
-    if ([string]::IsNullOrWhiteSpace($signTool)) { throw 'signtool.exe was not found.' }
 
     $msiPath = Join-Path $releasePath 'Infini-Transeon.msi'
     $zipPath = Join-Path $releasePath 'Infini-Transeon-portable.zip'
@@ -60,26 +41,23 @@ try {
     foreach ($path in @($msiPath, $zipPath, $sourcePath)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Release artifact '$path' is missing." }
     }
-    & $signTool sign /sha1 $importedCertificate.Thumbprint /fd SHA256 /td SHA256 `
-        /tr http://timestamp.digicert.com $msiPath
-    if ($LASTEXITCODE -ne 0) { throw 'Authenticode signing failed.' }
-    & $signTool verify /pa /all $msiPath
-    if ($LASTEXITCODE -ne 0) { throw 'Authenticode verification failed after signing.' }
 
     $artifacts = @(
         [ordered]@{
-            authenticodePublisher = $env:AUTHENTICODE_PUBLISHER
             byteSize = (Get-Item -LiteralPath $msiPath).Length
+            codeSigning = 'unsigned'
             fileName = 'Infini-Transeon.msi'
             sha256 = (Get-FileHash -LiteralPath $msiPath -Algorithm SHA256).Hash.ToLowerInvariant()
         },
         [ordered]@{
             byteSize = (Get-Item -LiteralPath $zipPath).Length
+            codeSigning = 'not-applicable'
             fileName = 'Infini-Transeon-portable.zip'
             sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
         },
         [ordered]@{
             byteSize = (Get-Item -LiteralPath $sourcePath).Length
+            codeSigning = 'not-applicable'
             fileName = 'Infini-Transeon-source.zip'
             sha256 = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
         }
@@ -117,9 +95,6 @@ try {
         [Text.UTF8Encoding]::new($false))
 }
 finally {
-    if ($null -ne $importedCertificate) {
-        Remove-Item -LiteralPath ("Cert:\CurrentUser\My\" + $importedCertificate.Thumbprint) -Force -ErrorAction SilentlyContinue
-    }
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force
     }

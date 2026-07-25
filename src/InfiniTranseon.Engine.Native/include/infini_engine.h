@@ -19,8 +19,6 @@ extern "C" {
 
 #define IT_ENGINE_ABI_VERSION 1U
 
-typedef struct IT_EngineHandle IT_EngineHandle;
-
 typedef enum IT_Result
 {
     IT_RESULT_OK = 0,
@@ -89,18 +87,6 @@ typedef void (IT_CALL* IT_RuntimeMessageCallback)(
     const IT_RuntimeEnvelopeV1* envelope,
     void* user_context);
 
-typedef void* (IT_CALL* IT_AllocateFn)(size_t byte_count, void* user_context);
-typedef void (IT_CALL* IT_FreeFn)(void* allocation, void* user_context);
-
-typedef struct IT_EngineCreateOptionsV1
-{
-    uint32_t struct_size;
-    uint32_t abi_version;
-    IT_AllocateFn allocate;
-    IT_FreeFn free;
-    void* allocator_context;
-} IT_EngineCreateOptionsV1;
-
 typedef struct IT_RuntimeCapabilitiesV1
 {
     uint32_t struct_size;
@@ -137,12 +123,6 @@ uint32_t IT_CALL IT_EngineGetAbiVersion(void) IT_NOEXCEPT;
 
 IT_Result IT_CALL IT_EngineGetCapabilities(
     IT_RuntimeCapabilitiesV1* capabilities) IT_NOEXCEPT;
-
-IT_Result IT_CALL IT_EngineCreate(
-    const IT_EngineCreateOptionsV1* options,
-    IT_EngineHandle** engine) IT_NOEXCEPT;
-
-IT_Result IT_CALL IT_EngineDestroy(IT_EngineHandle* engine) IT_NOEXCEPT;
 
 #if defined(__cplusplus)
 }

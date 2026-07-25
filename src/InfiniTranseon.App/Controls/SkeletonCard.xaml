@@ -1,0 +1,38 @@
+<UserControl
+    x:Class="InfiniTranseon.App.Controls.SkeletonCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <Storyboard x:Name="PulseStoryboard" RepeatBehavior="Forever" AutoReverse="True">
+            <DoubleAnimation
+                Storyboard.TargetName="Root"
+                Storyboard.TargetProperty="Opacity"
+                From="1.0"
+                To="0.55"
+                Duration="0:0:1" />
+        </Storyboard>
+    </UserControl.Resources>
+    <Border x:Name="Root" Style="{StaticResource CardBorderStyle}">
+        <StackPanel Spacing="{StaticResource SpaceS}">
+            <Border
+                Height="16"
+                Width="180"
+                HorizontalAlignment="Left"
+                CornerRadius="{StaticResource ControlCorner}"
+                Background="{ThemeResource SurfaceSunken}" />
+            <Border
+                Height="12"
+                Width="120"
+                HorizontalAlignment="Left"
+                CornerRadius="{StaticResource ControlCorner}"
+                Background="{ThemeResource SurfaceSunken}" />
+            <Border
+                Height="12"
+                Width="220"
+                HorizontalAlignment="Left"
+                CornerRadius="{StaticResource ControlCorner}"
+                Background="{ThemeResource SurfaceSunken}" />
+        </StackPanel>
+    </Border>
+</UserControl>

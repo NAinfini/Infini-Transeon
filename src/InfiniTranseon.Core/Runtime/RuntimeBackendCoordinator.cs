@@ -105,7 +105,7 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
         RuntimeTargetBinding Binding);
 
     private readonly IRuntimeEngineHostSession _session;
-    private readonly IReadOnlyList<BoundTarget> _bindings;
+    private readonly List<BoundTarget> _bindings;
     private readonly IRuntimeTranslationPipeline _pipeline;
     private readonly RuntimeEngineEventDispatcher _dispatcher;
     private readonly TimeSpan _commandTimeout;
@@ -114,6 +114,7 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
     private readonly object _budgetGate = new();
     private readonly Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? _budgetSnapshot;
     private readonly CancellationTokenSource _stop = new();
+    private readonly SemaphoreSlim _configurationGate = new(1, 1);
     private readonly List<BoundTarget> _active = [];
     private Task? _eventPump;
     private int _performanceStarted;
@@ -184,7 +185,7 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
                 "Performance controllers cannot contain null.",
                 nameof(performanceControllers));
         _session = session;
-        _bindings = Array.AsReadOnly(ownedBindings);
+        _bindings = [.. ownedBindings];
         _pipeline = pipeline;
         _dispatcher = new RuntimeEngineEventDispatcher(
             cloudOcr,
@@ -308,6 +309,92 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
         }
     }
 
+    public async ValueTask ApplyProfileAsync(
+        RuntimeProfileBinding profile,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (Volatile.Read(ref _started) == 0)
+            throw new InvalidOperationException("runtime.backend.notStarted");
+
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            BoundTarget[] existing = _bindings
+                .Where(item => item.Profile.ProfileId == profile.Profile.ProfileId)
+                .ToArray();
+            if (existing.Length != profile.Targets.Count ||
+                existing.Select(item => item.Binding.TargetInstanceId).ToHashSet()
+                    .SetEquals(profile.Targets.Select(item => item.TargetInstanceId)) is false)
+            {
+                throw new InvalidOperationException("runtime.profile.targetSetChanged");
+            }
+
+            var replacements = new List<BoundTarget>(profile.Targets.Count);
+            foreach (RuntimeTargetBinding binding in profile.Targets)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                BoundTarget current = existing.Single(item =>
+                    item.Binding.TargetInstanceId == binding.TargetInstanceId);
+                if (binding.ConfigurationRevision <= current.Binding.ConfigurationRevision ||
+                    binding.ProfileTarget.TargetId != current.Binding.ProfileTarget.TargetId ||
+                    binding.NativeHandle != current.Binding.NativeHandle ||
+                    binding.DesktopRegion != current.Binding.DesktopRegion)
+                {
+                    throw new InvalidOperationException(
+                        "runtime.profile.targetBindingChanged");
+                }
+
+                RuntimeProcessingConfiguration configuration =
+                    ProfileRuntimeConfigurationFactory.Create(
+                        binding.ProfileTarget,
+                        binding.TargetInstanceId,
+                        binding.ConfigurationRevision,
+                        profile.Profile.ProfileId,
+                        profile.ProfileRevision);
+                RuntimeProcessingConfigurationAcknowledgement processing =
+                    await _session.ApplyProcessingConfigurationAsync(
+                        configuration,
+                        _commandTimeout,
+                        cancellationToken).ConfigureAwait(false);
+                if (!processing.Accepted)
+                    throw new EngineRuntimeCommandRejectedException(
+                        "applyProfile",
+                        processing.ErrorCode ?? "runtime.processing.rejected");
+
+                await _pipeline.ReplaceAsync(
+                    new RuntimeTranslationTarget(
+                        _session.RuntimeEpoch,
+                        binding.TargetInstanceId,
+                        new CaptureTargetId(binding.ProfileTarget.TargetId),
+                        profile.ProfileRevision,
+                        profile.Profile,
+                        binding.ProfileTarget,
+                        binding.TargetPixelWidth,
+                        binding.TargetPixelHeight,
+                        binding.RunOptions,
+                        _reducedMotion),
+                    cancellationToken).ConfigureAwait(false);
+                replacements.Add(new BoundTarget(
+                    profile.Profile,
+                    profile.ProfileRevision,
+                    binding));
+            }
+
+            _bindings.RemoveAll(item =>
+                item.Profile.ProfileId == profile.Profile.ProfileId);
+            _bindings.AddRange(replacements);
+            _active.RemoveAll(item =>
+                item.Profile.ProfileId == profile.Profile.ProfileId);
+            _active.AddRange(replacements);
+        }
+        finally
+        {
+            _configurationGate.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -332,6 +419,7 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
         try { await _session.DisposeAsync().ConfigureAwait(false); }
         catch (Exception exception) { failures.Add(exception); }
         _stop.Dispose();
+        _configurationGate.Dispose();
         if (failures.Count > 0) throw new AggregateException(failures);
     }
 

@@ -127,7 +127,7 @@
 7. 多翻译器会增加遮挡、延迟和费用，因此默认档案只启用一个通道，但用户可明确添加更多通道，每个区域最多 4 条。
 8. 多结果区域必须提供最大高度、最大行数、自动缩小、滚动禁止和溢出策略；游戏内覆盖不得出现需要鼠标滚动的内容。
 9. “锁定不降级”只表示系统不得主动降低该区域的用户配置；当资源或设备无法满足配置时，必须丢弃旧任务并进入显式错误或暂停状态，绝不能建立无界积压。
-10. Windows.Graphics.Capture 的系统捕获边框在 Windows 11 上可通过 `IsBorderRequired = false` 关闭，但需要 `GraphicsCaptureAccess.RequestAccessAsync` 的一次性用户授权。后端平台 spike 必须实测：授权流程、拒绝授权时边框保留的行为、授权在重启后的持久性；拒绝授权的用户必须在 UI 中被如实告知边框会保留。任何情况下不得宣称“无痕捕获”。
+10. Windows.Graphics.Capture 的系统捕获边框在 Windows 11 上可通过 `IsBorderRequired = false` 关闭，但需要受信任签名的 package identity、`graphicsCaptureWithoutBorder` 能力与 `GraphicsCaptureAccess.RequestAccessAsync` 的一次性用户授权。当前 GitHub 无签名发布不伪造身份、不请求无效授权，明确显示并记录系统捕获边框会保留；接入受信任包签名后，后端平台 spike 才能实测授权、拒绝与重启持久性。任何情况下不得宣称“无痕捕获”。
 
 ## 6. 捕获、OCR 与性能策略
 
@@ -178,7 +178,7 @@ InfiniTranseon.App.exe (.NET / WinUI 3，关闭窗口后驻留托盘)
 - 可配置 REST 适配器不执行用户代码；限制为声明式请求模板、响应提取规则和受控凭据引用。
 - 档案导入导出使用版本化格式，自动排除 API 密钥、历史、截图、模型、个人路径和窗口句柄。
 - 产品免费开源，Apache-2.0；通过 GitHub Releases 提供安装版和便携版。发布流程生成 LICENSE、NOTICE、SBOM、源码归档和模型/字体/字典独立许可清单。
-- 默认只在没有活动捕获且主界面可见时检查更新，不自动安装。安装器验证 Authenticode 发布者；便携 ZIP 验证由应用内置信任根签署的 canonical manifest，manifest 绑定版本、渠道、架构和 SHA-256，并定义双密钥轮换与防降级状态。
+- 默认只在没有活动捕获且主界面可见时检查更新，不自动安装。当前无 Authenticode 阶段，MSI 必须由 Ed25519 签名的 canonical manifest 明确声明为 `unsigned`，应用在下载与打开前显示未知发布者警告；所有制品均验证 manifest 绑定的版本、渠道、架构、大小和 SHA-256，并保留双密钥轮换与防降级状态。未来采用 Authenticode 时再启用发布者验证。
 - 初始公开版本不设社区档案浏览或下载。
 - 所有已确认功能属于首个公开版本；开发阶段只作为内部垂直切片，不对外宣称 Alpha/Beta。
 

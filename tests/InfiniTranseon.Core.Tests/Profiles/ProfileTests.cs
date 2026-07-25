@@ -77,6 +77,42 @@ public sealed class ProfileTests
     }
 
     [Fact]
+    public void Desktop_fixed_region_requires_valid_physical_pixel_bounds()
+    {
+        ProfileDocument missing = ProfileDocument.Create("Desktop crop", "ja", "en");
+        missing.Targets.Add(ProfileTarget.Create(
+            "Display crop",
+            CaptureTargetKind.DesktopFixedRegion));
+
+        ProfileValidationResult missingResult = new ProfileValidator().Validate(
+            missing,
+            RuntimeCapabilities.VersionOne,
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.False(missingResult.IsValid);
+        Assert.Contains(missingResult.Issues,
+            issue => issue.Code == "profile.target.desktopRegionRequired");
+
+        ProfileDocument valid = missing with
+        {
+            Targets =
+            [
+                missing.Targets[0] with
+                {
+                    DesktopRegion = new OverlayPixelRect(-1920, 100, 1280, 720),
+                },
+            ],
+        };
+
+        ProfileValidationResult validResult = new ProfileValidator().Validate(
+            valid,
+            RuntimeCapabilities.VersionOne,
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.True(validResult.IsValid);
+    }
+
+    [Fact]
     public void FutureVersionIsRejectedAndVersionZeroMigratesOneWay()
     {
         var migrator = new ProfileMigrator();
@@ -310,6 +346,7 @@ public sealed class ProfileTests
                 TextColor = "#FFFFFFFF",
                 OutlineColor = "#FF112233",
                 OutlineWidth = 2,
+                PreferredFontSize = 30,
                 MinimumDwell = TimeSpan.FromMilliseconds(650),
                 CrossfadeDuration = TimeSpan.FromMilliseconds(140),
                 OffsetDestination = new NormalizedRect(0.7, 0.1, 0.25, 0.3),
@@ -325,6 +362,7 @@ public sealed class ProfileTests
         Assert.Equal(new OverlayPixelRect(1344, 108, 480, 324), style.DestinationBounds);
         Assert.Equal("#FF112233", style.OutlineColor);
         Assert.Equal(2, style.OutlineWidth);
+        Assert.Equal(30, style.PreferredFontSize);
         Assert.Equal(3, style.MaximumLines);
         Assert.Equal(650, style.MinimumDwellMilliseconds);
         Assert.Equal(140, style.CrossfadeMilliseconds);

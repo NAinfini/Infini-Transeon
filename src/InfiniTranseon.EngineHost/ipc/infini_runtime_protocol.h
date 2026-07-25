@@ -27,6 +27,8 @@ inline constexpr std::uint32_t processing_configuration_kind = 22U;
 inline constexpr std::uint32_t processing_configuration_acknowledgement_kind = 23U;
 inline constexpr std::uint32_t ocr_result_kind = 6U;
 inline constexpr std::uint32_t ocr_result_acknowledgement_kind = 24U;
+inline constexpr std::uint32_t thumbnail_request_kind = 26U;
+inline constexpr std::uint32_t thumbnail_acknowledgement_kind = 27U;
 inline constexpr std::size_t nonce_bytes = 32U;
 
 enum class ProtocolError
@@ -130,6 +132,7 @@ struct OcrExecutionIdentity final
     std::array<std::byte, 16U> runtime_epoch{};
     std::array<std::byte, 16U> target_instance_id{};
     std::uint8_t area_kind{};
+    bool manual{};
     std::array<std::byte, 16U> region_id{};
     std::array<std::byte, 16U> text_track_id{};
     std::uint64_t source_generation{};
@@ -174,6 +177,12 @@ struct CloudOcrCropEvent final
     std::uint32_t encoded_byte_ceiling{};
 };
 
+struct ThumbnailRequest final
+{
+    std::array<std::byte, 16U> target_instance_id{};
+    std::uint32_t maximum_long_edge{};
+};
+
 class BootstrapParseResult final
 {
 public:
@@ -195,6 +204,9 @@ private:
 [[nodiscard]] std::optional<CaptureTargetCommand> parse_capture_target_command(
     std::span<const std::byte> bytes) noexcept;
 
+[[nodiscard]] bool parse_manual_ocr_request(
+    std::span<const std::byte> bytes) noexcept;
+
 [[nodiscard]] std::optional<overlay::desired_state> parse_overlay_desired_state(
     std::span<const std::byte> bytes) noexcept;
 
@@ -203,6 +215,9 @@ private:
 
 [[nodiscard]] std::optional<ProcessingConfigurationCommand>
 parse_processing_configuration(std::span<const std::byte> bytes) noexcept;
+
+[[nodiscard]] std::optional<ThumbnailRequest>
+    parse_thumbnail_request(std::span<const std::byte> bytes) noexcept;
 
 [[nodiscard]] std::optional<OcrResultCommand>
     parse_ocr_result(std::span<const std::byte> bytes) noexcept;

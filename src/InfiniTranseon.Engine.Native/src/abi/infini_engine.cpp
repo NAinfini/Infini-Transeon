@@ -1,13 +1,5 @@
 #include <infini_engine.h>
 
-#include <new>
-
-struct IT_EngineHandle
-{
-    IT_FreeFn free;
-    void* allocator_context;
-};
-
 uint32_t IT_CALL IT_EngineGetAbiVersion(void) noexcept
 {
     return IT_ENGINE_ABI_VERSION;
@@ -56,66 +48,5 @@ IT_Result IT_CALL IT_EngineGetCapabilities(IT_RuntimeCapabilitiesV1* const capab
     capabilities->max_gpu_budget_percentage = 25U;
     capabilities->max_ipc_message_bytes = 8'388'608U;
     capabilities->max_ipc_in_flight_bytes = 33'554'432ULL;
-    return IT_RESULT_OK;
-}
-
-IT_Result IT_CALL IT_EngineCreate(
-    const IT_EngineCreateOptionsV1* const options,
-    IT_EngineHandle** const engine) noexcept
-{
-    if (options == nullptr || engine == nullptr)
-    {
-        return IT_RESULT_INVALID_ARGUMENT;
-    }
-
-    *engine = nullptr;
-    if (options->struct_size < sizeof(IT_EngineCreateOptionsV1))
-    {
-        return IT_RESULT_INVALID_STRUCTURE_SIZE;
-    }
-
-    if (options->abi_version != IT_ENGINE_ABI_VERSION)
-    {
-        return IT_RESULT_ABI_VERSION_MISMATCH;
-    }
-
-    if ((options->allocate == nullptr) != (options->free == nullptr))
-    {
-        return IT_RESULT_INVALID_ARGUMENT;
-    }
-
-    if (options->allocate != nullptr)
-    {
-        void* const memory = options->allocate(sizeof(IT_EngineHandle), options->allocator_context);
-        if (memory == nullptr)
-        {
-            return IT_RESULT_OUT_OF_MEMORY;
-        }
-
-        *engine = new (memory) IT_EngineHandle{options->free, options->allocator_context};
-        return IT_RESULT_OK;
-    }
-
-    *engine = new (std::nothrow) IT_EngineHandle{nullptr, nullptr};
-    return *engine == nullptr ? IT_RESULT_OUT_OF_MEMORY : IT_RESULT_OK;
-}
-
-IT_Result IT_CALL IT_EngineDestroy(IT_EngineHandle* const engine) noexcept
-{
-    if (engine == nullptr)
-    {
-        return IT_RESULT_INVALID_ARGUMENT;
-    }
-
-    IT_FreeFn const free = engine->free;
-    void* const allocator_context = engine->allocator_context;
-    if (free == nullptr)
-    {
-        delete engine;
-        return IT_RESULT_OK;
-    }
-
-    engine->~IT_EngineHandle();
-    free(engine, allocator_context);
     return IT_RESULT_OK;
 }

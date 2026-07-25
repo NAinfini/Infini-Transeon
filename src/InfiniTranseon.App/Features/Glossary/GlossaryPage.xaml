@@ -2,6 +2,7 @@
     x:Class="InfiniTranseon.App.Features.Glossary.GlossaryPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
     xmlns:data="using:InfiniTranseon.App.Presentation"
     Loaded="OnLoaded">
     <ScrollViewer Padding="{StaticResource PagePadding}">
@@ -17,6 +18,10 @@
                 IsClosable="False"
                 IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+            <ProgressBar
+                x:Uid="PageLoadingIndicator"
+                IsIndeterminate="True"
+                Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
 
             <StackPanel
                 Spacing="10"
@@ -28,111 +33,310 @@
                 <TextBlock x:Uid="GlossaryNoProfileBody" HorizontalAlignment="Center" TextAlignment="Center" Style="{StaticResource CaptionTextStyle}" />
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind ViewModel.HasActiveProfile, Mode=OneWay}">
-                <AutoSuggestBox x:Uid="GlossarySearchBox" QueryIcon="Find" MinWidth="260" />
-                <Button x:Uid="AddTermButton" Style="{StaticResource AccentButtonStyle}" Click="OnAddTermClick">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE710;" FontSize="14" />
-                        <TextBlock x:Uid="AddTermButtonLabel" />
-                    </StackPanel>
-                </Button>
-                <Button x:Uid="ImportGlossaryButton">
-                    <TextBlock x:Uid="ImportGlossaryButtonLabel" />
-                </Button>
-                <Button x:Uid="ExportGlossaryButton">
-                    <TextBlock x:Uid="ExportGlossaryButtonLabel" />
-                </Button>
-            </StackPanel>
+            <!--
+                Spec 5.7: three parallel cards on desktop (Game context / Glossary / Style prompt),
+                stacked on narrow (<1120). Only the column widths and each card's Grid.Column/Grid.Row
+                change between states; the cards' own content is unaffected.
+            -->
+            <Grid
+                x:Name="SectionsGrid"
+                ColumnSpacing="{StaticResource SpaceL}"
+                RowSpacing="{StaticResource SpaceL}"
+                Visibility="{x:Bind ViewModel.HasActiveProfile, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="ContextColumn" Width="*" />
+                    <ColumnDefinition x:Name="GlossaryColumn" Width="1.4*" />
+                    <ColumnDefinition x:Name="StylePromptColumn" Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <Border Style="{StaticResource CardBorderStyle}" Padding="0">
-                <StackPanel>
-                    <Grid Padding="16,10" ColumnSpacing="12" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="2*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Uid="GlossarySourceColumn" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
-                        <TextBlock x:Uid="GlossaryTargetColumn" Grid.Column="1" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
-                        <TextBlock x:Uid="GlossaryScopeColumn" Grid.Column="2" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
-                        <TextBlock x:Uid="GlossaryProtectedColumn" Grid.Column="3" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" MinWidth="70" />
-                        <TextBlock x:Uid="GlossaryNotesColumn" Grid.Column="4" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
-                    </Grid>
-                    <ItemsRepeater ItemsSource="{x:Bind Entries}">
-                        <ItemsRepeater.Layout>
-                            <StackLayout />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="data:GlossaryEntry">
-                                <Grid Padding="16,10" ColumnSpacing="12" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{x:Bind SourceTerm}" Style="{StaticResource BodyTextStyle}" />
-                                    <TextBlock Text="{x:Bind TargetTerm}" Grid.Column="1" Style="{StaticResource BodyTextStyle}" />
-                                    <TextBlock Text="{x:Bind Scope}" Grid.Column="2" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
-                                    <FontIcon
-                                        Grid.Column="3"
-                                        Glyph="&#xE72E;"
-                                        FontSize="13"
-                                        MinWidth="70"
-                                        Visibility="{x:Bind Protected}"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Text="{x:Bind Notes}" Grid.Column="4" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
-                                    <Button
-                                        x:Uid="DeleteTermButton"
-                                        Grid.Column="5"
-                                        MinWidth="32"
-                                        MinHeight="32"
-                                        Padding="6"
-                                        VerticalAlignment="Center"
-                                        Tag="{x:Bind SourceTerm}"
-                                        Click="OnDeleteTermClick">
-                                        <FontIcon Glyph="&#xE74D;" FontSize="13" />
-                                    </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </StackPanel>
-            </Border>
-
-            <TextBlock x:Uid="StylePromptHeader" Style="{StaticResource SectionHeaderStyle}" Margin="0,8,0,0" />
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel Spacing="10">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <TextBlock x:Uid="StylePromptVersionLabel" Style="{StaticResource BodyTextStyle}" VerticalAlignment="Center" />
-                            <ComboBox MinWidth="200" SelectedIndex="0">
-                                <ComboBoxItem Content="v3 — casual game tone" />
-                                <ComboBoxItem Content="v2 — literal" />
-                                <ComboBoxItem Content="v1 — default template" />
-                            </ComboBox>
+                <!-- Game context card -->
+                <StackPanel
+                    x:Name="ContextCard"
+                    Grid.Column="0"
+                    Grid.Row="0"
+                    Spacing="{StaticResource SpaceM}">
+                    <TextBlock x:Uid="LanguageContextHeader" Style="{StaticResource SectionHeaderStyle}" />
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="{StaticResource SpaceM}">
+                            <!-- Languages were previously settable only in the creation wizard, which
+                                 left every existing profile's language pair permanently unchangeable. -->
+                            <Grid ColumnSpacing="{StaticResource SpaceM}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="ContextSourceLanguageBox"
+                                    x:Uid="ContextSourceLanguageBox"
+                                    MaxLength="64"
+                                    TextChanged="OnGameContextTextChanged" />
+                                <TextBox
+                                    x:Name="ContextTargetLanguageBox"
+                                    x:Uid="ContextTargetLanguageBox"
+                                    Grid.Column="1"
+                                    MaxLength="64"
+                                    TextChanged="OnGameContextTextChanged" />
+                            </Grid>
+                            <TextBox
+                                x:Name="ContextGameNameBox"
+                                x:Uid="ContextGameNameBox"
+                                MaxLength="256"
+                                TextChanged="OnGameContextTextChanged" />
+                            <TextBox
+                                x:Name="ContextGameDescriptionBox"
+                                x:Uid="ContextGameDescriptionBox"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                MaxLength="4096"
+                                MinHeight="84"
+                                TextChanged="OnGameContextTextChanged" />
+                            <NumberBox
+                                x:Name="ContextRecentLinesBox"
+                                x:Uid="ContextRecentLinesBox"
+                                Minimum="0"
+                                Maximum="32"
+                                SpinButtonPlacementMode="Compact"
+                                ValueChanged="OnGameContextValueChanged" />
+                            <Button
+                                x:Uid="SaveGameContextButton"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="OnSaveGameContextClick" />
+                            <InfoBar
+                                x:Name="ContextStatusBar"
+                                IsOpen="False"
+                                IsClosable="True" />
                         </StackPanel>
-                        <Button x:Uid="SavePromptVersionButton" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}">
-                            <TextBlock x:Uid="SavePromptVersionButtonLabel" />
-                        </Button>
-                    </Grid>
-                    <TextBox
-                        x:Uid="StylePromptEditor"
-                        AcceptsReturn="True"
-                        TextWrapping="Wrap"
-                        MinHeight="120"
-                        Text="Translate as natural, casual game dialogue. Keep proper nouns from the glossary untouched. Prefer short sentences that fit an overlay slot." />
-                    <InfoBar
-                        x:Uid="StylePromptCacheWarning"
-                        IsOpen="True"
-                        IsClosable="False"
-                        Severity="Informational" />
+                    </Border>
                 </StackPanel>
-            </Border>
+
+                <!-- Glossary card -->
+                <StackPanel
+                    x:Name="GlossaryCard"
+                    Grid.Column="1"
+                    Grid.Row="0"
+                    Spacing="{StaticResource SpaceM}">
+                    <TextBlock x:Uid="GlossaryTableHeader" Style="{StaticResource SectionHeaderStyle}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <AutoSuggestBox x:Uid="GlossarySearchBox"
+                                        QueryIcon="Find"
+                                        MinWidth="200"
+                                        TextChanged="OnGlossarySearchChanged" />
+                        <Button x:Uid="AddTermButton" Style="{StaticResource AccentButtonStyle}" Click="OnAddTermClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE710;" FontSize="14" />
+                                <TextBlock x:Uid="AddTermButtonLabel" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Uid="ImportGlossaryButton" Click="OnImportGlossaryClick">
+                            <TextBlock x:Uid="ImportGlossaryButtonLabel" />
+                        </Button>
+                        <Button x:Uid="ExportGlossaryButton" Click="OnExportGlossaryClick">
+                            <TextBlock x:Uid="ExportGlossaryButtonLabel" />
+                        </Button>
+                    </StackPanel>
+
+                    <controls:EmptyState
+                        x:Uid="GlossaryEmptyState"
+                        Glyph="&#xE8A5;"
+                        Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
+                        <controls:EmptyState.ActionContent>
+                            <Button
+                                x:Uid="GlossaryPromoteFromHistoryButton"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Click="OnPromoteFromHistoryClick" />
+                        </controls:EmptyState.ActionContent>
+                    </controls:EmptyState>
+
+                    <Border
+                        Style="{StaticResource CardBorderStyle}"
+                        Padding="0"
+                        Visibility="{x:Bind TableVisibility(ViewModel.HasActiveProfile, ViewModel.IsEmpty), Mode=OneWay}">
+                        <StackPanel>
+                            <Grid Padding="16,10" ColumnSpacing="12" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="2*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Uid="GlossarySourceColumn" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                                <TextBlock x:Uid="GlossaryTargetColumn" Grid.Column="1" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                                <TextBlock x:Uid="GlossaryScopeColumn" Grid.Column="2" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                                <TextBlock x:Uid="GlossaryProtectedColumn" Grid.Column="3" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" MinWidth="70" />
+                                <TextBlock x:Uid="GlossaryNotesColumn" Grid.Column="4" FontWeight="SemiBold" FontSize="{StaticResource TypeCaption}" />
+                            </Grid>
+                            <ItemsRepeater ItemsSource="{x:Bind Entries}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="data:GlossaryEntry">
+                                        <Grid Padding="16,10" ColumnSpacing="12" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind SourceTerm}" Style="{StaticResource BodyTextStyle}" />
+                                            <TextBlock Text="{x:Bind TargetTerm}" Grid.Column="1" Style="{StaticResource BodyTextStyle}" />
+                                            <TextBlock Text="{x:Bind Scope}" Grid.Column="2" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
+                                            <StackPanel
+                                                Grid.Column="3"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                MinWidth="70"
+                                                Visibility="{x:Bind Protected}"
+                                                VerticalAlignment="Center">
+                                                <FontIcon
+                                                    Glyph="&#xE72E;"
+                                                    FontSize="13"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock
+                                                    x:Uid="GlossaryProtectedValue"
+                                                    Style="{StaticResource CaptionTextStyle}" />
+                                            </StackPanel>
+                                            <TextBlock Text="{x:Bind Notes}" Grid.Column="4" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" />
+                                            <Button
+                                                x:Uid="EditTermButton"
+                                                Grid.Column="5"
+                                                Tag="{x:Bind}"
+                                                Click="OnEditTermClick">
+                                                <FontIcon Glyph="&#xE70F;" FontSize="13" />
+                                            </Button>
+                                            <Button
+                                                x:Uid="DeleteTermButton"
+                                                Grid.Column="6"
+                                                MinWidth="32"
+                                                MinHeight="32"
+                                                Padding="6"
+                                                VerticalAlignment="Center"
+                                                Tag="{x:Bind SourceTerm}"
+                                                Click="OnDeleteTermClick">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="13" />
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </StackPanel>
+                    </Border>
+
+                    <!--
+                        Inline edit panel (audited defect fix): editing a row no longer opens a modal
+                        dialog. It reuses the existing AddOrUpdateAsync with the correct
+                        replacingSourceTerm so renames actually rename instead of leaving orphans.
+                    -->
+                    <Border
+                        x:Name="GlossaryEditPanel"
+                        Style="{StaticResource CardBorderStyle}"
+                        Visibility="Collapsed">
+                        <StackPanel Spacing="{StaticResource SpaceS}">
+                            <TextBlock x:Uid="GlossaryEditHeader" Style="{StaticResource SectionHeaderStyle}" />
+                            <TextBox x:Name="GlossaryEditSourceBox" x:Uid="GlossaryEditSourceBox" MaxLength="1024" />
+                            <TextBox x:Name="GlossaryEditTargetBox" x:Uid="GlossaryEditTargetBox" MaxLength="4096" />
+                            <TextBox x:Name="GlossaryEditNotesBox" x:Uid="GlossaryEditNotesBox" MaxLength="4096" />
+                            <CheckBox x:Name="GlossaryEditProtectedCheck" x:Uid="GlossaryEditProtectedCheck" />
+                            <InfoBar
+                                x:Name="GlossaryEditStatusBar"
+                                IsOpen="False"
+                                IsClosable="True" />
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="{StaticResource SpaceS}"
+                                HorizontalAlignment="Right">
+                                <Button x:Uid="GlossaryEditCancelButton" Click="OnCancelGlossaryEditClick" />
+                                <Button
+                                    x:Uid="GlossaryEditSaveButton"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Click="OnSaveGlossaryEditClick" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Style prompt card -->
+                <StackPanel
+                    x:Name="StylePromptCard"
+                    Grid.Column="2"
+                    Grid.Row="0"
+                    Spacing="{StaticResource SpaceM}">
+                    <TextBlock x:Uid="StylePromptHeader" Style="{StaticResource SectionHeaderStyle}" />
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Spacing="10">
+                                <TextBlock x:Name="StylePromptVersionLabel" x:Uid="StylePromptVersionLabel" Style="{StaticResource BodyTextStyle}" />
+                                <ComboBox
+                                    x:Name="StylePromptVersionSelector"
+                                    AutomationProperties.LabeledBy="{x:Bind StylePromptVersionLabel}"
+                                    HorizontalAlignment="Stretch"
+                                    ItemsSource="{x:Bind ViewModel.StylePromptVersions}"
+                                    SelectedItem="{x:Bind ViewModel.SelectedStylePromptVersion, Mode=TwoWay}"
+                                    DisplayMemberPath="DisplayName"
+                                    SelectionChanged="OnStylePromptVersionChanged" />
+                                <Button
+                                    x:Uid="SavePromptVersionButton"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Click="OnSavePromptVersionClick">
+                                    <TextBlock x:Uid="SavePromptVersionButtonLabel" />
+                                </Button>
+                            </StackPanel>
+                            <TextBox
+                                x:Name="StylePromptNameBox"
+                                x:Uid="StylePromptNameBox"
+                                MaxLength="128" />
+                            <TextBox
+                                x:Name="StylePromptEditor"
+                                x:Uid="StylePromptEditor"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                MaxLength="8192"
+                                MinHeight="120" />
+                            <!--
+                                Transient cache-invalidation notice (audited noise defect fix): only
+                                opened by code after an explicit switch or save, never left always-open.
+                            -->
+                            <InfoBar
+                                x:Name="StylePromptCacheWarning"
+                                x:Uid="StylePromptCacheWarning"
+                                IsOpen="False"
+                                IsClosable="True"
+                                Severity="Informational" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <VisualStateManager.VisualStateGroups>
+                    <VisualStateGroup>
+                        <VisualState x:Name="WideState">
+                            <VisualState.StateTriggers>
+                                <AdaptiveTrigger MinWindowWidth="1120" />
+                            </VisualState.StateTriggers>
+                        </VisualState>
+                        <VisualState x:Name="StackedState">
+                            <VisualState.Setters>
+                                <Setter Target="GlossaryColumn.Width" Value="0" />
+                                <Setter Target="StylePromptColumn.Width" Value="0" />
+                                <Setter Target="GlossaryCard.(Grid.Column)" Value="0" />
+                                <Setter Target="GlossaryCard.(Grid.Row)" Value="1" />
+                                <Setter Target="StylePromptCard.(Grid.Column)" Value="0" />
+                                <Setter Target="StylePromptCard.(Grid.Row)" Value="2" />
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateManager.VisualStateGroups>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </Page>

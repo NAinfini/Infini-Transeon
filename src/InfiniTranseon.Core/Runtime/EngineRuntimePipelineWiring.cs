@@ -33,6 +33,11 @@ public sealed class PausableRuntimeTranslationPipeline : IRuntimeTranslationPipe
 
     public void Register(RuntimeTranslationTarget target) => _inner.Register(target);
 
+    public ValueTask ReplaceAsync(
+        RuntimeTranslationTarget target,
+        CancellationToken cancellationToken) =>
+        _inner.ReplaceAsync(target, cancellationToken);
+
     public void Unregister(TargetInstanceId targetInstanceId) =>
         _inner.Unregister(targetInstanceId);
 
@@ -138,24 +143,44 @@ public sealed class EngineRuntimeTranslationRecordSink
 }
 
 /// <summary>
-/// Default control surface backed by the pause pipeline and visibility overlay sink.
-/// Manual OCR is not exposed by protocol v1 (the EngineHost drives its own OCR cadence and
-/// has no app-initiated recognition message), so it fails loudly rather than pretending to
-/// succeed.
+/// Default control surface backed by the pause pipeline, visibility overlay sink and the
+/// authenticated EngineHost session. Manual OCR schedules one pass on the next usable frame;
+/// recognition results continue through the normal OCR event pipeline.
 /// </summary>
 public sealed class DefaultEngineRuntimeControl : IEngineRuntimeControl
 {
     private readonly PausableRuntimeTranslationPipeline _pause;
     private readonly VisibilityGatingOverlaySink _overlay;
+    private readonly IRuntimeEngineHostSession _session;
+    private readonly TimeSpan _commandTimeout;
+    private readonly RuntimeBackendCoordinator? _coordinator;
 
     public DefaultEngineRuntimeControl(
         PausableRuntimeTranslationPipeline pause,
-        VisibilityGatingOverlaySink overlay)
+        VisibilityGatingOverlaySink overlay,
+        IRuntimeEngineHostSession session,
+        TimeSpan commandTimeout)
+        : this(pause, overlay, session, commandTimeout, coordinator: null)
+    {
+    }
+
+    public DefaultEngineRuntimeControl(
+        PausableRuntimeTranslationPipeline pause,
+        VisibilityGatingOverlaySink overlay,
+        IRuntimeEngineHostSession session,
+        TimeSpan commandTimeout,
+        RuntimeBackendCoordinator? coordinator)
     {
         ArgumentNullException.ThrowIfNull(pause);
         ArgumentNullException.ThrowIfNull(overlay);
+        ArgumentNullException.ThrowIfNull(session);
+        if (commandTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(commandTimeout));
         _pause = pause;
         _overlay = overlay;
+        _session = session;
+        _commandTimeout = commandTimeout;
+        _coordinator = coordinator;
     }
 
     public ValueTask PauseAllAsync(CancellationToken cancellationToken)
@@ -179,6 +204,38 @@ public sealed class DefaultEngineRuntimeControl : IEngineRuntimeControl
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask RequestManualOcrAsync(CancellationToken cancellationToken) =>
-        throw new EngineRuntimeUnsupportedOperationException("manualOcr");
+    public async ValueTask RequestManualOcrAsync(CancellationToken cancellationToken)
+    {
+        RuntimeManualOcrAcknowledgement acknowledgement =
+            await _session.RequestManualOcrAsync(_commandTimeout, cancellationToken)
+                .ConfigureAwait(false);
+        if (!acknowledgement.Accepted)
+            throw new EngineRuntimeCommandRejectedException(
+                "manualOcr",
+                acknowledgement.ErrorCode ?? "ocr.manual.rejected");
+    }
+
+    public ValueTask ApplyProfileAsync(
+        RuntimeProfileBinding binding,
+        CancellationToken cancellationToken) =>
+        _coordinator?.ApplyProfileAsync(binding, cancellationToken) ??
+        ValueTask.FromException(
+            new EngineRuntimeUnsupportedOperationException("applyProfile"));
+
+    public async ValueTask<RuntimeThumbnail> RequestThumbnailAsync(
+        TargetInstanceId targetInstanceId,
+        int maximumLongEdge,
+        CancellationToken cancellationToken)
+    {
+        RuntimeThumbnailAcknowledgement acknowledgement =
+            await _session.RequestThumbnailAsync(
+                new RuntimeThumbnailRequest(targetInstanceId, maximumLongEdge),
+                _commandTimeout,
+                cancellationToken).ConfigureAwait(false);
+        if (!acknowledgement.Accepted || acknowledgement.Thumbnail is null)
+            throw new EngineRuntimeCommandRejectedException(
+                "thumbnail",
+                acknowledgement.ErrorCode ?? "thumbnail.rejected");
+        return acknowledgement.Thumbnail;
+    }
 }

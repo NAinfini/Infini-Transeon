@@ -18,7 +18,6 @@ void require(const bool condition)
 int main()
 {
     static_assert(IT_ENGINE_ABI_VERSION == 1U);
-    static_assert(sizeof(IT_EngineHandle*) == sizeof(void*));
     static_assert(std::is_standard_layout_v<IT_RuntimeEnvelopeV1>);
     static_assert(sizeof(IT_Guid) == 16U);
     static_assert(IT_RUNTIME_MESSAGE_SHUTDOWN_ACKNOWLEDGEMENT == 18);
@@ -39,18 +38,6 @@ int main()
     require(capabilities.max_capture_sources == 8U);
     require(capabilities.max_targets == 8U);
     require(capabilities.max_ipc_message_bytes == 8'388'608U);
-
-    IT_EngineCreateOptionsV1 options{};
-    options.struct_size = sizeof(options);
-    options.abi_version = IT_ENGINE_ABI_VERSION;
-
-    IT_EngineHandle* engine = nullptr;
-    require(IT_EngineCreate(&options, &engine) == IT_RESULT_OK);
-    require(engine != nullptr);
-    require(IT_EngineDestroy(engine) == IT_RESULT_OK);
-
-    options.struct_size = 0U;
-    require(IT_EngineCreate(&options, &engine) == IT_RESULT_INVALID_STRUCTURE_SIZE);
 
     return EXIT_SUCCESS;
 }

@@ -11,6 +11,7 @@ public enum RestHttpMethod
 
 public enum RestBodyFormat { JsonUtf8, FormUrlEncodedUtf8 }
 public enum RestResponseFormat { Json, ServerSentEvents }
+public enum RestLanguageCodeStyle { Bcp47, BaseLanguage }
 
 public sealed record RestResponseLimits(
     int MaximumHeaderBytes = 32 * 1024,
@@ -68,7 +69,8 @@ public sealed record DeclarativeRestAdapterDefinition
         RestResponseFormat responseFormat = RestResponseFormat.Json,
         RestResponseLimits? responseLimits = null,
         IReadOnlyDictionary<int, RestStatusMapping>? statusMappings = null,
-        string sseDoneMarker = "[DONE]")
+        string sseDoneMarker = "[DONE]",
+        RestLanguageCodeStyle languageCodeStyle = RestLanguageCodeStyle.Bcp47)
     {
         if (schemaVersion != 1) throw new ArgumentOutOfRangeException(nameof(schemaVersion));
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -145,6 +147,7 @@ public sealed record DeclarativeRestAdapterDefinition
         ResponseLimits = limits;
         StatusMappings = new ReadOnlyDictionary<int, RestStatusMapping>(mappings);
         SseDoneMarker = sseDoneMarker;
+        LanguageCodeStyle = languageCodeStyle;
     }
 
     public int SchemaVersion { get; }
@@ -162,6 +165,7 @@ public sealed record DeclarativeRestAdapterDefinition
     public RestResponseLimits ResponseLimits { get; }
     public IReadOnlyDictionary<int, RestStatusMapping> StatusMappings { get; }
     public string SseDoneMarker { get; }
+    public RestLanguageCodeStyle LanguageCodeStyle { get; }
 
     private static bool IsSafeHeader(string name) =>
         !string.IsNullOrWhiteSpace(name) && name.All(character =>

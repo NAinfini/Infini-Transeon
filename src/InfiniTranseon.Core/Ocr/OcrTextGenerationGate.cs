@@ -120,8 +120,10 @@ public sealed class OcrTextGenerationGate
             bool stable = state.ConsecutiveFrames >= _options.StableFrameCount &&
                 observedAtUtc - state.PendingSince >= _options.MinimumDelay;
             bool forced = observedAtUtc - state.SequenceStarted >= _options.MaximumWait;
-            if ((!stable && !forced) || string.Equals(
-                    state.EmittedText, processed.NormalizedText, StringComparison.Ordinal))
+            bool explicitlyRequested = result.ExecutionToken.IsManual;
+            if ((!stable && !forced && !explicitlyRequested) ||
+                (!explicitlyRequested && string.Equals(
+                    state.EmittedText, processed.NormalizedText, StringComparison.Ordinal)))
             {
                 generation = null;
                 return false;

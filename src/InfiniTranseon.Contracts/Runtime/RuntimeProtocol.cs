@@ -40,6 +40,8 @@ public enum RuntimeMessageKind
     ProcessingConfigurationAcknowledgement = 23,
     OcrResultAcknowledgement = 24,
     RuntimeBudgetSnapshot = 25,
+    ThumbnailRequest = 26,
+    ThumbnailAcknowledgement = 27,
 }
 
 public sealed record RuntimeEnvelopeHeader(

@@ -12,11 +12,25 @@ namespace InfiniTranseon.App.Presentation.Services;
 public sealed class RealGlossaryService : IGlossaryService
 {
     private readonly ProfileRepository _repository;
+    private readonly IRuntimeControlService? _runtime;
+    private Guid _selectedProfileId;
 
-    public RealGlossaryService(ProfileRepository repository)
+    public RealGlossaryService(
+        ProfileRepository repository,
+        IRuntimeControlService? runtime = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
         _repository = repository;
+        _runtime = runtime;
+    }
+
+    public void SelectProfile(Guid profileId)
+    {
+        if (profileId == Guid.Empty)
+        {
+            throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
+        }
+        _selectedProfileId = profileId;
     }
 
     public async Task<GlossarySnapshot> GetEntriesAsync(CancellationToken cancellationToken = default)
@@ -27,7 +41,19 @@ public sealed class RealGlossaryService : IGlossaryService
             return GlossarySnapshot.Empty;
         }
 
-        return new GlossarySnapshot(active.ProfileId, active.Name, ProfileDocumentData.ReadGlossary(active));
+        return new GlossarySnapshot(
+            active.ProfileId,
+            active.Name,
+            ProfileDocumentData.ReadGlossary(active),
+            active.StylePrompt.Versions
+                .OrderByDescending(version => version.Version)
+                .Select(version => new StylePromptVersion(
+                    version.Version,
+                    version.Name,
+                    version.Template,
+                    version.CreatedAt))
+                .ToArray(),
+            active.StylePrompt.ActiveVersion);
     }
 
     public async Task AddOrUpdateAsync(
@@ -60,17 +86,120 @@ public sealed class RealGlossaryService : IGlossaryService
         await SaveGlossaryAsync(active, entries, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task ImportAsync(
+        IReadOnlyList<GlossaryEntry> imported,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(imported);
+        ProfileDocument active = await RequireActiveAsync(cancellationToken).ConfigureAwait(false);
+        var entries = ProfileDocumentData.ReadGlossary(active)
+            .ToDictionary(entry => entry.SourceTerm, StringComparer.Ordinal);
+        foreach (GlossaryEntry entry in imported)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ArgumentException.ThrowIfNullOrWhiteSpace(entry.SourceTerm);
+            ArgumentException.ThrowIfNullOrWhiteSpace(entry.TargetTerm);
+            entries[entry.SourceTerm] = entry;
+        }
+        await SaveGlossaryAsync(
+            active,
+            entries.Values.OrderBy(entry => entry.SourceTerm, StringComparer.Ordinal).ToArray(),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SaveStylePromptVersionAsync(
+        string name,
+        string template,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(template);
+        if (name.Length > 128 || template.Length > 8_192)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(template),
+                "Style prompt names are limited to 128 characters and templates to 8192 characters.");
+        }
+
+        ProfileDocument active = await RequireActiveAsync(cancellationToken).ConfigureAwait(false);
+        if (active.StylePrompt.Versions.Count >= 32)
+        {
+            throw new InvalidOperationException(
+                "A profile can retain at most 32 style prompt versions.");
+        }
+        int version = active.StylePrompt.Versions.Count == 0
+            ? 1
+            : checked(active.StylePrompt.Versions.Max(item => item.Version) + 1);
+        List<ProfileStylePromptVersion> versions = [.. active.StylePrompt.Versions];
+        versions.Add(new ProfileStylePromptVersion
+        {
+            Version = version,
+            Name = name.Trim(),
+            Template = template.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        ProfileDocument updated = active with
+        {
+            StylePrompt = new ProfileStylePromptSettings
+            {
+                ActiveVersion = version,
+                Versions = versions,
+            },
+        };
+        await SaveAndApplyAsync(updated, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ActivateStylePromptVersionAsync(
+        int version,
+        CancellationToken cancellationToken = default)
+    {
+        if (version <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(version));
+        }
+        ProfileDocument active = await RequireActiveAsync(cancellationToken).ConfigureAwait(false);
+        if (!active.StylePrompt.Versions.Any(item => item.Version == version))
+        {
+            throw new KeyNotFoundException($"Style prompt version {version} was not found.");
+        }
+        await SaveAndApplyAsync(
+            active with
+            {
+                StylePrompt = active.StylePrompt with { ActiveVersion = version },
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task SaveGlossaryAsync(
         ProfileDocument active,
         IReadOnlyList<GlossaryEntry> entries,
         CancellationToken cancellationToken)
     {
         ProfileDocument updated = ProfileDocumentData.WithGlossary(active, entries);
-        await _repository.SaveAsync(updated, cancellationToken).ConfigureAwait(false);
+        await SaveAndApplyAsync(updated, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task SaveAndApplyAsync(
+        ProfileDocument document,
+        CancellationToken cancellationToken)
+    {
+        await _repository.SaveAsync(document, cancellationToken).ConfigureAwait(false);
+        if (_runtime is not null)
+        {
+            await _runtime
+                .ApplyProfileAsync(document.ProfileId, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<ProfileDocument?> GetActiveAsync(CancellationToken cancellationToken)
     {
+        if (_selectedProfileId != Guid.Empty)
+        {
+            return await _repository.LoadAsync(_selectedProfileId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         IReadOnlyList<ProfileDocument> documents = await _repository.ListAsync(cancellationToken).ConfigureAwait(false);
         return documents.FirstOrDefault();
     }

@@ -1,0 +1,146 @@
+<!--
+THESIS: Operational evidence stays live and readable without making the user leave the game.
+OWN-WORLD: A calm event ledger, shared status semantics, and explicit reporting tools.
+STORY: Scan live events, compare retained translations, or export a report from one destination.
+FIRST VIEWPORT: Scope selector and filters precede the newest events; reports never interrupt the feed.
+FORM: Global activity workspace in the approved native Fluent direction.
+-->
+<Page
+    x:Class="InfiniTranseon.App.Features.Activity.ActivityPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
+    xmlns:data="using:InfiniTranseon.App.Features.Activity"
+    Loaded="OnLoaded"
+    Unloaded="OnUnloaded">
+    <ScrollViewer>
+        <controls:PageShell
+            Title="{x:Bind ActivityTitle, Mode=OneTime}"
+            Subtitle="{x:Bind ActivitySubtitle, Mode=OneTime}"
+            IsLoading="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+            ErrorMessage="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}">
+            <controls:PageShell.PageContent>
+                <StackPanel Spacing="{StaticResource SpaceL}">
+                    <SelectorBar
+                        x:Name="ActivitySelector"
+                        SelectionChanged="OnActivitySectionChanged">
+                        <SelectorBarItem
+                            x:Uid="ActivityLiveTab"
+                            Tag="live"
+                            IsSelected="True" />
+                        <SelectorBarItem
+                            x:Uid="ActivityHistoryTab"
+                            Tag="history" />
+                        <SelectorBarItem
+                            x:Uid="ActivityReportsTab"
+                            Tag="reports" />
+                    </SelectorBar>
+
+                    <StackPanel x:Name="LivePanel" Spacing="{StaticResource SpaceM}">
+                        <Grid ColumnSpacing="{StaticResource SpaceM}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <AutoSuggestBox
+                                x:Name="ActivitySearchBox"
+                                x:Uid="ActivitySearchBox"
+                                QueryIcon="Find"
+                                TextChanged="OnFilterChanged" />
+                            <ComboBox
+                                x:Name="ActivityKindFilter"
+                                x:Uid="ActivityKindFilter"
+                                Grid.Column="1"
+                                SelectionChanged="OnKindFilterChanged">
+                                <ComboBoxItem x:Uid="ActivityKindAll" Tag="all" />
+                                <ComboBoxItem x:Uid="ActivityKindOcr" Tag="ocr" />
+                                <ComboBoxItem x:Uid="ActivityKindTranslation" Tag="translation" />
+                                <ComboBoxItem x:Uid="ActivityKindDiagnostic" Tag="diagnostic" />
+                            </ComboBox>
+                        </Grid>
+
+                        <controls:EmptyState
+                            x:Name="ActivityEmptyState"
+                            x:Uid="ActivityEmptyState"
+                            Glyph="&#xE9D9;" />
+
+                        <ItemsRepeater x:Name="ActivityRepeater" ItemsSource="{x:Bind Events}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Spacing="{StaticResource SpaceS}" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="data:ActivityEventRow">
+                                    <Border Style="{StaticResource CardBorderStyle}">
+                                        <Grid ColumnSpacing="{StaticResource SpaceL}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="112" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="{StaticResource SpaceXS}">
+                                                <TextBlock
+                                                    Text="{x:Bind Time}"
+                                                    Style="{StaticResource MetricTextStyle}" />
+                                                <TextBlock
+                                                    Text="{x:Bind Scope}"
+                                                    Style="{StaticResource CaptionTextStyle}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <StackPanel
+                                                Grid.Column="1"
+                                                Spacing="{StaticResource SpaceXS}">
+                                                <TextBlock
+                                                    Text="{x:Bind Title}"
+                                                    FontWeight="SemiBold" />
+                                                <TextBlock
+                                                    Text="{x:Bind Detail}"
+                                                    Style="{StaticResource CaptionTextStyle}"
+                                                    TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <controls:StatusBadge
+                                                Grid.Column="2"
+                                                Text="{x:Bind KindLabel}"
+                                                Severity="{x:Bind Severity}"
+                                                VerticalAlignment="Top" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+
+                    <Grid
+                        x:Name="HistoryPanel"
+                        MinHeight="520"
+                        Visibility="Collapsed" />
+
+                    <StackPanel
+                        x:Name="ReportsPanel"
+                        Spacing="{StaticResource SpaceM}"
+                        Visibility="Collapsed">
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="{StaticResource SpaceM}">
+                                <TextBlock
+                                    x:Uid="ActivityReportsHeader"
+                                    Style="{StaticResource SectionHeaderStyle}" />
+                                <TextBlock
+                                    x:Uid="ActivityReportsBody"
+                                    Style="{StaticResource BodyTextStyle}"
+                                    TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
+                                    <Button
+                                        x:Uid="ActivityExportButton"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnExportDiagnosticsClick" />
+                                    <Button
+                                        x:Uid="ActivityCrashFolderButton"
+                                        Click="OnOpenCrashReportsClick" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </controls:PageShell.PageContent>
+        </controls:PageShell>
+    </ScrollViewer>
+</Page>

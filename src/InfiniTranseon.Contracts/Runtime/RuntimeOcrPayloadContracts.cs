@@ -15,6 +15,7 @@ internal static class RuntimeOcrExecutionTokenCodec
         source.RuntimeEpoch.TryWriteBytes(destination[0..16]);
         source.TargetInstanceId.Value.TryWriteBytes(destination[16..32]);
         destination[32] = (byte)source.Area.Kind;
+        destination[33] = token.IsManual ? (byte)1 : (byte)0;
         source.Area.UserRegionId?.Value.TryWriteBytes(destination[36..52]);
         source.TextTrackId.Value.TryWriteBytes(destination[52..68]);
         BinaryPrimitives.WriteInt64LittleEndian(destination[68..], source.SourceGeneration);
@@ -26,7 +27,9 @@ internal static class RuntimeOcrExecutionTokenCodec
 
     internal static OcrExecutionToken Read(ReadOnlySpan<byte> source)
     {
-        if (source.Length < PayloadBytes || source[33..36].IndexOfAnyExcept((byte)0) >= 0)
+        if (source.Length < PayloadBytes ||
+            source[33] > 1 ||
+            source[34..36].IndexOfAnyExcept((byte)0) >= 0)
             throw new InvalidDataException("OCR execution token is truncated or malformed.");
         try
         {
@@ -48,7 +51,8 @@ internal static class RuntimeOcrExecutionTokenCodec
                     BinaryPrimitives.ReadInt64LittleEndian(source[76..])),
                 new Guid(source[84..100]),
                 BinaryPrimitives.ReadInt32LittleEndian(source[100..]),
-                BinaryPrimitives.ReadInt64LittleEndian(source[104..]));
+                BinaryPrimitives.ReadInt64LittleEndian(source[104..]),
+                source[33] == 1);
         }
         catch (ArgumentException exception)
         {

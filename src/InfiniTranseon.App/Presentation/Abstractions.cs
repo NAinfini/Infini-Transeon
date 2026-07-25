@@ -16,11 +16,34 @@ public enum HistoryRetention
     Days90,
 }
 
+public enum AppPerformancePreset
+{
+    Eco,
+    Balanced,
+    Performance,
+}
+
 public sealed record ApplicationSettings(
     UiThemePreference Theme,
     bool StrictOffline,
     HistoryRetention HistoryRetention,
-    string UiLanguage);
+    string UiLanguage,
+    IReadOnlyList<AppHotkeyBinding>? Hotkeys = null,
+    AppPerformancePreset PerformancePreset = AppPerformancePreset.Balanced,
+    bool ReducedMotion = false,
+    IReadOnlyDictionary<string, string>? ProviderEndpoints = null,
+    bool CloseToTray = true,
+    bool CloseToTrayConfirmed = false,
+    IReadOnlyList<Guid>? PinnedProfileIds = null)
+{
+    public IReadOnlyList<AppHotkeyBinding> EffectiveHotkeys =>
+        Hotkeys ?? HotkeyDefaults.Create();
+
+    public IReadOnlyDictionary<string, string> EffectiveProviderEndpoints =>
+        ProviderEndpoints ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
+    public IReadOnlyList<Guid> EffectivePinnedProfileIds => PinnedProfileIds ?? [];
+}
 
 // Backing repositories are asynchronous SQLite/credential stores, so every read and mutation is
 // async. View models call these from an explicit InitializeAsync/load pattern and surface failures
@@ -36,6 +59,24 @@ public interface IProfileService
     Task<Guid> SaveAsync(ProfileEditModel profile, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Guid profileId, CancellationToken cancellationToken = default);
+
+    Task ExportAsync(
+        Guid profileId,
+        Stream destination,
+        CancellationToken cancellationToken = default);
+
+    Task<Guid> ImportAsync(Stream source, CancellationToken cancellationToken = default);
+}
+
+public interface IWorkbenchService
+{
+    Task<WorkbenchProfileDraft?> LoadAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default);
+
+    Task<ProfileRuntimeApplyResult> SaveAndApplyAsync(
+        WorkbenchProfileDraft profile,
+        CancellationToken cancellationToken = default);
 }
 
 // Facade over the EngineHost runtime lifecycle for the UI. Status mirrors the Contracts
@@ -56,7 +97,7 @@ public interface IRuntimeControlService
 
     event EventHandler<EngineRuntimeStatusChange>? StatusChanged;
 
-    // Raised whenever the running capture-target set changes.
+    // Raised whenever the running capture-target set or its user-visible control state changes.
     event EventHandler? TargetsChanged;
 
     IReadOnlyList<RunningTarget> GetRunningTargets();
@@ -70,11 +111,36 @@ public interface IRuntimeControlService
     Task SetOverlayVisibleAsync(bool visible, CancellationToken cancellationToken = default);
 
     Task RequestManualOcrAsync(CancellationToken cancellationToken = default);
+
+    Task<ProfileRuntimeApplyResult> ApplyProfileAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProfileRuntimeApplyResult.SavedOnly);
+
+    Task<RuntimeThumbnail?> RequestThumbnailAsync(
+        Guid targetId,
+        int maximumLongEdge,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<RuntimeThumbnail?>(null);
+}
+
+public enum ProfileRuntimeApplyResult
+{
+    SavedOnly,
+    HotApplied,
+    Restarted,
 }
 
 public interface IHistoryService
 {
+    void SelectProfile(Guid? profileId);
+
     Task<IReadOnlyList<HistoryEvent>> GetEventsAsync(CancellationToken cancellationToken = default);
+
+    Task SaveCorrectionAsync(
+        HistoryEvent historyEvent,
+        string correctedText,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IDiagnosticsService
@@ -86,6 +152,8 @@ public interface IDiagnosticsService
 // repository. AddOrUpdate keys on SourceTerm; replacingSourceTerm names the entry being renamed.
 public interface IGlossaryService
 {
+    void SelectProfile(Guid profileId);
+
     Task<GlossarySnapshot> GetEntriesAsync(CancellationToken cancellationToken = default);
 
     Task AddOrUpdateAsync(
@@ -94,6 +162,19 @@ public interface IGlossaryService
         CancellationToken cancellationToken = default);
 
     Task RemoveAsync(string sourceTerm, CancellationToken cancellationToken = default);
+
+    Task ImportAsync(
+        IReadOnlyList<GlossaryEntry> entries,
+        CancellationToken cancellationToken = default);
+
+    Task SaveStylePromptVersionAsync(
+        string name,
+        string template,
+        CancellationToken cancellationToken = default);
+
+    Task ActivateStylePromptVersionAsync(
+        int version,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ISettingsService
@@ -103,6 +184,32 @@ public interface ISettingsService
     Task UpdateAsync(ApplicationSettings settings, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ProviderRow>> GetProvidersAsync(CancellationToken cancellationToken = default);
+
+    Task<ProviderRow> ImportRestAdapterAsync(
+        Stream source,
+        CancellationToken cancellationToken = default);
+
+    Task RemoveCustomProviderAsync(
+        string providerId,
+        CancellationToken cancellationToken = default);
+}
+
+// Update metadata and progress only. Release manifests and downloaded binaries are verified by the
+// Core update service before this presentation seam reports an installer as ready.
+public interface IAppUpdateService
+{
+    AppUpdateSnapshot Snapshot { get; }
+
+    event EventHandler? Changed;
+
+    Task CheckAsync(
+        bool explicitUserAction,
+        bool mainUiVisible,
+        CancellationToken cancellationToken = default);
+
+    Task DownloadInstallerAsync(
+        bool userApproved,
+        CancellationToken cancellationToken = default);
 }
 
 // References and presence only; the secret value never crosses into the presentation layer. Set/Clear
@@ -115,23 +222,16 @@ public interface ISecretReferenceService
 
     Task SetSecretAsync(string providerId, string secret, CancellationToken cancellationToken = default);
 
+    Task SetSecretAsync(
+        string providerId,
+        string credentialReference,
+        string secret,
+        CancellationToken cancellationToken = default);
+
     Task ClearSecretAsync(string providerId, CancellationToken cancellationToken = default);
-}
 
-// Read-only surface over protocol safety ceilings plus the latest dynamic budget snapshot
-// and reconnect revision. View models display localized disabled reasons from these values
-// and never derive their own limits.
-public interface IRuntimeCapabilitiesService
-{
-    RuntimeCapabilities Capabilities { get; }
-
-    RuntimeBudgetSnapshot? LatestBudget { get; }
-
-    long ReconnectRevision { get; }
-
-    event EventHandler? Changed;
-
-    void UpdateBudget(RuntimeBudgetSnapshot budget);
-
-    void ApplyReconnect(RuntimeReconnectSnapshot snapshot);
+    Task ClearSecretAsync(
+        string providerId,
+        string credentialReference,
+        CancellationToken cancellationToken = default);
 }

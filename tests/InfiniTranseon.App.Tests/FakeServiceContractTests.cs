@@ -66,9 +66,7 @@ public sealed class FakeServiceContractTests
         await service.SetOverlayVisibleAsync(false, ct);
         Assert.False(service.IsOverlayVisible);
 
-        // Protocol v1 has no manual-OCR message; the fake mirrors the real typed failure.
-        await Assert.ThrowsAsync<EngineRuntimeUnsupportedOperationException>(
-            () => service.RequestManualOcrAsync(ct));
+        await service.RequestManualOcrAsync(ct);
 
         await service.StopAsync(ct);
         Assert.Equal(EngineRuntimeStatus.Stopped, service.Status);

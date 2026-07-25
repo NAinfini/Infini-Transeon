@@ -13,68 +13,124 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel
+        <Grid
             x:Name="TitleBarArea"
-            Orientation="Horizontal"
-            Spacing="12"
-            Padding="16,0,0,0">
-            <FontIcon Glyph="&#xF2B7;" FontSize="16" VerticalAlignment="Center" />
-            <TextBlock
-                Text="Infini-Transeon"
-                FontSize="{StaticResource TypeCaption}"
-                VerticalAlignment="Center" />
-        </StackPanel>
+            Padding="16,0,150,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <FontIcon Glyph="&#xF2B7;" FontSize="16" VerticalAlignment="Center" />
+                <TextBlock
+                    Text="Infini-Transeon"
+                    FontSize="{StaticResource TypeCaption}"
+                    VerticalAlignment="Center" />
+            </StackPanel>
+            <Button
+                x:Name="RuntimeStatusPill"
+                Grid.Column="2"
+                Padding="10,4"
+                CornerRadius="{StaticResource BadgeCornerRadius}"
+                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                VerticalAlignment="Center"
+                Click="OnRuntimeStatusClick">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon
+                        x:Name="RuntimeStatusGlyph"
+                        Glyph="&#xE71A;"
+                        FontSize="{StaticResource TypeCaption}"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <TextBlock
+                        x:Name="RuntimeStatusText"
+                        x:Uid="RuntimeStatusText"
+                        FontSize="{StaticResource TypeCaption}"
+                        VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </Grid>
 
-        <NavigationView
-            x:Name="Nav"
-            Grid.Row="1"
-            IsBackButtonVisible="Collapsed"
-            IsSettingsVisible="False"
-            PaneDisplayMode="Left"
-            OpenPaneLength="220"
-            SelectionChanged="OnNavSelectionChanged">
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <InfoBar
+                x:Name="UpdateNotice"
+                Grid.Row="0"
+                x:Uid="UpdateAvailableNotice"
+                IsClosable="True"
+                IsOpen="False"
+                Severity="Informational">
+                <InfoBar.ActionButton>
+                    <Button
+                        x:Uid="UpdateAvailableNoticeButton"
+                        Click="OnReviewUpdateClick" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <NavigationView
+                x:Name="Nav"
+                Grid.Row="1"
+                IsBackButtonVisible="Auto"
+                IsBackEnabled="False"
+                IsSettingsVisible="False"
+                PaneDisplayMode="Left"
+                OpenPaneLength="220"
+                CompactPaneLength="48"
+                BackRequested="OnNavBackRequested"
+                SelectionChanged="OnNavSelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Uid="NavProfiles" Tag="profiles" IsSelected="True">
+                <NavigationViewItem x:Name="GlobalHomeItem" x:Uid="NavHome" Tag="home" IsSelected="True">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE7C4;" />
+                        <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Uid="NavRunningTargets" Tag="running">
+                <NavigationViewItem x:Name="WorkspaceHomeItem" x:Uid="NavWorkspaceHome" Tag="workspace-home" Visibility="Collapsed">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE768;" />
+                        <FontIcon Glyph="&#xE72B;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Uid="NavHistory" Tag="history">
+                <NavigationViewItem x:Name="WorkspaceOverviewItem" x:Uid="NavWorkspaceOverview" Tag="overview" Visibility="Collapsed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="WorkspaceCaptureItem" x:Uid="NavWorkspaceCapture" Tag="capture" Visibility="Collapsed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE722;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="WorkspaceChannelsItem" x:Uid="NavWorkspaceChannels" Tag="channels" Visibility="Collapsed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8AB;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="WorkspaceOverlayItem" x:Uid="NavWorkspaceOverlay" Tag="overlay" Visibility="Collapsed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7F4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="WorkspaceLanguageItem" x:Uid="NavWorkspaceLanguage" Tag="language" Visibility="Collapsed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xF2B7;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="WorkspaceHistoryItem" x:Uid="NavWorkspaceHistory" Tag="history" Visibility="Collapsed">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Uid="NavServicesModels" Tag="services">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE968;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemSeparator />
-                <NavigationViewItem x:Uid="NavGlossary" Tag="glossary">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE82D;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem x:Uid="NavOverlayStyles" Tag="overlaystyles">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE790;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem x:Uid="NavWorkbench" Tag="workbench">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE9E9;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Uid="NavDiagnostics" Tag="diagnostics">
+                <NavigationViewItem x:Uid="NavActivity" Tag="activity">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Uid="NavProviders" Tag="providers">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE968;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem x:Uid="NavSettings" Tag="settings">
@@ -83,7 +139,8 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
-            <Frame x:Name="ContentFrame" />
-        </NavigationView>
+                <Frame x:Name="ContentFrame" />
+            </NavigationView>
+        </Grid>
     </Grid>
 </Window>

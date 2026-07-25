@@ -75,6 +75,7 @@ public sealed class RuntimeEngineEvent : IDisposable
 public interface IRuntimeEngineHostSession : IAsyncDisposable
 {
     Guid RuntimeEpoch { get; }
+    int MonitoringProcessId => 0;
     IAsyncEnumerable<RuntimeEngineEvent> ReadEventsAsync(
         CancellationToken cancellationToken = default);
     ValueTask<RuntimeCaptureTargetAcknowledgement> ApplyCaptureTargetAsync(
@@ -94,10 +95,19 @@ public interface IRuntimeEngineHostSession : IAsyncDisposable
             RuntimeProcessingConfiguration configuration,
             TimeSpan timeout,
             CancellationToken cancellationToken);
+    ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
     ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
         OcrResultSnapshot result,
         TimeSpan timeout,
         CancellationToken cancellationToken);
+    ValueTask<RuntimeThumbnailAcknowledgement> RequestThumbnailAsync(
+        RuntimeThumbnailRequest request,
+        TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromException<RuntimeThumbnailAcknowledgement>(
+            new EngineRuntimeUnsupportedOperationException("thumbnail"));
 }
 
 public sealed class RuntimeEngineHostSession : IRuntimeEngineHostSession
@@ -154,6 +164,7 @@ public sealed class RuntimeEngineHostSession : IRuntimeEngineHostSession
     }
 
     public int ProcessId { get; }
+    public int MonitoringProcessId => ProcessId;
 
     public Guid RuntimeEpoch { get; }
 
@@ -355,6 +366,56 @@ public sealed class RuntimeEngineHostSession : IRuntimeEngineHostSession
         if (acknowledgement.TargetInstanceId != result.ExecutionToken.Source.TargetInstanceId ||
             acknowledgement.SourceGeneration != result.ExecutionToken.Source.SourceGeneration ||
             acknowledgement.ResultSequence != result.ExecutionToken.ResultSequence)
+            throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
+        return acknowledgement;
+    }
+
+    public async ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.ControlRequest,
+            RuntimeMessageKind.ControlResponse,
+            RuntimeManualOcrPayloadCodec.EncodeRequest(),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return RuntimeManualOcrPayloadCodec.DecodeAcknowledgement(responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(
+                RuntimeProtocolError.InvalidPayloadLength, exception);
+        }
+    }
+
+    public async ValueTask<RuntimeThumbnailAcknowledgement> RequestThumbnailAsync(
+        RuntimeThumbnailRequest request,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        byte[] responsePayload = await RequestAsync(
+            RuntimeMessageKind.ThumbnailRequest,
+            RuntimeMessageKind.ThumbnailAcknowledgement,
+            RuntimeThumbnailPayloadCodec.EncodeRequest(request),
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        RuntimeThumbnailAcknowledgement acknowledgement;
+        try
+        {
+            acknowledgement = RuntimeThumbnailPayloadCodec.DecodeAcknowledgement(
+                responsePayload);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new RuntimeProtocolException(
+                RuntimeProtocolError.InvalidPayloadLength,
+                exception);
+        }
+        if (acknowledgement.TargetInstanceId != request.TargetInstanceId)
             throw new RuntimeProtocolException(RuntimeProtocolError.AuthenticationFailed);
         return acknowledgement;
     }
@@ -608,7 +669,8 @@ public sealed class RuntimeEngineHostSession : IRuntimeEngineHostSession
         RuntimeMessageKind.CaptureTargetAcknowledgement or
         RuntimeMessageKind.OverlayAcknowledgement or
         RuntimeMessageKind.ProcessingConfigurationAcknowledgement or
-        RuntimeMessageKind.OcrResultAcknowledgement;
+        RuntimeMessageKind.OcrResultAcknowledgement or
+        RuntimeMessageKind.ThumbnailAcknowledgement;
 
     internal static void EnqueueEventOrThrow(
         ChannelWriter<RuntimeEngineEvent> writer,

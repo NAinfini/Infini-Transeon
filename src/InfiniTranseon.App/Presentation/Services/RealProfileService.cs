@@ -81,32 +81,119 @@ public sealed class RealProfileService : IProfileService
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task ExportAsync(
+        Guid profileId,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        if (profileId == Guid.Empty)
+            throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
+        ArgumentNullException.ThrowIfNull(destination);
+        ProfileDocument document = await _repository.LoadAsync(profileId, cancellationToken)
+            .ConfigureAwait(false) ?? throw new KeyNotFoundException("Profile was not found.");
+        new ProfileArchiveService().Export(document, destination);
+        await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<Guid> ImportAsync(
+        Stream source,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ProfileDocument imported = new ProfileArchiveService().Import(source) with
+        {
+            ProfileId = Guid.NewGuid(),
+        };
+        await _repository.SaveAsync(imported, cancellationToken).ConfigureAwait(false);
+        return imported.ProfileId;
+    }
+
     private static ProfileDocument Apply(ProfileDocument existing, ProfileEditModel edit)
     {
         // The wizard carries a provider display name or id; resolve it to the catalog's stable id.
+        CatalogProvider? catalogProvider = string.IsNullOrWhiteSpace(edit.TranslationProviderId)
+            ? null
+            : ProviderCatalog.Find(edit.TranslationProviderId);
+        if (catalogProvider is { IsSelectable: false })
+            throw new InvalidOperationException(
+                $"Provider '{catalogProvider.DisplayName}' is not installed or runtime-ready.");
         string providerId = string.IsNullOrWhiteSpace(edit.TranslationProviderId)
             ? string.Empty
-            : ProviderCatalog.Find(edit.TranslationProviderId)?.Id ?? edit.TranslationProviderId;
+            : catalogProvider?.Id ?? edit.TranslationProviderId;
 
-        var regions = edit.Regions.Select(region =>
-            ProfileRegion.Create(region.Name, new NormalizedRect(0, 0, 1, 1)) with
+        ProfileTarget? primaryExistingTarget = existing.Targets.FirstOrDefault(target =>
+            target.TargetId == edit.TargetId) ?? existing.Targets.FirstOrDefault();
+
+        List<ProfileRegion> BuildPrimaryRegions(ProfileTarget? existingTarget)
+        {
+            var existingRegions = (existingTarget?.Regions ?? [])
+                .ToDictionary(region => region.RegionId);
+            return edit.Regions.Select(region =>
             {
-                Priority = ToCorePriority(region.Priority),
-                TranslationChannels = string.IsNullOrWhiteSpace(providerId)
+                ProfileRegion? preserved = region.RegionId == Guid.Empty
+                    ? null
+                    : existingRegions.GetValueOrDefault(region.RegionId);
+                var bounds = new NormalizedRect(region.X, region.Y, region.Width, region.Height);
+                List<ProfileTranslationChannel> channels = string.IsNullOrWhiteSpace(providerId)
+                    ? preserved?.TranslationChannels ?? []
+                    :
+                    [
+                        ProfileTranslationChannel.Create(providerId) with { DisplayOrder = 0 },
+                    ];
+                return (preserved ?? ProfileRegion.Create(region.Name, bounds)) with
+                {
+                    RegionId = region.RegionId == Guid.Empty
+                        ? preserved?.RegionId ?? Guid.NewGuid()
+                        : region.RegionId,
+                    Name = region.Name,
+                    Bounds = bounds,
+                    Priority = ProfilePresentationMapper.Priority(region.Priority),
+                    ContextRole = ProfilePresentationMapper.ContextRole(region.ContextRole),
+                    TranslationChannels = channels,
+                };
+            }).ToList();
+        }
+
+        List<ProfileRegion> BuildNewTargetRegions() =>
+            edit.Regions.Select(region =>
+            {
+                var bounds = new NormalizedRect(region.X, region.Y, region.Width, region.Height);
+                List<ProfileTranslationChannel> channels = string.IsNullOrWhiteSpace(providerId)
                     ? []
                     :
                     [
                         ProfileTranslationChannel.Create(providerId) with { DisplayOrder = 0 },
-                    ],
+                    ];
+                return ProfileRegion.Create(region.Name, bounds) with
+                {
+                    Priority = ProfilePresentationMapper.Priority(region.Priority),
+                    ContextRole = ProfilePresentationMapper.ContextRole(region.ContextRole),
+                    TranslationChannels = channels,
+                };
             }).ToList();
 
-        var target = ProfileTarget.Create(
-            string.IsNullOrWhiteSpace(edit.TargetName) ? edit.Name : edit.TargetName,
-            ParseKind(edit.TargetKind)) with
+        var targets = new List<ProfileTarget>();
+        foreach (ProfileCaptureTargetDraft captureTarget in edit.EffectiveCaptureTargets)
         {
-            TargetId = edit.TargetId == Guid.Empty ? Guid.NewGuid() : edit.TargetId,
-            Regions = regions,
-        };
+            ProfileTarget? existingTarget = existing.Targets.FirstOrDefault(target =>
+                target.TargetId == captureTarget.TargetId);
+            bool isPrimary = captureTarget.TargetId == edit.TargetId ||
+                captureTarget == edit.EffectiveCaptureTargets[0];
+            List<ProfileRegion> regions = isPrimary
+                ? BuildPrimaryRegions(primaryExistingTarget)
+                : existingTarget?.Regions ?? BuildNewTargetRegions();
+            CaptureTargetKind kind = ProfilePresentationMapper.CaptureTargetKind(captureTarget.Kind);
+            targets.Add((existingTarget ?? ProfileTarget.Create(captureTarget.Name, kind)) with
+            {
+                TargetId = captureTarget.TargetId == Guid.Empty
+                    ? existingTarget?.TargetId ?? Guid.NewGuid()
+                    : captureTarget.TargetId,
+                Name = string.IsNullOrWhiteSpace(captureTarget.Name) ? edit.Name : captureTarget.Name,
+                Kind = kind,
+                DesktopRegion = captureTarget.DesktopRegion,
+                Regions = regions,
+            });
+        }
 
         ProfileDocument document = existing with
         {
@@ -115,7 +202,7 @@ public sealed class RealProfileService : IProfileService
             Name = edit.Name,
             SourceLanguage = edit.SourceLanguage,
             TargetLanguage = edit.TargetLanguage,
-            Targets = [target],
+            Targets = targets,
         };
 
         return ProfileDocumentData.WithResolution(document, edit.Resolution);
@@ -131,7 +218,11 @@ public sealed class RealProfileService : IProfileService
         return new ProfileCard(
             document.ProfileId,
             document.Name,
-            target is null ? "No capture target" : $"{target.Name} ({target.Kind})",
+            target is null
+                ? "No capture target"
+                : document.Targets.Count > 1
+                    ? $"{target.Name} ({target.Kind}) +{document.Targets.Count - 1}"
+                    : $"{target.Name} ({target.Kind})",
             string.IsNullOrEmpty(resolution) ? "—" : resolution,
             $"{document.SourceLanguage} → {document.TargetLanguage}",
             regionCount,
@@ -149,8 +240,24 @@ public sealed class RealProfileService : IProfileService
             .Select(channel => channel.InitialProviderId)
             .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id)) ?? string.Empty;
         var regions = target?.Regions
-            .Select(region => new ProfileRegionDraft(region.Name, ToDraftPriority(region.Priority)))
+            .Select(region => new ProfileRegionDraft(
+                region.Name,
+                ProfilePresentationMapper.Priority(region.Priority),
+                region.RegionId,
+                region.Bounds.X,
+                region.Bounds.Y,
+                region.Bounds.Width,
+                region.Bounds.Height,
+                ProfilePresentationMapper.ContextRole(region.ContextRole)))
             .ToArray() ?? [];
+        ProfileCaptureTargetDraft[] captureTargets = document.Targets
+            .Select(current => new ProfileCaptureTargetDraft(
+                current.TargetId,
+                current.Name,
+                current.Kind.ToString(),
+                ProfileDocumentData.ReadResolution(document),
+                current.DesktopRegion))
+            .ToArray();
         return new ProfileEditModel(
             document.ProfileId,
             document.Name,
@@ -161,25 +268,9 @@ public sealed class RealProfileService : IProfileService
             target?.Kind.ToString() ?? nameof(CaptureTargetKind.Window),
             ProfileDocumentData.ReadResolution(document),
             providerId,
-            regions);
+            regions,
+            target?.DesktopRegion,
+            captureTargets);
     }
 
-    private static CaptureTargetKind ParseKind(string kind) =>
-        Enum.TryParse(kind, ignoreCase: true, out CaptureTargetKind parsed) ? parsed : CaptureTargetKind.Window;
-
-    private static RegionPriority ToCorePriority(RegionPriorityLevel priority) => priority switch
-    {
-        RegionPriorityLevel.P0 => RegionPriority.P0,
-        RegionPriorityLevel.P1 => RegionPriority.P1,
-        RegionPriorityLevel.P2 => RegionPriority.P2,
-        _ => RegionPriority.P3,
-    };
-
-    private static RegionPriorityLevel ToDraftPriority(RegionPriority priority) => priority switch
-    {
-        RegionPriority.P0 => RegionPriorityLevel.P0,
-        RegionPriority.P1 => RegionPriorityLevel.P1,
-        RegionPriority.P2 => RegionPriorityLevel.P2,
-        _ => RegionPriorityLevel.P3,
-    };
 }

@@ -4,16 +4,18 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:uap11="http://schemas.microsoft.com/appx/manifest/uap/windows10/11"
-  IgnorableNamespaces="uap uap10 uap11">
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap10 uap11 rescap">
   <Identity
     Name="InfiniTranseon.Desktop"
-    Publisher="CN=Infini-Transeon Development"
+    Publisher="CN=InfiniTranseon"
     Version="0.1.0.0"
-    ProcessorArchitecture="x64" />
+    ProcessorArchitecture="neutral" />
   <Properties>
     <DisplayName>Infini-Transeon</DisplayName>
     <PublisherDisplayName>Infini-Transeon</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
   </Properties>
   <Dependencies>
     <TargetDeviceFamily
@@ -29,18 +31,29 @@
     <Application
       Id="App"
       Executable="InfiniTranseon.App.exe"
-      EntryPoint="Windows.FullTrustApplication"
-      uap10:RuntimeBehavior="packagedClassicApp"
+      uap10:RuntimeBehavior="win32App"
       uap10:TrustLevel="mediumIL">
       <uap:VisualElements
+        AppListEntry="none"
         DisplayName="Infini-Transeon"
         Description="Game OCR and translation overlay"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- Deep links: infinitranseon://profiles/{id}[/{section}][?start=1]. Only registered when the
+             app runs with package identity; the equivalent command line stays available without it. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="infinitranseon">
+            <uap:DisplayName>Infini-Transeon</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
     <uap11:Capability Name="graphicsCaptureWithoutBorder" />
   </Capabilities>
 </Package>

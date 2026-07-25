@@ -94,6 +94,25 @@ public sealed class RuntimeEngineHostLauncherTests
     }
 
     [Fact]
+    public async Task ManualOcrWithoutTargetsReceivesExplicitRejection()
+    {
+        await using RuntimeEngineHostSession session =
+            await RuntimeEngineHostLauncher.LaunchAsync(
+                FindEngineHostExecutable(),
+                TimeSpan.FromSeconds(10),
+                TestContext.Current.CancellationToken);
+
+        RuntimeManualOcrAcknowledgement acknowledgement =
+            await session.RequestManualOcrAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken);
+
+        Assert.False(acknowledgement.Accepted);
+        Assert.Equal(RuntimeManualOcrStatus.NoTargets, acknowledgement.Status);
+        Assert.Equal("ocr.manual.noTargets", acknowledgement.ErrorCode);
+    }
+
+    [Fact]
     public async Task CorrelatesConcurrentRequestsThroughOneReceiveLoop()
     {
         await using RuntimeEngineHostSession session =
@@ -397,13 +416,13 @@ public sealed class RuntimeEngineHostLauncherTests
         [
             Path.Combine(
                 directory.FullName,
-                "artifacts", "cmake", $"ninja-{configuration.ToLowerInvariant()}",
-                "src", "InfiniTranseon.EngineHost", "InfiniTranseon.EngineHost.exe"),
-            Path.Combine(
-                directory.FullName,
                 "artifacts", "cmake", "windows-x64",
                 "src", "InfiniTranseon.EngineHost", configuration,
                 "InfiniTranseon.EngineHost.exe"),
+            Path.Combine(
+                directory.FullName,
+                "artifacts", "cmake", $"ninja-{configuration.ToLowerInvariant()}",
+                "src", "InfiniTranseon.EngineHost", "InfiniTranseon.EngineHost.exe"),
         ];
         string? path = candidates.FirstOrDefault(File.Exists);
         Assert.True(path is not null,

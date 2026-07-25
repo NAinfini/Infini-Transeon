@@ -44,14 +44,20 @@ public sealed class GoogleVisionOcrProvider : IOcrProvider
         _credentials = credentials;
     }
 
-    public CredentialBinding CreateCredentialBinding() => new(
-        ProviderId,
-        "api-key",
-        "https",
-        _options.Endpoint.IdnHost,
-        _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port,
-        "x-goog-api-key",
-        _options.ProxyPolicy);
+    public CredentialBinding CreateCredentialBinding() => CreateCredentialBinding(_options);
+
+    public static CredentialBinding CreateCredentialBinding(GoogleVisionOcrOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new CredentialBinding(
+            ProviderId,
+            "api-key",
+            "https",
+            options.Endpoint.IdnHost,
+            options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port,
+            "x-goog-api-key",
+            options.ProxyPolicy);
+    }
 
     public async ValueTask<OcrResultSnapshot> RecognizeAsync(
         CloudOcrProviderRequest request,

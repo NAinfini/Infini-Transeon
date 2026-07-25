@@ -1,6 +1,8 @@
 # Capture platform spike results
 
-**Status:** Harness implemented; manual hardware and consent matrix not yet executed. Backend Tasks 3 and 11 remain blocked.
+**Status:** Harness implemented; one local desktop session was partially executed on 2026-07-23.
+See `docs/testing/hardware-acceptance-2026-07-23.md`. Real-game, consent-persistence,
+multi-window runtime and cloud-service rows remain open.
 
 ## Automated evidence
 
@@ -10,6 +12,8 @@
 - The borderless-consent command refuses to request access when package identity is absent.
 - The adapter inventory command completed on the development host and reported all DXGI adapters plus
   attached-output physical coordinates. This is inventory evidence only, not cross-adapter capture evidence.
+- The display inventory command reports current display modes plus coordinate scale; the window inventory
+  command reports UTF-8 top-level capture candidates with window DPI and owning monitor.
 - No automated command opens the system consent prompt.
 
 ## Commands
@@ -22,6 +26,8 @@ InfiniTranseon.CaptureSpike.exe --request-borderless
 InfiniTranseon.CaptureSpike.exe --capture-exclusion
 InfiniTranseon.CaptureSpike.exe --hotkey-probe
 InfiniTranseon.CaptureSpike.exe --adapter-inventory
+InfiniTranseon.CaptureSpike.exe --display-inventory
+InfiniTranseon.CaptureSpike.exe --window-inventory
 ```
 
 The borderless command may display a Windows system prompt. The exclusion command verifies the display-affinity

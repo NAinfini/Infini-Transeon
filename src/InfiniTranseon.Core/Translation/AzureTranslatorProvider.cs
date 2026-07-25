@@ -39,16 +39,20 @@ public sealed class AzureTranslatorProvider : ITranslationProvider
     }
 
     public CredentialBinding CreateCredentialBinding()
+        => CreateCredentialBinding(_options);
+
+    public static CredentialBinding CreateCredentialBinding(AzureTranslatorOptions options)
     {
-        int port = _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port;
+        ArgumentNullException.ThrowIfNull(options);
+        int port = options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port;
         return new CredentialBinding(
             "translation.azure-ai",
             "api-key",
-            _options.Endpoint.Scheme,
-            _options.Endpoint.IdnHost,
+            options.Endpoint.Scheme,
+            options.Endpoint.IdnHost,
             port,
             "ocp-apim-subscription-key",
-            _options.ProxyPolicy);
+            options.ProxyPolicy);
     }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(

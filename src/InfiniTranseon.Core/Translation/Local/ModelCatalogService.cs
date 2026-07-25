@@ -14,7 +14,12 @@ public sealed record ModelCatalogEntry(
     int Opset,
     IReadOnlyList<string> Architectures,
     IReadOnlyList<Uri> DownloadOrigins,
-    IReadOnlyList<ModelCatalogFile> Files);
+    IReadOnlyList<ModelCatalogFile> Files)
+{
+    public string? DisplayName { get; init; }
+    public IReadOnlyList<string> SourceLanguages { get; init; } = [];
+    public IReadOnlyList<string> TargetLanguages { get; init; } = [];
+}
 
 public sealed record ModelCatalogDocument(
     int SchemaVersion,
@@ -59,11 +64,17 @@ public sealed class VerifiedModelCatalog
         Architectures = Array.AsReadOnly(model.Architectures.ToArray()),
         DownloadOrigins = Array.AsReadOnly(model.DownloadOrigins.ToArray()),
         Files = Array.AsReadOnly(model.Files.ToArray()),
+        SourceLanguages = Array.AsReadOnly(model.SourceLanguages.ToArray()),
+        TargetLanguages = Array.AsReadOnly(model.TargetLanguages.ToArray()),
     };
 }
 
 public sealed class ModelCatalogService
 {
+    private static readonly HashSet<string> ExecutableExtensions = new(
+        [".bat", ".cmd", ".com", ".dll", ".exe", ".js", ".msi", ".ps1", ".py", ".scr", ".vbs"],
+        StringComparer.OrdinalIgnoreCase);
+
     private readonly SignatureVerifier _verifier;
     private readonly ISignedSequenceState _sequence;
 
@@ -97,18 +108,30 @@ public sealed class ModelCatalogService
 
     internal static void Validate(ModelCatalogDocument document)
     {
-        if (document.SchemaVersion != 1 || document.CatalogSequence < 1 || document.Models.Count > 64)
+        if (document.SchemaVersion != 1 ||
+            document.CatalogSequence < 1 ||
+            document.Models is null ||
+            document.Models.Count > 64)
             throw new InvalidDataException("Model catalog header is invalid.");
         if (document.Models.Select(item => (item.ModelId, item.Version)).Distinct().Count() != document.Models.Count)
             throw new InvalidDataException("Model catalog identities must be unique.");
         foreach (ModelCatalogEntry model in document.Models)
         {
+            if (model is null)
+                throw new InvalidDataException("Model catalog contains a null entry.");
             ArgumentException.ThrowIfNullOrWhiteSpace(model.ModelId);
             ArgumentException.ThrowIfNullOrWhiteSpace(model.Version);
             ArgumentException.ThrowIfNullOrWhiteSpace(model.LicenseSpdx);
             ArgumentException.ThrowIfNullOrWhiteSpace(model.Runtime);
-            if (!model.Architectures.Contains("win-x64", StringComparer.Ordinal) ||
-                model.DownloadOrigins.Count == 0 || model.Files.Count == 0 ||
+            if (model.Architectures is null ||
+                model.DownloadOrigins is null ||
+                model.Files is null ||
+                model.SourceLanguages is null ||
+                model.TargetLanguages is null ||
+                !model.Architectures.Contains("win-x64", StringComparer.Ordinal) ||
+                model.DownloadOrigins.Count == 0 ||
+                model.DownloadOrigins.Count > 16 ||
+                model.Files.Count is 0 or > 1024 ||
                 model.Opset is < 0 or > 100 ||
                 model.DownloadOrigins.Any(origin => !origin.IsAbsoluteUri || origin.Scheme != Uri.UriSchemeHttps ||
                     !string.IsNullOrEmpty(origin.UserInfo) || !string.IsNullOrEmpty(origin.Query) ||
@@ -116,6 +139,19 @@ public sealed class ModelCatalogService
                 throw new InvalidDataException($"Model '{model.ModelId}' has invalid platform or origins.");
             if (!IsIdentifier(model.ModelId))
                 throw new InvalidDataException("Model identifier is not path-safe.");
+            if (model.DisplayName is { Length: > 128 } ||
+                model.SourceLanguages.Count > 64 ||
+                model.TargetLanguages.Count > 64 ||
+                model.SourceLanguages.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    model.SourceLanguages.Count ||
+                model.TargetLanguages.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    model.TargetLanguages.Count ||
+                model.SourceLanguages.Concat(model.TargetLanguages).Any(language =>
+                    string.IsNullOrWhiteSpace(language) ||
+                    language.Length > 35 ||
+                    language.Any(character => !(char.IsAsciiLetterOrDigit(character) ||
+                        character is '-' or '_'))))
+                throw new InvalidDataException($"Model '{model.ModelId}' has invalid display metadata.");
             if (model.Files.Select(file => file.RelativePath).Distinct(StringComparer.Ordinal).Count() !=
                 model.Files.Count)
                 throw new InvalidDataException($"Model '{model.ModelId}' contains duplicate file paths.");
@@ -124,12 +160,46 @@ public sealed class ModelCatalogService
                     model.Files[0].RelativePath != $"phrase-tables/{model.ModelId}.json"))
                 throw new InvalidDataException(
                     $"Phrase table '{model.ModelId}' must use the worker-owned canonical path.");
+            if (string.Equals(
+                    model.Runtime,
+                    "ctranslate2-madlad-v1",
+                    StringComparison.Ordinal) &&
+                (model.Opset != 0 ||
+                    !new[]
+                    {
+                        "config.json",
+                        "model.bin",
+                        "shared_vocabulary.json",
+                        "spiece.model",
+                    }.All(required => model.Files.Any(file =>
+                        string.Equals(
+                            file.RelativePath,
+                            required,
+                            StringComparison.Ordinal)))))
+                throw new InvalidDataException(
+                    $"CTranslate2 model '{model.ModelId}' is missing a required data file.");
+            long totalBytes = 0;
             foreach (ModelCatalogFile file in model.Files)
             {
                 ModelPathPolicy.ValidateRelativePath(file.RelativePath);
-                if (file.ByteSize < 1 || file.Sha256.Length != 64 ||
+                if (file.ByteSize < 1 ||
+                    file.Sha256 is null ||
+                    file.Sha256.Length != 64 ||
                     !file.Sha256.All(character => char.IsAsciiHexDigit(character)))
                     throw new InvalidDataException($"Model '{model.ModelId}' has an invalid file.");
+                try
+                {
+                    totalBytes = checked(totalBytes + file.ByteSize);
+                }
+                catch (OverflowException exception)
+                {
+                    throw new InvalidDataException(
+                        $"Model '{model.ModelId}' has an invalid total size.",
+                        exception);
+                }
+                if (ExecutableExtensions.Contains(Path.GetExtension(file.RelativePath)))
+                    throw new InvalidDataException(
+                        $"Model '{model.ModelId}' contains executable content. Model packages may contain data only.");
             }
         }
     }

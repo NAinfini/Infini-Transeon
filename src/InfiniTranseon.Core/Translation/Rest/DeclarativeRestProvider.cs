@@ -156,6 +156,24 @@ public sealed class DeclarativeRestProvider : ITranslationProvider
                         out string? translated) ||
                     string.IsNullOrEmpty(translated))
                 {
+                    if (_definition.ResponseErrorJsonPointer is not null &&
+                        TrySelectString(
+                            document.RootElement,
+                            _definition.ResponseErrorJsonPointer,
+                            out string? providerError) &&
+                        !string.IsNullOrWhiteSpace(providerError))
+                    {
+                        string safeCode = new string(providerError
+                            .Where(character => char.IsAsciiLetterOrDigit(character) ||
+                                character is '.' or '-' or '_')
+                            .Take(64)
+                            .ToArray());
+                        return [new ProviderWireFailure(
+                            safeCode.Length == 0
+                                ? "provider.remoteError"
+                                : _definition.Id + "." + safeCode,
+                            false)];
+                    }
                     return [new ProviderWireFailure("provider.malformedResponse", false)];
                 }
                 return [new ProviderDelta(1, translated), new ProviderDone(1, new ProviderUsage(
@@ -211,10 +229,12 @@ public sealed class DeclarativeRestProvider : ITranslationProvider
             : _definition.BodyFormat == RestBodyFormat.JsonUtf8
                 ? JsonEncodedText.Encode(value).ToString()
                 : Uri.EscapeDataString(value);
+        string sourceLanguage = MapLanguageCode(request.SourceLanguage);
+        string targetLanguage = MapLanguageCode(request.TargetLanguage);
         string result = template
             .Replace("{{sourceText}}", Encode(request.SourceText), StringComparison.Ordinal)
-            .Replace("{{sourceLanguage}}", Encode(request.SourceLanguage), StringComparison.Ordinal)
-            .Replace("{{targetLanguage}}", Encode(request.TargetLanguage), StringComparison.Ordinal)
+            .Replace("{{sourceLanguage}}", Encode(sourceLanguage), StringComparison.Ordinal)
+            .Replace("{{targetLanguage}}", Encode(targetLanguage), StringComparison.Ordinal)
             .Replace("{{gameName}}", Encode(request.Context.GameName ?? string.Empty), StringComparison.Ordinal)
             .Replace("{{gameDescription}}", Encode(request.Context.GameDescription ?? string.Empty), StringComparison.Ordinal)
             .Replace("{{context}}", Encode(BuildContext(request.Context)), StringComparison.Ordinal)
@@ -236,6 +256,17 @@ public sealed class DeclarativeRestProvider : ITranslationProvider
                 StringComparison.Ordinal);
         }
         return result;
+    }
+
+    private string MapLanguageCode(string language)
+    {
+        if (_definition.LanguageCodeStyle == RestLanguageCodeStyle.Bcp47)
+            return language;
+        string normalized = language.Trim();
+        if (string.Equals(normalized, "auto", StringComparison.OrdinalIgnoreCase))
+            return "auto";
+        int separator = normalized.IndexOf('-');
+        return (separator < 0 ? normalized : normalized[..separator]).ToLowerInvariant();
     }
 
     public CredentialBinding CreateBinding(string reference) =>

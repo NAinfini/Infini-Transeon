@@ -9,8 +9,11 @@
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
 #include <winrt/Windows.Graphics.Capture.h>
 
+#include <array>
+#include <cstdint>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -280,6 +283,198 @@ int report_adapter_inventory()
     return adapter_index == 0 ? platform_error : success;
 }
 
+using get_dpi_for_monitor_function = HRESULT(WINAPI*)(
+    HMONITOR monitor, int dpi_type, UINT* dpi_x, UINT* dpi_y);
+
+struct display_inventory_context final
+{
+    get_dpi_for_monitor_function get_dpi_for_monitor{};
+    unsigned int count{};
+};
+
+BOOL CALLBACK report_display(
+    const HMONITOR monitor,
+    HDC,
+    RECT*,
+    const LPARAM parameter)
+{
+    auto& context = *reinterpret_cast<display_inventory_context*>(parameter);
+    MONITORINFOEXW information{};
+    information.cbSize = sizeof(information);
+    if (!GetMonitorInfoW(monitor, &information))
+    {
+        std::cerr << "displayInventory=error stage=get-monitor-info win32="
+                  << GetLastError() << '\n';
+        return FALSE;
+    }
+
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    const bool has_mode = EnumDisplaySettingsExW(
+        information.szDevice, ENUM_CURRENT_SETTINGS, &mode, 0) != FALSE;
+    UINT dpi_x = 0;
+    UINT dpi_y = 0;
+    const bool has_dpi = context.get_dpi_for_monitor != nullptr &&
+        SUCCEEDED(context.get_dpi_for_monitor(monitor, 0, &dpi_x, &dpi_y));
+    const RECT rect = information.rcMonitor;
+    const RECT work = information.rcWork;
+    std::wcout << L"display index=" << context.count
+               << L" device=" << information.szDevice
+               << L" primary="
+               << ((information.dwFlags & MONITORINFOF_PRIMARY) != 0 ? L"true" : L"false")
+               << L" desktopRect=" << rect.left << L',' << rect.top << L','
+               << rect.right << L',' << rect.bottom
+               << L" workRect=" << work.left << L',' << work.top << L','
+               << work.right << L',' << work.bottom;
+    if (has_mode)
+    {
+        std::wcout << L" modePixels=" << mode.dmPelsWidth << L'x' << mode.dmPelsHeight
+                   << L" refreshHz=" << mode.dmDisplayFrequency;
+        const LONG desktop_width = rect.right - rect.left;
+        const unsigned int coordinate_scale_percent = has_dpi
+            ? static_cast<unsigned int>(
+                (static_cast<unsigned long long>(dpi_x) * 100ULL + 48ULL) / 96ULL)
+            : desktop_width > 0
+                ? static_cast<unsigned int>(
+                    (static_cast<unsigned long long>(mode.dmPelsWidth) * 100ULL) /
+                    static_cast<unsigned long long>(desktop_width))
+                : 0U;
+        std::wcout << L" coordinateScalePercent=" << coordinate_scale_percent;
+    }
+    else
+    {
+        std::wcout << L" modePixels=unavailable";
+    }
+    if (has_dpi)
+    {
+        std::wcout << L" monitorApiDpi=" << dpi_x << L'x' << dpi_y;
+    }
+    else
+    {
+        std::wcout << L" monitorApiDpi=unavailable";
+    }
+    std::wcout << L'\n';
+    ++context.count;
+    return TRUE;
+}
+
+int report_display_inventory()
+{
+    const HMODULE shcore = LoadLibraryW(L"Shcore.dll");
+    auto get_dpi_for_monitor = shcore == nullptr
+        ? nullptr
+        : reinterpret_cast<get_dpi_for_monitor_function>(
+            GetProcAddress(shcore, "GetDpiForMonitor"));
+    display_inventory_context context{get_dpi_for_monitor, 0U};
+    const BOOL enumerated = EnumDisplayMonitors(
+        nullptr, nullptr, report_display, reinterpret_cast<LPARAM>(&context));
+    if (shcore != nullptr) FreeLibrary(shcore);
+    if (!enumerated)
+    {
+        std::cerr << "displayInventory=error stage=enumerate win32="
+                  << GetLastError() << '\n';
+        return platform_error;
+    }
+    std::cout << "displayInventory=complete displays=" << context.count << '\n';
+    return context.count == 0 ? platform_error : success;
+}
+
+std::wstring single_line(std::wstring value)
+{
+    std::ranges::replace(value, L'\r', L' ');
+    std::ranges::replace(value, L'\n', L' ');
+    return value;
+}
+
+std::string utf8(const std::wstring_view value)
+{
+    if (value.empty()) return {};
+    const int required = WideCharToMultiByte(
+        CP_UTF8,
+        WC_ERR_INVALID_CHARS,
+        value.data(),
+        static_cast<int>(value.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (required <= 0) return "<unencodable>";
+    std::string result(static_cast<std::size_t>(required), '\0');
+    const int written = WideCharToMultiByte(
+        CP_UTF8,
+        WC_ERR_INVALID_CHARS,
+        value.data(),
+        static_cast<int>(value.size()),
+        result.data(),
+        required,
+        nullptr,
+        nullptr);
+    return written == required ? result : "<unencodable>";
+}
+
+struct window_inventory_context final
+{
+    unsigned int count{};
+};
+
+BOOL CALLBACK report_window(const HWND window, const LPARAM parameter)
+{
+    if (!IsWindowVisible(window) || GetWindow(window, GW_OWNER) != nullptr)
+        return TRUE;
+
+    const int title_length = GetWindowTextLengthW(window);
+    if (title_length <= 0) return TRUE;
+    std::wstring title(static_cast<std::size_t>(title_length) + 1U, L'\0');
+    const int copied = GetWindowTextW(window, title.data(), title_length + 1);
+    if (copied <= 0) return TRUE;
+    title.resize(static_cast<std::size_t>(copied));
+
+    std::array<wchar_t, 256U> class_name{};
+    const int class_length = GetClassNameW(
+        window, class_name.data(), static_cast<int>(class_name.size()));
+    RECT rect{};
+    if (!GetWindowRect(window, &rect)) return TRUE;
+    DWORD process_id{};
+    GetWindowThreadProcessId(window, &process_id);
+    const UINT dpi = GetDpiForWindow(window);
+    const HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+    MONITORINFOEXW monitor_information{};
+    monitor_information.cbSize = sizeof(monitor_information);
+    const bool has_monitor = GetMonitorInfoW(monitor, &monitor_information) != FALSE;
+
+    auto& context = *reinterpret_cast<window_inventory_context*>(parameter);
+    const std::wstring clean_title = single_line(std::move(title));
+    const std::wstring_view window_class(
+        class_name.data(),
+        class_length > 0 ? static_cast<std::size_t>(class_length) : 0U);
+    std::cout << "window index=" << context.count
+              << " hwnd=0x" << std::hex
+              << reinterpret_cast<std::uintptr_t>(window) << std::dec
+              << " pid=" << process_id
+              << " title=\"" << utf8(clean_title) << '\"'
+              << " class=\"" << utf8(window_class) << '\"'
+              << " rect=" << rect.left << ',' << rect.top << ','
+              << rect.right << ',' << rect.bottom
+              << " dpi=" << dpi;
+    if (has_monitor) std::cout << " monitor=" << utf8(monitor_information.szDevice);
+    std::cout << '\n';
+    ++context.count;
+    return TRUE;
+}
+
+int report_window_inventory()
+{
+    window_inventory_context context{};
+    if (!EnumWindows(report_window, reinterpret_cast<LPARAM>(&context)))
+    {
+        std::cerr << "windowInventory=error stage=enumerate win32="
+                  << GetLastError() << '\n';
+        return platform_error;
+    }
+    std::cout << "windowInventory=complete candidates=" << context.count << '\n';
+    return success;
+}
+
 void print_help()
 {
     std::cout
@@ -289,6 +484,8 @@ void print_help()
         << "  --capture-exclusion       Verify WDA_EXCLUDEFROMCAPTURE and show a 15-second manual probe.\n"
         << "  --hotkey-probe            Wait 30 seconds for Ctrl+Alt+F10.\n"
         << "  --adapter-inventory       Report DXGI adapters and attached outputs.\n"
+        << "  --display-inventory       Report monitor modes, effective DPI and scale.\n"
+        << "  --window-inventory        Report visible top-level capture candidates.\n"
         << "  --help                     Show this help.\n";
 }
 }
@@ -321,6 +518,8 @@ int main(const int argument_count, const char* const* const arguments)
     if (command == "--capture-exclusion") return probe_capture_exclusion();
     if (command == "--hotkey-probe") return probe_global_hotkey();
     if (command == "--adapter-inventory") return report_adapter_inventory();
+    if (command == "--display-inventory") return report_display_inventory();
+    if (command == "--window-inventory") return report_window_inventory();
 
     std::cerr << "Unknown capture-spike command. Use --help.\n";
     return invalid_usage;

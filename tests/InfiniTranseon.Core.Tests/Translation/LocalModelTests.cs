@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Translation.Local;
@@ -168,6 +169,32 @@ public sealed class LocalModelTests
         Assert.Throws<InvalidDataException>(() => ModelCatalogService.Validate(document));
     }
 
+    [Theory]
+    [InlineData("runtime.dll")]
+    [InlineData("scripts/install.PS1")]
+    [InlineData("worker.exe")]
+    public void ModelCatalogRejectsExecutableContent(string relativePath)
+    {
+        var document = new ModelCatalogDocument(
+            1,
+            1,
+            DateTimeOffset.UtcNow,
+            [new ModelCatalogEntry(
+                "model",
+                "1",
+                "Apache-2.0",
+                "runtime",
+                1,
+                ["win-x64"],
+                [new Uri("https://models.example.test/")],
+                [new ModelCatalogFile(relativePath, 10, new string('A', 64))])],
+            []);
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(
+            () => ModelCatalogService.Validate(document));
+        Assert.Contains("data only", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task ModelDownloadRequiresApprovalAndAtomicallyVerifiesSizeAndChecksum()
     {
@@ -208,7 +235,140 @@ public sealed class LocalModelTests
         Assert.Equal(1, requests);
         Assert.Equal(1, clientConstructions);
         Assert.Equal(payload, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
-        Assert.Empty(Directory.GetFiles(temp.Path, "*.partial-*", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(temp.Path, "*.partial", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ModelDownloadResumesAnExistingPartialWithTheExactSignedRange()
+    {
+        byte[] payload = "verified resumable model payload"u8.ToArray();
+        const int existingBytes = 9;
+        using var temp = new TempDirectory();
+        string partial = Path.Combine(temp.Path, "model.bin.partial");
+        await File.WriteAllBytesAsync(
+            partial,
+            payload[..existingBytes],
+            TestContext.Current.CancellationToken);
+        var handler = new StubHandler(request =>
+        {
+            Assert.Equal(existingBytes, request.Headers.Range?.Ranges.Single().From);
+            var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+            {
+                Content = new ByteArrayContent(payload[existingBytes..]),
+            };
+            response.Content.Headers.ContentRange = new ContentRangeHeaderValue(
+                existingBytes,
+                payload.Length - 1,
+                payload.Length);
+            return response;
+        });
+        Uri origin = new("https://models.example.test/");
+        var file = new ModelCatalogFile(
+            "model.bin", payload.Length, Convert.ToHexString(SHA256.HashData(payload)));
+        var model = new ModelCatalogEntry(
+            "model", "1", "Apache-2.0", "runtime", 1, ["win-x64"], [origin], [file]);
+        var progress = new ProgressRecorder<ModelDownloadProgress>();
+        var service = new ModelDownloadService(
+            () => new HttpClient(handler, disposeHandler: false), temp.Path);
+
+        string path = await service.DownloadAsync(
+            Request(model, file, origin, approved: true),
+            progress,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(existingBytes, progress.Values[0].BytesReceived);
+        Assert.Equal(payload.Length, progress.Values[^1].BytesReceived);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(partial));
+    }
+
+    [Fact]
+    public async Task ModelDownloadRestartsSafelyWhenTheServerIgnoresTheRange()
+    {
+        byte[] payload = "server ignored range"u8.ToArray();
+        const int existingBytes = 6;
+        using var temp = new TempDirectory();
+        string partial = Path.Combine(temp.Path, "model.bin.partial");
+        await File.WriteAllBytesAsync(
+            partial,
+            payload[..existingBytes],
+            TestContext.Current.CancellationToken);
+        var handler = new StubHandler(request =>
+        {
+            Assert.Equal(existingBytes, request.Headers.Range?.Ranges.Single().From);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            };
+        });
+        Uri origin = new("https://models.example.test/");
+        var file = new ModelCatalogFile(
+            "model.bin", payload.Length, Convert.ToHexString(SHA256.HashData(payload)));
+        var model = new ModelCatalogEntry(
+            "model", "1", "Apache-2.0", "runtime", 1, ["win-x64"], [origin], [file]);
+        var service = new ModelDownloadService(
+            () => new HttpClient(handler, disposeHandler: false), temp.Path);
+
+        string path = await service.DownloadAsync(
+            Request(model, file, origin, approved: true),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(payload, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(partial));
+    }
+
+    [Fact]
+    public async Task InterruptedModelDownloadKeepsItsPartialAndResumesOnRetry()
+    {
+        byte[] payload = "retry this interrupted model download"u8.ToArray();
+        const int firstChunkBytes = 11;
+        int requests = 0;
+        using var temp = new TempDirectory();
+        var handler = new StubHandler(request =>
+        {
+            requests++;
+            if (requests == 1)
+            {
+                Assert.Null(request.Headers.Range);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StreamContent(
+                        new FailAfterFirstReadStream(payload, firstChunkBytes)),
+                };
+            }
+
+            Assert.Equal(firstChunkBytes, request.Headers.Range?.Ranges.Single().From);
+            var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+            {
+                Content = new ByteArrayContent(payload[firstChunkBytes..]),
+            };
+            response.Content.Headers.ContentRange = new ContentRangeHeaderValue(
+                firstChunkBytes,
+                payload.Length - 1,
+                payload.Length);
+            return response;
+        });
+        Uri origin = new("https://models.example.test/");
+        var file = new ModelCatalogFile(
+            "model.bin", payload.Length, Convert.ToHexString(SHA256.HashData(payload)));
+        var model = new ModelCatalogEntry(
+            "model", "1", "Apache-2.0", "runtime", 1, ["win-x64"], [origin], [file]);
+        var service = new ModelDownloadService(
+            () => new HttpClient(handler, disposeHandler: false), temp.Path);
+
+        await Assert.ThrowsAsync<IOException>(() => service.DownloadAsync(
+            Request(model, file, origin, approved: true),
+            TestContext.Current.CancellationToken).AsTask());
+
+        string partial = Path.Combine(temp.Path, "model.bin.partial");
+        Assert.Equal(firstChunkBytes, new FileInfo(partial).Length);
+
+        string path = await service.DownloadAsync(
+            Request(model, file, origin, approved: true),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(2, requests);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(partial));
     }
 
     [Fact]
@@ -284,6 +444,339 @@ public sealed class LocalModelTests
 
         Assert.Contains("automatic redirect", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.GetFiles(temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ModelDownloadFollowsBoundedHttpsRedirectAndPreservesRange()
+    {
+        byte[] payload = "redirected model"u8.ToArray();
+        const int existingBytes = 4;
+        int requests = 0;
+        var handler = new StubHandler(request =>
+        {
+            requests++;
+            Assert.Equal(existingBytes, request.Headers.Range?.Ranges.Single().From);
+            if (requests == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.TemporaryRedirect)
+                {
+                    Headers =
+                    {
+                        Location = new Uri("https://cdn.example.test/model.bin?token=signed"),
+                    },
+                };
+            }
+            var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+            {
+                Content = new ByteArrayContent(payload[existingBytes..]),
+            };
+            response.Content.Headers.ContentRange = new ContentRangeHeaderValue(
+                existingBytes,
+                payload.Length - 1,
+                payload.Length);
+            return response;
+        });
+        using var temp = new TempDirectory();
+        await File.WriteAllBytesAsync(
+            Path.Combine(temp.Path, "model.bin.partial"),
+            payload[..existingBytes],
+            TestContext.Current.CancellationToken);
+        Uri origin = new("https://models.example.test/");
+        var file = new ModelCatalogFile(
+            "model.bin", payload.Length, Convert.ToHexString(SHA256.HashData(payload)));
+        var model = new ModelCatalogEntry(
+            "model", "1", "Apache-2.0", "runtime", 1, ["win-x64"], [origin], [file]);
+        var service = new ModelDownloadService(
+            () => new HttpClient(handler, disposeHandler: false), temp.Path);
+
+        string path = await service.DownloadAsync(
+            Request(model, file, origin, approved: true),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, requests);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(
+            path,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ModelDownloadRejectsRedirectDowngradeToHttp()
+    {
+        byte[] payload = "model"u8.ToArray();
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Redirect)
+        {
+            Headers = { Location = new Uri("http://cdn.example.test/model.bin") },
+        });
+        using var temp = new TempDirectory();
+        Uri origin = new("https://models.example.test/");
+        var file = new ModelCatalogFile(
+            "model.bin", payload.Length, Convert.ToHexString(SHA256.HashData(payload)));
+        var model = new ModelCatalogEntry(
+            "model", "1", "Apache-2.0", "runtime", 1, ["win-x64"], [origin], [file]);
+        var service = new ModelDownloadService(
+            () => new HttpClient(handler, disposeHandler: false), temp.Path);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.DownloadAsync(
+            Request(model, file, origin, approved: true),
+            TestContext.Current.CancellationToken).AsTask());
+        Assert.Empty(Directory.GetFiles(temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ModelPackageInstallRequiresApprovalChecksSpaceAndPublishesAllFilesAtomically()
+    {
+        byte[] first = "first model part"u8.ToArray();
+        byte[] second = "second model part"u8.ToArray();
+        int clientConstructions = 0;
+        var handler = new StubHandler(request =>
+        {
+            byte[] payload = request.RequestUri!.AbsolutePath.EndsWith("model.bin", StringComparison.Ordinal)
+                ? first
+                : second;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            };
+        });
+        using var temp = new TempDirectory();
+        Uri origin = new("https://models.example.test/releases/");
+        var model = new ModelCatalogEntry(
+            "madlad-3b-int8",
+            "1.0.0",
+            "Apache-2.0",
+            "ctranslate2-v1",
+            0,
+            ["win-x64"],
+            [origin],
+            [
+                new ModelCatalogFile(
+                    "model.bin", first.Length, Convert.ToHexString(SHA256.HashData(first))),
+                new ModelCatalogFile(
+                    "spiece.model", second.Length, Convert.ToHexString(SHA256.HashData(second))),
+            ]);
+        VerifiedModelCatalog catalog = Catalog(model);
+        var progress = new ProgressRecorder<ModelPackageInstallProgress>();
+        var service = new ModelPackageService(
+            () =>
+            {
+                clientConstructions++;
+                return new HttpClient(handler, disposeHandler: false);
+            },
+            temp.Path,
+            _ => 1024 * 1024);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(
+            new ModelPackageInstallRequest(
+                catalog, model.ModelId, model.Version, origin, UserApproved: false),
+            runtimeReady: false,
+            progress: null,
+            TestContext.Current.CancellationToken).AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(
+            new ModelPackageInstallRequest(
+                catalog, model.ModelId, model.Version, origin, UserApproved: true, StrictOffline: true),
+            runtimeReady: false,
+            progress: null,
+            TestContext.Current.CancellationToken).AsTask());
+        Assert.Equal(0, clientConstructions);
+
+        ModelPackageSnapshot installed = await service.InstallAsync(
+            new ModelPackageInstallRequest(
+                catalog, model.ModelId, model.Version, origin, UserApproved: true),
+            runtimeReady: false,
+            progress,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ModelPackageState.RuntimeUnavailable, installed.State);
+        Assert.False(installed.IsSelectable);
+        Assert.Equal(2, clientConstructions);
+        Assert.Equal(first, await File.ReadAllBytesAsync(
+            Path.Combine(installed.PackageDirectory, "model.bin"),
+            TestContext.Current.CancellationToken));
+        Assert.Equal(second, await File.ReadAllBytesAsync(
+            Path.Combine(installed.PackageDirectory, "spiece.model"),
+            TestContext.Current.CancellationToken));
+        Assert.True(File.Exists(Path.Combine(installed.PackageDirectory, "installation.json")));
+        Assert.Empty(Directory.GetDirectories(
+            Path.Combine(temp.Path, ".staging"), "*", SearchOption.TopDirectoryOnly));
+        Assert.Equal(first.Length + second.Length, progress.Values[^1].BytesReceived);
+        Assert.Equal(2, progress.Values[^1].CompletedFiles);
+
+        var reopened = new ModelPackageService(
+            () => throw new InvalidOperationException("Inspect must not create an HTTP client."),
+            temp.Path);
+        ModelPackageSnapshot restored = reopened.Inspect(
+            catalog, model.ModelId, model.Version, runtimeReady: true);
+        Assert.Equal(ModelPackageState.Installed, restored.State);
+        Assert.True(restored.IsSelectable);
+
+        var newerCatalog = new VerifiedModelCatalog(
+            new ModelCatalogDocument(
+                1,
+                2,
+                DateTimeOffset.UtcNow,
+                [model],
+                [new SignatureEntry(
+                    "test-key",
+                    "Ed25519",
+                    Convert.ToBase64String(new byte[64]))]),
+            "test-key");
+        Assert.Equal(
+            ModelPackageState.Installed,
+            reopened.Inspect(
+                newerCatalog,
+                model.ModelId,
+                model.Version,
+                runtimeReady: true).State);
+        ManagedModelPackage managed = Assert.Single(reopened.ListManagedPackages());
+        Assert.Equal(model.ModelId, managed.ModelId);
+        Assert.Equal(model.Version, managed.Version);
+
+        string markerPath = Path.Combine(installed.PackageDirectory, "installation.json");
+        string marker = await File.ReadAllTextAsync(
+            markerPath,
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            markerPath,
+            marker.Replace(
+                model.Files[0].Sha256,
+                new string('0', 64),
+                StringComparison.Ordinal),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            ModelPackageState.Corrupt,
+            reopened.Inspect(
+                newerCatalog,
+                model.ModelId,
+                model.Version,
+                runtimeReady: true).State);
+    }
+
+    [Fact]
+    public async Task ModelPackageDiskOrChecksumFailureNeverPublishesAPartialPackage()
+    {
+        byte[] payload = "tampered"u8.ToArray();
+        int clientConstructions = 0;
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(payload),
+        });
+        using var temp = new TempDirectory();
+        Uri origin = new("https://models.example.test/");
+        var model = new ModelCatalogEntry(
+            "model",
+            "1",
+            "Apache-2.0",
+            "runtime",
+            0,
+            ["win-x64"],
+            [origin],
+            [new ModelCatalogFile("model.bin", payload.Length, new string('0', 64))]);
+        VerifiedModelCatalog catalog = Catalog(model);
+        var noSpace = new ModelPackageService(
+            () =>
+            {
+                clientConstructions++;
+                return new HttpClient(handler, disposeHandler: false);
+            },
+            temp.Path,
+            _ => payload.Length - 1);
+
+        await Assert.ThrowsAsync<IOException>(() => noSpace.InstallAsync(
+            new ModelPackageInstallRequest(
+                catalog, model.ModelId, model.Version, origin, UserApproved: true),
+            runtimeReady: false,
+            progress: null,
+            TestContext.Current.CancellationToken).AsTask());
+        Assert.Equal(0, clientConstructions);
+
+        var enoughSpace = new ModelPackageService(
+            () =>
+            {
+                clientConstructions++;
+                return new HttpClient(handler, disposeHandler: false);
+            },
+            temp.Path,
+            _ => 1024);
+        await Assert.ThrowsAsync<InvalidDataException>(() => enoughSpace.InstallAsync(
+            new ModelPackageInstallRequest(
+                catalog, model.ModelId, model.Version, origin, UserApproved: true),
+            runtimeReady: false,
+            progress: null,
+            TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Equal(1, clientConstructions);
+        Assert.False(Directory.Exists(Path.Combine(
+            temp.Path, "packages", model.ModelId, model.Version)));
+        Assert.Empty(Directory.GetFiles(temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task CancelledModelPackageInstallCleansStagingAndDoesNotPublish()
+    {
+        byte[] payload = "model"u8.ToArray();
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(payload),
+        });
+        using var temp = new TempDirectory();
+        Uri origin = new("https://models.example.test/");
+        var model = new ModelCatalogEntry(
+            "model",
+            "1",
+            "Apache-2.0",
+            "runtime",
+            0,
+            ["win-x64"],
+            [origin],
+            [new ModelCatalogFile(
+                "model.bin", payload.Length, Convert.ToHexString(SHA256.HashData(payload)))]);
+        VerifiedModelCatalog catalog = Catalog(model);
+        var service = new ModelPackageService(
+            () => new HttpClient(handler, disposeHandler: false),
+            temp.Path,
+            _ => 1024);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.InstallAsync(
+            new ModelPackageInstallRequest(
+                catalog, model.ModelId, model.Version, origin, UserApproved: true),
+            runtimeReady: false,
+            progress: null,
+            cancellation.Token).AsTask());
+
+        Assert.False(Directory.Exists(Path.Combine(
+            temp.Path, "packages", model.ModelId, model.Version)));
+        Assert.Empty(Directory.GetFiles(temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ModelPackageRemovalRequiresConfirmationAndRejectsAnActiveModel()
+    {
+        using var temp = new TempDirectory();
+        string package = Path.Combine(temp.Path, "packages", "model", "1");
+        Directory.CreateDirectory(package);
+        await File.WriteAllTextAsync(
+            Path.Combine(package, "installation.json"),
+            "{}",
+            TestContext.Current.CancellationToken);
+        var active = new ModelPackageService(
+            () => throw new InvalidOperationException(),
+            temp.Path,
+            isModelActive: (modelId, version) => modelId == "model" && version == "1");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => active.RemoveAsync(
+            "model", "1", userConfirmed: false, TestContext.Current.CancellationToken).AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => active.RemoveAsync(
+            "model", "1", userConfirmed: true, TestContext.Current.CancellationToken).AsTask());
+        Assert.True(Directory.Exists(package));
+
+        var inactive = new ModelPackageService(
+            () => throw new InvalidOperationException(),
+            temp.Path);
+        await inactive.RemoveAsync(
+            "model", "1", userConfirmed: true, TestContext.Current.CancellationToken);
+        Assert.False(Directory.Exists(package));
     }
 
     [Fact]
@@ -494,6 +987,13 @@ public sealed class LocalModelTests
         }
     }
 
+    private sealed class ProgressRecorder<T> : IProgress<T>
+    {
+        public List<T> Values { get; } = [];
+
+        public void Report(T value) => Values.Add(value);
+    }
+
     private static TranslationRequest Request(bool strictOffline)
     {
         var source = new SourceGenerationToken(
@@ -537,6 +1037,15 @@ public sealed class LocalModelTests
             origin,
             approved,
             strictOffline);
+
+    private static VerifiedModelCatalog Catalog(ModelCatalogEntry model) => new(
+        new ModelCatalogDocument(
+            1,
+            1,
+            DateTimeOffset.UtcNow,
+            [model],
+            [new SignatureEntry("test-key", "Ed25519", Convert.ToBase64String(new byte[64]))]),
+        "test-key");
 
     private static async Task<IReadOnlyList<ProviderWireEvent>> CollectAsync(
         IAsyncEnumerable<ProviderWireEvent> source)
@@ -669,6 +1178,47 @@ public sealed class LocalModelTests
         public override ValueTask WriteAsync(
             ReadOnlyMemory<byte> buffer,
             CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class FailAfterFirstReadStream(byte[] payload, int firstChunkBytes) : Stream
+    {
+        private bool _firstRead = true;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => payload.Length;
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (!_firstRead)
+                throw new IOException("Simulated interrupted download.");
+            _firstRead = false;
+            int read = Math.Min(firstChunkBytes, count);
+            payload.AsSpan(0, read).CopyTo(buffer.AsSpan(offset, read));
+            return read;
+        }
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_firstRead)
+                return ValueTask.FromException<int>(
+                    new IOException("Simulated interrupted download."));
+            _firstRead = false;
+            int read = Math.Min(firstChunkBytes, buffer.Length);
+            payload.AsMemory(0, read).CopyTo(buffer);
+            return ValueTask.FromResult(read);
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
     }
 
     private sealed class TempDirectory : IDisposable

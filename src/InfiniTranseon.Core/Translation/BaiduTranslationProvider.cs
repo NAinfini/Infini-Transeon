@@ -8,23 +8,64 @@ using InfiniTranseon.Core.Privacy;
 
 namespace InfiniTranseon.Core.Translation;
 
+public sealed record BaiduTranslationOptions(
+    Uri Endpoint,
+    string AppIdReference,
+    string SecretReference,
+    ProxyPolicy ProxyPolicy,
+    int MaximumResponseBytes = 1024 * 1024);
+
 public sealed class BaiduTranslationProvider : ITranslationProvider
 {
-    private static readonly Uri Endpoint = new("https://fanyi-api.baidu.com/api/trans/vip/translate");
+    private const string ProviderId = "translation.baidu";
+    private readonly BaiduTranslationOptions _options;
     private readonly HttpClient _httpClient;
     private readonly IBoundCredentialStore _credentials;
 
-    public BaiduTranslationProvider(HttpClient httpClient, IBoundCredentialStore credentials)
+    public BaiduTranslationProvider(
+        BaiduTranslationOptions options,
+        HttpClient httpClient,
+        IBoundCredentialStore credentials)
     {
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.AppIdReference);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.SecretReference);
+        if (!options.Endpoint.IsAbsoluteUri || options.Endpoint.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(options.Endpoint.UserInfo) ||
+            !string.IsNullOrEmpty(options.Endpoint.Query) ||
+            !string.IsNullOrEmpty(options.Endpoint.Fragment))
+        {
+            throw new ArgumentException(
+                "Baidu translation endpoint must be an absolute HTTPS URI.",
+                nameof(options));
+        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumResponseBytes, 1024);
+        _options = options;
         _httpClient = httpClient;
         _credentials = credentials;
     }
 
-    public CredentialBinding CreateBinding(string purpose) => new(
-        "translation.baidu", purpose, "https", Endpoint.Host, 443,
-        "baidu-md5-appid-salt-secret", ProxyPolicy.System);
+    public CredentialBinding CreateBinding(string purpose) =>
+        CreateCredentialBinding(_options, purpose);
+
+    public static CredentialBinding CreateCredentialBinding(
+        BaiduTranslationOptions options,
+        string purpose)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (purpose is not ("app-id" or "secret"))
+            throw new ArgumentOutOfRangeException(nameof(purpose));
+        return new CredentialBinding(
+            ProviderId,
+            purpose,
+            options.Endpoint.Scheme,
+            options.Endpoint.IdnHost,
+            options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port,
+            "baidu-md5-appid-salt-secret",
+            options.ProxyPolicy);
+    }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(
         TranslationRequest request,
@@ -45,9 +86,13 @@ public sealed class BaiduTranslationProvider : ITranslationProvider
         try
         {
             appId = await _credentials.ReadAsync(
-                "app-id", CreateBinding("app-id"), cancellationToken).ConfigureAwait(false);
+                _options.AppIdReference,
+                CreateBinding("app-id"),
+                cancellationToken).ConfigureAwait(false);
             secret = await _credentials.ReadAsync(
-                "secret", CreateBinding("secret"), cancellationToken).ConfigureAwait(false);
+                _options.SecretReference,
+                CreateBinding("secret"),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (CredentialBindingException)
         {
@@ -57,13 +102,13 @@ public sealed class BaiduTranslationProvider : ITranslationProvider
             return [new ProviderWireFailure("provider.credentialMissing", false)];
         string salt = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         string sign = ComputeSignature(appId, request.SourceText, salt, secret);
-        using var message = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+        using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
         {
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["q"] = request.SourceText,
-                ["from"] = request.SourceLanguage,
-                ["to"] = request.TargetLanguage,
+                ["from"] = ProviderLanguageCodes.ForBaidu(request.SourceLanguage),
+                ["to"] = ProviderLanguageCodes.ForBaidu(request.TargetLanguage),
                 ["appid"] = appId,
                 ["salt"] = salt,
                 ["sign"] = sign,
@@ -98,7 +143,13 @@ public sealed class BaiduTranslationProvider : ITranslationProvider
                     response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500)];
             }
             byte[] bytes;
-            try { bytes = await ReadBoundedAsync(response.Content, cancellationToken).ConfigureAwait(false); }
+            try
+            {
+                bytes = await ReadBoundedAsync(
+                    response.Content,
+                    _options.MaximumResponseBytes,
+                    cancellationToken).ConfigureAwait(false);
+            }
             catch (InvalidDataException)
             {
                 return [new ProviderWireFailure("provider.responseLimit", false)];
@@ -153,11 +204,12 @@ public sealed class BaiduTranslationProvider : ITranslationProvider
 
     private static async Task<byte[]> ReadBoundedAsync(
         HttpContent content,
+        int maximumResponseBytes,
         CancellationToken cancellationToken)
     {
         if (content.Headers.ContentEncoding.Count > 0)
             throw new InvalidDataException("Compressed Baidu responses are not accepted.");
-        if (content.Headers.ContentLength is > 1024 * 1024)
+        if (content.Headers.ContentLength is long length && length > maximumResponseBytes)
             throw new InvalidDataException("Baidu response exceeds its size limit.");
         await using Stream stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var output = new MemoryStream();
@@ -166,7 +218,7 @@ public sealed class BaiduTranslationProvider : ITranslationProvider
         {
             int read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
             if (read == 0) return output.ToArray();
-            if (output.Length + read > 1024 * 1024)
+            if (output.Length + read > maximumResponseBytes)
                 throw new InvalidDataException("Baidu response exceeds its size limit.");
             output.Write(buffer, 0, read);
         }

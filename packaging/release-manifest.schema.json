@@ -23,11 +23,12 @@
     "artifact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["fileName", "byteSize", "sha256"],
+      "required": ["fileName", "byteSize", "sha256", "codeSigning"],
       "properties": {
         "fileName": { "type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$" },
         "byteSize": { "type": "integer", "minimum": 1 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "codeSigning": { "enum": ["not-applicable", "unsigned", "authenticode"] },
         "authenticodePublisher": { "type": "string", "minLength": 1 }
       }
     },

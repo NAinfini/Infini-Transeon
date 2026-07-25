@@ -1,0 +1,249 @@
+<Page
+    x:Class="InfiniTranseon.App.Features.Home.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
+    xmlns:data="using:InfiniTranseon.App.Presentation"
+    Loaded="OnLoaded"
+    Unloaded="OnUnloaded">
+    <ScrollViewer>
+        <controls:PageShell
+            Title="{x:Bind HomeTitle, Mode=OneTime}"
+            Subtitle="{x:Bind HomeSubtitle, Mode=OneTime}"
+            IsLoading="{x:Bind ProfilesViewModel.IsLoading, Mode=OneWay}"
+            ErrorMessage="{x:Bind ErrorMessage, Mode=OneTime}"
+            IsEmpty="{x:Bind ProfilesViewModel.IsEmpty, Mode=OneWay}"
+            EmptyGlyph="&#xE7F4;"
+            EmptyTitle="{x:Bind EmptyTitle, Mode=OneTime}"
+            EmptyBody="{x:Bind EmptyBody, Mode=OneTime}">
+            <controls:PageShell.HeaderCommands>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
+                    <Button x:Uid="HomeImportButton" Click="OnImportProfileClick" />
+                    <Button
+                        x:Uid="HomeNewProfileButton"
+                        Click="OnNewProfileClick"
+                        Style="{StaticResource AccentButtonStyle}" />
+                </StackPanel>
+            </controls:PageShell.HeaderCommands>
+            <controls:PageShell.EmptyAction>
+                <Button
+                    x:Uid="HomeEmptyCreateButton"
+                    Click="OnNewProfileClick"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </controls:PageShell.EmptyAction>
+            <controls:PageShell.PageContent>
+                <StackPanel Spacing="{StaticResource SpaceXL}">
+                    <StackPanel
+                        Spacing="{StaticResource SpaceM}"
+                        Visibility="{x:Bind RunningPanelVisibility, Mode=OneTime}">
+                        <TextBlock x:Uid="HomeRunningHeader" Style="{StaticResource SectionHeaderStyle}" />
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid ColumnSpacing="{StaticResource SpaceL}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="{StaticResource SpaceXS}">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
+                                        <controls:StatusBadge
+                                            Text="{x:Bind RuntimeStatusText, Mode=OneTime}"
+                                            Severity="{x:Bind RuntimeStatusSeverity, Mode=OneTime}" />
+                                        <TextBlock
+                                            Text="{x:Bind RunningTargetSummary, Mode=OneTime}"
+                                            Style="{StaticResource BodyTextStyle}"
+                                            VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock
+                                        Text="{x:Bind RunningTargetMetrics, Mode=OneTime}"
+                                        Style="{StaticResource CaptionTextStyle}" />
+                                </StackPanel>
+                                <CommandBar
+                                    Grid.Column="1"
+                                    Background="Transparent"
+                                    DefaultLabelPosition="Right">
+                                    <AppBarButton
+                                        x:Uid="HomePauseButton"
+                                        Icon="Pause"
+                                        Label="{x:Bind PauseLabel, Mode=OneTime}"
+                                        Command="{x:Bind RuntimeViewModel.TogglePauseCommand}" />
+                                    <AppBarButton
+                                        x:Uid="HomeOverlayButton"
+                                        Icon="View"
+                                        Label="{x:Bind OverlayLabel, Mode=OneTime}"
+                                        Command="{x:Bind RuntimeViewModel.ToggleOverlayCommand}" />
+                                    <AppBarButton
+                                        x:Uid="HomeManualOcrButton"
+                                        Icon="Scan"
+                                        Command="{x:Bind RuntimeViewModel.ManualOcrCommand}" />
+                                    <AppBarButton
+                                        x:Uid="HomeStopButton"
+                                        Icon="Stop"
+                                        Command="{x:Bind RuntimeViewModel.StopCommand}" />
+                                </CommandBar>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource SpaceM}">
+                        <TextBlock x:Uid="HomeProfilesHeader" Style="{StaticResource SectionHeaderStyle}" />
+                        <ItemsRepeater ItemsSource="{x:Bind ProfilesViewModel.Profiles}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout
+                                    MinItemWidth="{StaticResource ProfileCardWidth}"
+                                    MinRowSpacing="{StaticResource SpaceL}"
+                                    MinColumnSpacing="{StaticResource SpaceL}"
+                                    ItemsStretch="Fill" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="data:ProfileCard">
+                                    <Border Style="{StaticResource CardBorderStyle}" Padding="0">
+                                        <Grid RowSpacing="{StaticResource SpaceM}">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="{StaticResource ProfileCardThumbHeight}" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <Grid
+                                                Background="{ThemeResource ThumbLetterboxBrush}"
+                                                CornerRadius="8,8,0,0">
+                                                <FontIcon
+                                                    Glyph="&#xE7F4;"
+                                                    FontSize="28"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                <controls:StatusBadge
+                                                    Text="{x:Bind MatchStateText}"
+                                                    Severity="{x:Bind MatchSeverity}"
+                                                    Margin="{StaticResource ProfileBadgeMargin}"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Top" />
+                                                <FontIcon
+                                                    Glyph="&#xE840;"
+                                                    FontSize="{StaticResource TypeBody}"
+                                                    Margin="{StaticResource ProfilePinMargin}"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Visibility="{x:Bind IsPinned}" />
+                                                <TextBlock
+                                                    Text="{x:Bind Resolution}"
+                                                    Style="{StaticResource CaptionTextStyle}"
+                                                    Margin="{StaticResource ProfileResolutionMargin}"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Bottom" />
+                                            </Grid>
+                                            <StackPanel
+                                                Grid.Row="1"
+                                                Padding="{StaticResource CardPadding}"
+                                                Spacing="{StaticResource SpaceS}">
+                                                <Button
+                                                    Tag="{x:Bind ProfileId}"
+                                                    Click="OnOpenWorkspaceClick"
+                                                    HorizontalContentAlignment="Left"
+                                                    Background="Transparent"
+                                                    Padding="0"
+                                                    BorderThickness="0">
+                                                    <StackPanel Spacing="{StaticResource SpaceXS}">
+                                                        <TextBlock
+                                                            Text="{x:Bind Name}"
+                                                            FontSize="{StaticResource TypeBodyLarge}"
+                                                            FontWeight="{StaticResource FontWeightStrong}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock
+                                                            Text="{x:Bind TargetDescription}"
+                                                            Style="{StaticResource CaptionTextStyle}" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <TextBlock Text="{x:Bind Languages}" Style="{StaticResource CaptionTextStyle}" />
+                                                <Grid Margin="{StaticResource ProfileActionMargin}">
+                                                    <Button
+                                                        Content="{x:Bind PrimaryAction}"
+                                                        Tag="{x:Bind ProfileId}"
+                                                        Click="OnStartProfileClick"
+                                                        Style="{StaticResource AccentButtonStyle}" />
+                                                    <StackPanel
+                                                        Orientation="Horizontal"
+                                                        Spacing="{StaticResource SpaceXS}"
+                                                        HorizontalAlignment="Right">
+                                                        <Button
+                                                            x:Uid="HomeProfileMoreButton"
+                                                            Tag="{x:Bind ProfileId}"
+                                                            MinWidth="{StaticResource MinHitTarget}"
+                                                            MinHeight="{StaticResource MinHitTarget}"
+                                                            Padding="{StaticResource InsetXS}">
+                                                            <FontIcon Glyph="&#xE712;" FontSize="{StaticResource TypeBody}" />
+                                                            <Button.Flyout>
+                                                                <MenuFlyout>
+                                                                    <MenuFlyoutItem
+                                                                        x:Uid="HomeTogglePinMenuItem"
+                                                                        Tag="{x:Bind ProfileId}"
+                                                                        Click="OnTogglePinClick" />
+                                                                    <MenuFlyoutItem
+                                                                        x:Uid="HomeExportProfileMenuItem"
+                                                                        Tag="{x:Bind ProfileId}"
+                                                                        Click="OnExportProfileClick" />
+                                                                    <MenuFlyoutSeparator />
+                                                                    <MenuFlyoutItem
+                                                                        x:Uid="HomeDeleteProfileMenuItem"
+                                                                        Tag="{x:Bind ProfileId}"
+                                                                        Foreground="{ThemeResource StatusCriticalBrush}"
+                                                                        Click="OnDeleteProfileClick" />
+                                                                </MenuFlyout>
+                                                            </Button.Flyout>
+                                                        </Button>
+                                                        <Button
+                                                            x:Uid="HomeOpenWorkspaceButton"
+                                                            Tag="{x:Bind ProfileId}"
+                                                            Click="OnOpenWorkspaceClick" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+
+                    <StackPanel
+                        Spacing="{StaticResource SpaceM}"
+                        Visibility="{x:Bind ActivityVisibility, Mode=OneTime}">
+                        <Grid>
+                            <TextBlock x:Uid="HomeActivityHeader" Style="{StaticResource SectionHeaderStyle}" />
+                            <Button
+                                x:Uid="HomeViewActivityButton"
+                                Click="OnViewActivityClick"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top" />
+                        </Grid>
+                        <ItemsRepeater ItemsSource="{x:Bind RecentActivity}">
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="data:HomeActivityItem">
+                                    <Grid
+                                        Padding="{StaticResource SettingRowPadding}"
+                                        ColumnSpacing="{StaticResource SpaceM}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <controls:StatusBadge
+                                            Text="{x:Bind Title}"
+                                            Severity="{x:Bind Severity}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Text="{x:Bind Detail}"
+                                            Style="{StaticResource BodyTextStyle}"
+                                            VerticalAlignment="Center" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Text="{x:Bind OccurredAtUtc}"
+                                            Style="{StaticResource CaptionTextStyle}"
+                                            VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </StackPanel>
+            </controls:PageShell.PageContent>
+        </controls:PageShell>
+    </ScrollViewer>
+</Page>

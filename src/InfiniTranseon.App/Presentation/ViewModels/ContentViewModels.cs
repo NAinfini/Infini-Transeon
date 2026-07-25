@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Runtime;
+using InfiniTranseon.App.Presentation.Services;
 
 namespace InfiniTranseon.App.Presentation.ViewModels;
 
@@ -285,6 +286,31 @@ public sealed partial class RunningTargetsViewModel : PageViewModelBase
     }
 }
 
+// Pure, WinUI-free grouping for the history date headers (spec 5.8: Today / Yesterday / specific
+// dates). Kept as a standalone static class so the grouping boundary logic is unit-testable without a
+// view model or any UI host; label text formatting stays in the page (localized, culture-aware).
+public static class HistoryDateGrouping
+{
+    public static IReadOnlyList<HistoryDateGroup> Group(
+        IReadOnlyList<HistoryEvent> events,
+        DateTimeOffset nowLocal)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        DateOnly today = DateOnly.FromDateTime(nowLocal.LocalDateTime);
+        DateOnly yesterday = today.AddDays(-1);
+        return events
+            .GroupBy(item => DateOnly.FromDateTime(item.CapturedAtUtc.ToLocalTime().DateTime))
+            .OrderByDescending(group => group.Key)
+            .Select(group => new HistoryDateGroup(
+                group.Key == today ? HistoryDateGroupKind.Today :
+                group.Key == yesterday ? HistoryDateGroupKind.Yesterday :
+                HistoryDateGroupKind.Earlier,
+                group.Key,
+                group.OrderByDescending(item => item.CapturedAtUtc).ToArray()))
+            .ToArray();
+    }
+}
+
 public sealed partial class HistoryViewModel : PageViewModelBase
 {
     private readonly IHistoryService _historyService;
@@ -302,6 +328,10 @@ public sealed partial class HistoryViewModel : PageViewModelBase
     }
 
     public ObservableCollection<HistoryEvent> Events { get; } = [];
+    public ObservableCollection<HistoryDateGroup> GroupedEvents { get; } = [];
+    private readonly List<HistoryEvent> _allEvents = [];
+
+    public void SelectProfile(Guid? profileId) => _historyService.SelectProfile(profileId);
 
     public override Task InitializeAsync(CancellationToken cancellationToken = default) =>
         RunGuardedAsync(async () =>
@@ -312,14 +342,35 @@ public sealed partial class HistoryViewModel : PageViewModelBase
 
             IReadOnlyList<HistoryEvent> events =
                 await _historyService.GetEventsAsync(cancellationToken).ConfigureAwait(true);
-            Events.Clear();
-            foreach (HistoryEvent item in events)
-            {
-                Events.Add(item);
-            }
-
-            IsEmpty = Events.Count == 0 && !IsHistoryDisabled;
+            _allEvents.Clear();
+            _allEvents.AddRange(events);
+            ApplyFilter(string.Empty, days: 0);
         });
+
+    public void ApplyFilter(string? query, int days)
+    {
+        string normalized = query?.Trim() ?? string.Empty;
+        DateTimeOffset? cutoff = days <= 0 ? null : DateTimeOffset.Now.AddDays(-days);
+        IEnumerable<HistoryEvent> filtered = _allEvents.Where(item =>
+            (normalized.Length == 0 ||
+                item.SourceText.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                item.Region.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                item.Channels.Any(channel =>
+                    channel.Text.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                    channel.Provider.Contains(normalized, StringComparison.OrdinalIgnoreCase))) &&
+            (cutoff is null ||
+                !DateTimeOffset.TryParse(item.Timestamp, out DateTimeOffset timestamp) ||
+                timestamp >= cutoff));
+        Events.Clear();
+        foreach (HistoryEvent item in filtered) Events.Add(item);
+        IsEmpty = Events.Count == 0 && !IsHistoryDisabled;
+
+        GroupedEvents.Clear();
+        foreach (HistoryDateGroup group in HistoryDateGrouping.Group(Events, DateTimeOffset.Now))
+        {
+            GroupedEvents.Add(group);
+        }
+    }
 }
 
 public sealed partial class DiagnosticsViewModel : PageViewModelBase
@@ -369,6 +420,16 @@ public sealed partial class GlossaryViewModel : PageViewModelBase
     }
 
     public ObservableCollection<GlossaryEntry> Entries { get; } = [];
+    public ObservableCollection<StylePromptVersion> StylePromptVersions { get; } = [];
+    private readonly List<GlossaryEntry> _allEntries = [];
+
+    [ObservableProperty]
+    public partial StylePromptVersion? SelectedStylePromptVersion { get; set; }
+
+    [ObservableProperty]
+    public partial int ActiveStylePromptVersion { get; private set; }
+
+    public void SelectProfile(Guid profileId) => _glossaryService.SelectProfile(profileId);
 
     public override Task InitializeAsync(CancellationToken cancellationToken = default) =>
         RunGuardedAsync(() => ReloadAsync(cancellationToken));
@@ -391,25 +452,77 @@ public sealed partial class GlossaryViewModel : PageViewModelBase
             await ReloadAsync(cancellationToken).ConfigureAwait(true);
         });
 
+    public Task ImportAsync(
+        IReadOnlyList<GlossaryEntry> entries,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            await _glossaryService.ImportAsync(entries, cancellationToken).ConfigureAwait(true);
+            await ReloadAsync(cancellationToken).ConfigureAwait(true);
+        });
+
+    public Task SaveStylePromptVersionAsync(
+        string name,
+        string template,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            await _glossaryService
+                .SaveStylePromptVersionAsync(name, template, cancellationToken)
+                .ConfigureAwait(true);
+            await ReloadAsync(cancellationToken).ConfigureAwait(true);
+        });
+
+    public Task ActivateStylePromptVersionAsync(
+        int version,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            await _glossaryService
+                .ActivateStylePromptVersionAsync(version, cancellationToken)
+                .ConfigureAwait(true);
+            await ReloadAsync(cancellationToken).ConfigureAwait(true);
+        });
+
+    public void ApplyFilter(string? query)
+    {
+        string normalized = query?.Trim() ?? string.Empty;
+        IEnumerable<GlossaryEntry> filtered = _allEntries.Where(entry =>
+            normalized.Length == 0 ||
+            entry.SourceTerm.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+            entry.TargetTerm.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+            entry.Notes.Contains(normalized, StringComparison.OrdinalIgnoreCase));
+        Entries.Clear();
+        foreach (GlossaryEntry entry in filtered) Entries.Add(entry);
+        IsEmpty = HasActiveProfile && Entries.Count == 0;
+    }
+
     private async Task ReloadAsync(CancellationToken cancellationToken)
     {
         GlossarySnapshot snapshot =
             await _glossaryService.GetEntriesAsync(cancellationToken).ConfigureAwait(true);
         HasActiveProfile = snapshot.HasActiveProfile;
         ActiveProfileName = snapshot.ActiveProfileName;
-        Entries.Clear();
-        foreach (GlossaryEntry entry in snapshot.Entries)
+        _allEntries.Clear();
+        _allEntries.AddRange(snapshot.Entries);
+        StylePromptVersions.Clear();
+        foreach (StylePromptVersion version in snapshot.StylePromptVersions)
         {
-            Entries.Add(entry);
+            StylePromptVersions.Add(version);
         }
-
-        IsEmpty = HasActiveProfile && Entries.Count == 0;
+        ActiveStylePromptVersion = snapshot.ActiveStylePromptVersion;
+        SelectedStylePromptVersion = StylePromptVersions.FirstOrDefault(version =>
+            version.Version == ActiveStylePromptVersion) ??
+            StylePromptVersions.FirstOrDefault();
+        ApplyFilter(string.Empty);
     }
 }
 
 public sealed partial class ServicesModelsViewModel : PageViewModelBase
 {
     private readonly ISettingsService _settingsService;
+    private readonly LocalModelManagementService? _localModels;
+    private CancellationTokenSource? _modelOperationCancellation;
 
     public ServicesModelsViewModel(ISettingsService settingsService)
     {
@@ -417,34 +530,256 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
         _settingsService = settingsService;
     }
 
+    public ServicesModelsViewModel(
+        ISettingsService settingsService,
+        LocalModelManagementService localModels)
+    {
+        ArgumentNullException.ThrowIfNull(settingsService);
+        ArgumentNullException.ThrowIfNull(localModels);
+        _settingsService = settingsService;
+        _localModels = localModels;
+    }
+
     public ObservableCollection<ProviderRow> Providers { get; } = [];
 
+    // The grouped sections a provider card renders under (spec 5.9). Order matches the page's
+    // visual grouping: cloud translation, cloud OCR, local models, then custom REST adapters, with
+    // a trailing Other bucket so a row that matches none of the known shapes is still shown instead
+    // of silently dropped.
+    public enum ProviderGroup
+    {
+        CloudTranslation,
+        CloudOcr,
+        LocalModel,
+        Custom,
+        Other,
+    }
+
+    // Pure and WinUI-free so the page code-behind and unit tests share one classification rule.
+    // Custom and local-model rows are identified by their own flags before capability; a built-in
+    // row's Kind carries "OCR" (see BuiltInProviderSpecs) whenever its capability is not translation,
+    // which is what distinguishes Cloud OCR from the defensive Other fallback.
+    public static ProviderGroup ClassifyGroup(ProviderRow provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        if (provider.IsCustom)
+        {
+            return ProviderGroup.Custom;
+        }
+        if (provider.IsLocalModel)
+        {
+            return ProviderGroup.LocalModel;
+        }
+        if (provider.IsTranslationProvider)
+        {
+            return ProviderGroup.CloudTranslation;
+        }
+        if (provider.Kind.Contains("OCR", StringComparison.OrdinalIgnoreCase))
+        {
+            return ProviderGroup.CloudOcr;
+        }
+        return ProviderGroup.Other;
+    }
+
+    [ObservableProperty]
+    public partial bool IsModelOperationInProgress { get; private set; }
+
+    [ObservableProperty]
+    public partial double ModelOperationPercent { get; private set; }
+
+    [ObservableProperty]
+    public partial string ModelOperationStatus { get; private set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool ModelOperationSucceeded { get; private set; }
+
     public override Task InitializeAsync(CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(() => ReloadAsync(cancellationToken));
+
+    public Task ImportRestAdapterAsync(
+        Stream source,
+        CancellationToken cancellationToken = default) =>
         RunGuardedAsync(async () =>
         {
-            IReadOnlyList<ProviderRow> providers =
-                await _settingsService.GetProvidersAsync(cancellationToken).ConfigureAwait(true);
-            Providers.Clear();
-            foreach (ProviderRow provider in providers)
-            {
-                Providers.Add(provider);
-            }
-
-            IsEmpty = Providers.Count == 0;
+            await _settingsService
+                .ImportRestAdapterAsync(source, cancellationToken)
+                .ConfigureAwait(true);
+            await ReloadAsync(cancellationToken).ConfigureAwait(true);
         });
+
+    public Task RemoveCustomProviderAsync(
+        string providerId,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            await _settingsService
+                .RemoveCustomProviderAsync(providerId, cancellationToken)
+                .ConfigureAwait(true);
+            await ReloadAsync(cancellationToken).ConfigureAwait(true);
+        });
+
+    public Task InstallLocalModelAsync(
+        ProviderRow provider,
+        bool userApproved,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            LocalModelManagementService models = _localModels ??
+                throw new InvalidOperationException(
+                    "Local model management is unavailable in this composition.");
+            string modelId = provider.ModelId ??
+                throw new ArgumentException(
+                    "The selected row does not identify a model.",
+                    nameof(provider));
+            string version = provider.ModelVersion ??
+                throw new ArgumentException(
+                    "The selected row does not identify a model version.",
+                    nameof(provider));
+            ApplicationSettings settings =
+                await _settingsService.GetSettingsAsync(cancellationToken).ConfigureAwait(true);
+            using var operationCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (Interlocked.CompareExchange(
+                    ref _modelOperationCancellation,
+                    operationCancellation,
+                    comparand: null) is not null)
+                throw new InvalidOperationException("A local model operation is already running.");
+            IsModelOperationInProgress = true;
+            ModelOperationSucceeded = false;
+            ModelOperationPercent = 0;
+            ModelOperationStatus = provider.Name;
+            try
+            {
+                var progress = new Progress<LocalModelOperationProgress>(value =>
+                {
+                    ModelOperationPercent = value.TotalBytes <= 0
+                        ? 0
+                        : Math.Clamp(
+                            value.BytesReceived * 100d / value.TotalBytes,
+                            0,
+                            100);
+                    ModelOperationStatus = value.RelativePath;
+                });
+                await models.InstallAsync(
+                    modelId,
+                    version,
+                    userApproved,
+                    settings.StrictOffline,
+                    progress,
+                    operationCancellation.Token).ConfigureAwait(true);
+                await ReloadAsync(operationCancellation.Token).ConfigureAwait(true);
+                ModelOperationSucceeded = true;
+            }
+            catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
+            {
+                ModelOperationStatus = string.Empty;
+            }
+            finally
+            {
+                Interlocked.CompareExchange(
+                    ref _modelOperationCancellation,
+                    null,
+                    operationCancellation);
+                IsModelOperationInProgress = false;
+            }
+        });
+
+    public Task RemoveLocalModelAsync(
+        ProviderRow provider,
+        bool userConfirmed,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            LocalModelManagementService models = _localModels ??
+                throw new InvalidOperationException(
+                    "Local model management is unavailable in this composition.");
+            string modelId = provider.ModelId ??
+                throw new ArgumentException(
+                    "The selected row does not identify a model.",
+                    nameof(provider));
+            string version = provider.ModelVersion ??
+                throw new ArgumentException(
+                    "The selected row does not identify a model version.",
+                    nameof(provider));
+            using var operationCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (Interlocked.CompareExchange(
+                    ref _modelOperationCancellation,
+                    operationCancellation,
+                    comparand: null) is not null)
+                throw new InvalidOperationException("A local model operation is already running.");
+            IsModelOperationInProgress = true;
+            ModelOperationSucceeded = false;
+            ModelOperationPercent = 0;
+            ModelOperationStatus = provider.Name;
+            try
+            {
+                await models.RemoveAsync(
+                    modelId,
+                    version,
+                    userConfirmed,
+                    operationCancellation.Token).ConfigureAwait(true);
+                await ReloadAsync(operationCancellation.Token).ConfigureAwait(true);
+                ModelOperationSucceeded = true;
+            }
+            catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
+            {
+                ModelOperationStatus = string.Empty;
+            }
+            finally
+            {
+                Interlocked.CompareExchange(
+                    ref _modelOperationCancellation,
+                    null,
+                    operationCancellation);
+                IsModelOperationInProgress = false;
+            }
+        });
+
+    public void CancelModelOperation()
+    {
+        CancellationTokenSource? cancellation = Volatile.Read(ref _modelOperationCancellation);
+        if (cancellation is null)
+            return;
+        try
+        {
+            cancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The operation completed between the field read and cancellation request.
+        }
+    }
+
+    private async Task ReloadAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ProviderRow> providers =
+            await _settingsService.GetProvidersAsync(cancellationToken).ConfigureAwait(true);
+        Providers.Clear();
+        foreach (ProviderRow provider in providers)
+        {
+            Providers.Add(provider);
+        }
+
+        IsEmpty = Providers.Count == 0;
+    }
 }
 
 public sealed partial class SettingsViewModel : PageViewModelBase
 {
     private readonly ISettingsService _settingsService;
+    private readonly IAppUpdateService _updateService;
 
     public SettingsViewModel(
         ISettingsService settingsService,
-        IRuntimeCapabilitiesService capabilitiesService)
+        RuntimeCapabilitiesService capabilitiesService,
+        IAppUpdateService updateService)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(capabilitiesService);
+        ArgumentNullException.ThrowIfNull(updateService);
         _settingsService = settingsService;
+        _updateService = updateService;
         RuntimeCapabilities capabilities = capabilitiesService.Capabilities;
         MaxTargets = capabilities.MaxTargets;
         MaxRegionsPerTarget = capabilities.MaxRegionsPerTarget;
@@ -455,15 +790,74 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     public partial ApplicationSettings Settings { get; set; } = new(
         UiThemePreference.System, StrictOffline: false, HistoryRetention.Days30, "en-US");
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCheckForUpdates))]
+    [NotifyPropertyChangedFor(nameof(CanDownloadUpdate))]
+    [NotifyPropertyChangedFor(nameof(CanOpenInstaller))]
+    public partial AppUpdateSnapshot UpdateSnapshot { get; private set; } =
+        new(AppUpdateStatus.Idle, "0.0.0");
+
+    public bool CanCheckForUpdates => UpdateSnapshot.Status is not
+        (AppUpdateStatus.Checking or AppUpdateStatus.Downloading);
+
+    public bool CanDownloadUpdate =>
+        !string.IsNullOrWhiteSpace(UpdateSnapshot.AvailableVersion) &&
+        UpdateSnapshot.Status is AppUpdateStatus.Available or AppUpdateStatus.Failed;
+
+    public bool CanOpenInstaller =>
+        UpdateSnapshot.Status == AppUpdateStatus.ReadyToInstall &&
+        !string.IsNullOrWhiteSpace(UpdateSnapshot.InstallerPath);
+
     public int MaxTargets { get; }
 
     public int MaxRegionsPerTarget { get; }
 
     public int MaxTranslationChannelsPerRegion { get; }
 
+    public ObservableCollection<HotkeyEditorRow> Hotkeys { get; } = [];
+
+    // Pure and WinUI-free predicate backing the in-page settings search (spec 5.10): matches a
+    // query against a setting row's label/description text so the page code-behind and unit tests
+    // share the same rule instead of the page re-implementing it against live XAML elements.
+    public static bool MatchesSearch(string query, params string[] fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        return string.IsNullOrWhiteSpace(query) ||
+            fields.Any(field => field.Contains(query, StringComparison.CurrentCultureIgnoreCase));
+    }
+
     public override Task InitializeAsync(CancellationToken cancellationToken = default) =>
         RunGuardedAsync(async () =>
-            Settings = await _settingsService.GetSettingsAsync(cancellationToken).ConfigureAwait(true));
+        {
+            Settings = await _settingsService.GetSettingsAsync(cancellationToken).ConfigureAwait(true);
+            Hotkeys.Clear();
+            foreach (AppHotkeyBinding binding in Settings.EffectiveHotkeys)
+            {
+                Hotkeys.Add(new HotkeyEditorRow(binding));
+            }
+            UpdateSnapshot = _updateService.Snapshot;
+        });
+
+    public Task CheckForUpdatesAsync(CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            await _updateService.CheckAsync(
+                explicitUserAction: true,
+                mainUiVisible: true,
+                cancellationToken).ConfigureAwait(true);
+            UpdateSnapshot = _updateService.Snapshot;
+        });
+
+    public Task DownloadUpdateAsync(
+        bool userApproved,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            await _updateService.DownloadInstallerAsync(
+                userApproved,
+                cancellationToken).ConfigureAwait(true);
+            UpdateSnapshot = _updateService.Snapshot;
+        });
 
     public Task UpdateThemeAsync(UiThemePreference theme, CancellationToken cancellationToken = default) =>
         ApplyAsync(Settings with { Theme = theme }, cancellationToken);
@@ -481,6 +875,68 @@ public sealed partial class SettingsViewModel : PageViewModelBase
         HistoryRetention retention,
         CancellationToken cancellationToken = default) =>
         ApplyAsync(Settings with { HistoryRetention = retention }, cancellationToken);
+
+    public Task UpdatePerformancePresetAsync(
+        AppPerformancePreset preset,
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(Settings with { PerformancePreset = preset }, cancellationToken);
+
+    public Task UpdateReducedMotionAsync(
+        bool reducedMotion,
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(Settings with { ReducedMotion = reducedMotion }, cancellationToken);
+
+    public Task UpdateCloseToTrayAsync(
+        bool closeToTray,
+        bool confirmed,
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(
+            Settings with
+            {
+                CloseToTray = closeToTray,
+                CloseToTrayConfirmed = confirmed,
+            },
+            cancellationToken);
+
+    public Task UpdateHotkeysAsync(
+        IReadOnlyList<AppHotkeyBinding> hotkeys,
+        CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(async () =>
+        {
+            ArgumentNullException.ThrowIfNull(hotkeys);
+            if (hotkeys.Select(binding => binding.Action).Distinct().Count() != hotkeys.Count)
+            {
+                throw new ArgumentException("Hotkey actions must be unique.", nameof(hotkeys));
+            }
+            AppHotkeyBinding[] enabled = hotkeys.Where(binding => binding.Enabled).ToArray();
+            if (enabled.Any(binding => !HotkeyGesture.TryParse(binding.Gesture, out _)) ||
+                enabled.GroupBy(
+                        binding => binding.Gesture.Replace(" ", string.Empty),
+                        StringComparer.OrdinalIgnoreCase)
+                    .Any(group => group.Count() > 1))
+            {
+                throw new ArgumentException(
+                    "Enabled hotkeys must be valid and unique.",
+                    nameof(hotkeys));
+            }
+            ApplicationSettings updated = Settings with { Hotkeys = hotkeys.ToArray() };
+            await _settingsService.UpdateAsync(updated, cancellationToken).ConfigureAwait(true);
+            Settings = updated;
+        });
+
+    public Task SaveHotkeyRowsAsync(CancellationToken cancellationToken = default) =>
+        UpdateHotkeysAsync(
+            Hotkeys.Select(row => row.ToBinding()).ToArray(),
+            cancellationToken);
+
+    public void RestoreDefaultHotkeys()
+    {
+        Hotkeys.Clear();
+        foreach (AppHotkeyBinding binding in HotkeyDefaults.Create())
+        {
+            Hotkeys.Add(new HotkeyEditorRow(binding));
+        }
+    }
 
     private Task ApplyAsync(ApplicationSettings updated, CancellationToken cancellationToken) =>
         RunGuardedAsync(async () =>

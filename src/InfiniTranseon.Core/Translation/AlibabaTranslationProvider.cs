@@ -50,17 +50,23 @@ public sealed class AlibabaTranslationProvider : ITranslationProvider
     }
 
     public CredentialBinding CreateCredentialBinding(string purpose)
+        => CreateCredentialBinding(_options, purpose);
+
+    public static CredentialBinding CreateCredentialBinding(
+        AlibabaTranslationOptions options,
+        string purpose)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (purpose is not ("access-key-id" or "access-key-secret" or "security-token"))
             throw new ArgumentOutOfRangeException(nameof(purpose));
         return new CredentialBinding(
             ProviderId,
             purpose,
             "https",
-            _options.Endpoint.IdnHost,
-            _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port,
+            options.Endpoint.IdnHost,
+            options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port,
             "acs3-hmac-sha256",
-            _options.ProxyPolicy);
+            options.ProxyPolicy);
     }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(
@@ -115,8 +121,10 @@ public sealed class AlibabaTranslationProvider : ITranslationProvider
         byte[] body = Encoding.UTF8.GetBytes(string.Join('&', new[]
         {
             "FormatType=text",
-            "SourceLanguage=" + Rfc3986(request.SourceLanguage),
-            "TargetLanguage=" + Rfc3986(request.TargetLanguage),
+            "SourceLanguage=" + Rfc3986(
+                ProviderLanguageCodes.ForAlibaba(request.SourceLanguage)),
+            "TargetLanguage=" + Rfc3986(
+                ProviderLanguageCodes.ForAlibaba(request.TargetLanguage)),
             "SourceText=" + Rfc3986(request.SourceText),
             "Scene=general",
         }));

@@ -176,8 +176,10 @@ public sealed class EngineRuntimeServiceTests
     public async Task DisposeTearsDownTheBackendAndItsSession()
     {
         var harness = new Harness();
+        var ownedResource = new TrackedDisposable();
         var service = new EngineRuntimeService(
-            Found(), harness.SessionFactory, harness.BackendFactory, FastRestart);
+            Found(), harness.SessionFactory, harness.BackendFactory, FastRestart,
+            lifetimeResource: ownedResource);
         await service.StartAsync(TestContext.Current.CancellationToken);
         ScriptedSession session = harness.Sessions.Single();
         FakeBackend backend = harness.Backends.Single();
@@ -186,6 +188,7 @@ public sealed class EngineRuntimeServiceTests
 
         Assert.True(backend.Disposed);
         Assert.True(session.Disposed);
+        Assert.True(ownedResource.Disposed);
     }
 
     [Fact]
@@ -335,6 +338,13 @@ public sealed class EngineRuntimeServiceTests
         }
     }
 
+    private sealed class TrackedDisposable : IDisposable
+    {
+        public bool Disposed { get; private set; }
+
+        public void Dispose() => Disposed = true;
+    }
+
     private sealed class ScriptedSession(Guid epoch) : IRuntimeEngineHostSession
     {
         private int _disposed;
@@ -366,6 +376,10 @@ public sealed class EngineRuntimeServiceTests
             ApplyProcessingConfigurationAsync(
                 RuntimeProcessingConfiguration configuration, TimeSpan timeout,
                 CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
             OcrResultSnapshot result, TimeSpan timeout,

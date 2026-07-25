@@ -32,6 +32,11 @@ public interface IRuntimeTranslationSessionSink
 public interface IRuntimeTranslationPipeline : IAsyncDisposable
 {
     void Register(RuntimeTranslationTarget target);
+    ValueTask ReplaceAsync(
+        RuntimeTranslationTarget target,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromException(
+            new EngineRuntimeUnsupportedOperationException("replaceProfile"));
     void Unregister(TargetInstanceId targetInstanceId);
     ValueTask EnqueueAsync(OcrResultSnapshot result, CancellationToken cancellationToken);
     Task DrainAsync(CancellationToken cancellationToken);
@@ -144,6 +149,7 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
     private readonly Dictionary<Guid, OverlayStateCoordinator> _overlays = [];
     private readonly Dictionary<ExecutionKey, ActiveExecution> _executions = [];
     private readonly ConcurrentQueue<Exception> _observerFailures = new();
+    private readonly RuntimeTranslationContextLedger _contextLedger = new();
     private int _disposed;
 
     public RuntimeTranslationPipeline(
@@ -183,6 +189,65 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
         }
     }
 
+    public async ValueTask ReplaceAsync(
+        RuntimeTranslationTarget target,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        OverlayStateCoordinator coordinator;
+        ActiveExecution[] cancelled;
+        lock (_gate)
+        {
+            if (!_targets.TryGetValue(
+                    target.TargetInstanceId.Value,
+                    out RuntimeTranslationTarget? previous) ||
+                !_overlays.TryGetValue(target.TargetInstanceId.Value, out coordinator!))
+            {
+                throw new InvalidOperationException("pipeline.targetNotRegistered");
+            }
+            if (previous.RuntimeEpoch != target.RuntimeEpoch ||
+                previous.CaptureTargetId != target.CaptureTargetId ||
+                target.ProfileRevision <= previous.ProfileRevision)
+            {
+                throw new InvalidOperationException("pipeline.targetReplacementInvalid");
+            }
+
+            ExecutionKey[] keys = _executions.Keys
+                .Where(key => key.TargetInstanceId == target.TargetInstanceId.Value)
+                .ToArray();
+            var active = new List<ActiveExecution>(keys.Length);
+            foreach (ExecutionKey key in keys)
+            {
+                if (_executions.Remove(key, out ActiveExecution? execution))
+                {
+                    execution.Cancellation.Cancel();
+                    active.Add(execution);
+                }
+            }
+            cancelled = active.ToArray();
+            _targets[target.TargetInstanceId.Value] = target;
+            _textGate.Clear(target.TargetInstanceId);
+        }
+
+        try
+        {
+            await Task.WhenAll(cancelled.Select(item => item.Task))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            cancelled.All(item => item.Cancellation.IsCancellationRequested) &&
+            !cancellationToken.IsCancellationRequested)
+        {
+        }
+
+        if (coordinator.Clear(out OverlayDesiredState? cleared))
+            await _overlay.ApplyAsync(cleared!, cancellationToken).ConfigureAwait(false);
+    }
+
     public void Unregister(TargetInstanceId targetInstanceId)
     {
         ArgumentNullException.ThrowIfNull(targetInstanceId);
@@ -205,6 +270,8 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
         }
         if (stoppedProfile is Guid profileId && _records is IRuntimeTranslationSessionSink session)
             session.ProfileStopped(profileId);
+        if (stoppedProfile is Guid clearedProfileId)
+            _contextLedger.Clear(clearedProfileId);
     }
 
     public ValueTask EnqueueAsync(
@@ -260,7 +327,7 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
                     "OCR result region is not registered."), cancellationToken).ConfigureAwait(false);
             return;
         }
-        if (!region.Enabled || !region.TranslationEnabled) return;
+        if (!region.Enabled) return;
 
         if (source.Area.Kind == CaptureAreaKind.RemainingArea)
         {
@@ -351,6 +418,12 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
                 cancellationToken).ConfigureAwait(false);
             return;
         }
+
+        _contextLedger.ObserveRole(
+            target.Profile.ProfileId,
+            region.ContextRole,
+            generation.SourceText);
+        if (!region.TranslationEnabled) return;
 
         IReadOnlyList<TranslationChannelDefinition> channels;
         try { channels = ProfileTranslationFactory.CreateChannels(region); }
@@ -534,10 +607,13 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
                 displayRegionId, generation.SourceToken, bounds, style, channels);
             await _overlay.ApplyAsync(initial, cancellationToken).ConfigureAwait(false);
             var outputs = new List<TranslationOutput>();
+            TranslationRunOptions runOptions = _contextLedger.Apply(
+                target.RunOptions,
+                target.Profile.Context.RecentLineCount);
             await foreach (TranslationOutput output in _orchestrator.RunAsync(
                                generation,
                                channels,
-                               target.RunOptions,
+                               runOptions,
                                cancellationToken).ConfigureAwait(false))
             {
                 outputs.Add(output);
@@ -557,6 +633,18 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
                     generation,
                     outputs.AsReadOnly(),
                     cancellationToken).ConfigureAwait(false);
+            string? latestTranslation = outputs
+                .Where(output => output.StreamCompleted &&
+                    output.TerminalErrorCode is null &&
+                    output.Text.Length > 0)
+                .OrderByDescending(output => output.StageIndex)
+                .ThenByDescending(output => output.Attempt)
+                .Select(output => output.Text)
+                .FirstOrDefault();
+            _contextLedger.Append(
+                target.Profile.ProfileId,
+                generation.SourceText,
+                latestTranslation);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

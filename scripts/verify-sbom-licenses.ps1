@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$BomPath,
     [string]$ModelCatalogPath,
+    [string]$NativeNoticesPath,
     [string]$NoticesOutputPath
 )
 
@@ -101,6 +102,25 @@ foreach ($component in @($bom.components)) {
         licenses = @($expressions.ToArray() | Sort-Object -Unique)
         packageUrl = if ($component.PSObject.Properties.Name -contains 'purl') { [string]$component.purl } else { $null }
     })
+}
+
+if (-not [string]::IsNullOrWhiteSpace($NativeNoticesPath)) {
+    $native = Get-Content -LiteralPath $NativeNoticesPath -Raw | ConvertFrom-Json
+    if ($native.schemaVersion -ne 1 -or @($native.components).Count -eq 0) {
+        throw 'Native third-party notices are invalid or empty.'
+    }
+    foreach ($component in @($native.components)) {
+        $expressions = @($component.licenses | ForEach-Object { [string]$_ })
+        Assert-CompatibleLicense `
+            -Component ([string]$component.name) `
+            -Expressions $expressions
+        $notices.Add([ordered]@{
+            name = [string]$component.name
+            version = [string]$component.version
+            licenses = @($expressions | Sort-Object -Unique)
+            licenseFile = [string]$component.licenseFile
+        })
+    }
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ModelCatalogPath) -and

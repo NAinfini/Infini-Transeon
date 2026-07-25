@@ -26,9 +26,22 @@
         "licenseSpdx": { "type": "string", "minLength": 1 },
         "runtime": { "type": "string", "minLength": 1 },
         "opset": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "sourceLanguages": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,35}$" },
+          "uniqueItems": true
+        },
+        "targetLanguages": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,35}$" },
+          "uniqueItems": true
+        },
         "architectures": { "type": "array", "minItems": 1, "items": { "enum": ["win-x64"] }, "uniqueItems": true },
-        "downloadOrigins": { "type": "array", "minItems": 1, "items": { "type": "string", "format": "uri", "pattern": "^https://" }, "uniqueItems": true },
-        "files": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/modelFile" } }
+        "downloadOrigins": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "type": "string", "format": "uri", "pattern": "^https://" }, "uniqueItems": true },
+        "files": { "type": "array", "minItems": 1, "maxItems": 1024, "items": { "$ref": "#/$defs/modelFile" } }
       }
     },
     "modelFile": {
@@ -36,7 +49,11 @@
       "additionalProperties": false,
       "required": ["relativePath", "byteSize", "sha256"],
       "properties": {
-        "relativePath": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:|/|.*(?:^|/)\\.\\.(?:/|$)).+$" },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![A-Za-z]:|/|.*(?:^|/)\\.\\.(?:/|$)|.*\\.(?:bat|cmd|com|dll|exe|js|msi|ps1|py|scr|vbs)$).+$"
+        },
         "byteSize": { "type": "integer", "minimum": 1 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
@@ -52,5 +69,5 @@
       }
     }
   },
-  "$comment": "Sign canonical JSON with signatures omitted. Persist the highest accepted catalogSequence. Model catalog trust roots are separate from release trust roots and support current/next key rotation."
+  "$comment": "Sign canonical JSON with signatures omitted. Persist the highest accepted catalogSequence independently from the application release sequence. Trust keys support current/next rotation."
 }

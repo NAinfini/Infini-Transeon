@@ -345,6 +345,19 @@ std::optional<CaptureTargetCommand> parse_capture_target_command(
         : std::nullopt;
 }
 
+bool parse_manual_ocr_request(const std::span<const std::byte> bytes) noexcept
+{
+    constexpr std::size_t payload_bytes = 8U;
+    constexpr std::uint32_t schema_version = 1U;
+    constexpr std::byte manual_ocr_operation{1U};
+    return bytes.size() == payload_bytes &&
+        read_u32(bytes, 0U) == schema_version &&
+        bytes[4U] == manual_ocr_operation &&
+        bytes[5U] == std::byte{} &&
+        bytes[6U] == std::byte{} &&
+        bytes[7U] == std::byte{};
+}
+
 std::optional<overlay::desired_state> parse_overlay_desired_state(
     const std::span<const std::byte> bytes) noexcept
 {
@@ -645,6 +658,21 @@ std::optional<ProcessingConfigurationCommand> parse_processing_configuration(
         : std::nullopt;
 }
 
+std::optional<ThumbnailRequest> parse_thumbnail_request(
+    const std::span<const std::byte> bytes) noexcept
+{
+    if (bytes.size() != 24U || read_u32(bytes, 0U) != 1U)
+        return std::nullopt;
+    ThumbnailRequest request{};
+    request.maximum_long_edge = read_u32(bytes, 4U);
+    std::ranges::copy(bytes.subspan(8U, 16U), request.target_instance_id.begin());
+    if (!nonzero(request.target_instance_id) ||
+        request.maximum_long_edge < 320U ||
+        request.maximum_long_edge > 1280U)
+        return std::nullopt;
+    return request;
+}
+
 std::optional<OcrResultCommand> parse_ocr_result(
     const std::span<const std::byte> bytes) noexcept
 {
@@ -655,13 +683,15 @@ std::optional<OcrResultCommand> parse_ocr_result(
         read_u32(bytes, 4U) > maximum_lines || bytes[120U] > std::byte{1} ||
         !reserved_zero(bytes.subspan(121U, 7U)) ||
         !reserved_zero(bytes.subspan(140U, 4U)) ||
-        !reserved_zero(bytes.subspan(41U, 3U)))
+        bytes[41U] > std::byte{1} ||
+        !reserved_zero(bytes.subspan(42U, 2U)))
         return std::nullopt;
 
     OcrResultCommand result{};
     std::ranges::copy(bytes.subspan(8U, 16U), result.token.runtime_epoch.begin());
     std::ranges::copy(bytes.subspan(24U, 16U), result.token.target_instance_id.begin());
     result.token.area_kind = std::to_integer<std::uint8_t>(bytes[40U]);
+    result.token.manual = bytes[41U] == std::byte{1};
     std::ranges::copy(bytes.subspan(44U, 16U), result.token.region_id.begin());
     std::ranges::copy(bytes.subspan(60U, 16U), result.token.text_track_id.begin());
     result.token.source_generation = read_u64(bytes, 76U);
@@ -809,6 +839,7 @@ std::optional<std::vector<std::byte>> encode_cloud_ocr_crop_request(
         std::ranges::copy(event.token.runtime_epoch, payload.begin() + 4U);
         std::ranges::copy(event.token.target_instance_id, payload.begin() + 20U);
         payload[36U] = static_cast<std::byte>(event.token.area_kind);
+        payload[37U] = event.token.manual ? std::byte{1} : std::byte{};
         std::ranges::copy(event.token.region_id, payload.begin() + 40U);
         std::ranges::copy(event.token.text_track_id, payload.begin() + 56U);
         write_u64(bytes, 72U, event.token.source_generation);
@@ -908,6 +939,7 @@ std::optional<std::vector<std::byte>> encode_ocr_result(
         std::ranges::copy(result.token.runtime_epoch, payload.begin() + 8U);
         std::ranges::copy(result.token.target_instance_id, payload.begin() + 24U);
         payload[40U] = static_cast<std::byte>(result.token.area_kind);
+        payload[41U] = result.token.manual ? std::byte{1} : std::byte{};
         std::ranges::copy(result.token.region_id, payload.begin() + 44U);
         std::ranges::copy(result.token.text_track_id, payload.begin() + 60U);
         write_u64(bytes, 76U, result.token.source_generation);

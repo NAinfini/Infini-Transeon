@@ -18,6 +18,17 @@ namespace infini::runtime
     std::size_t current,
     std::size_t requested,
     std::size_t limit) noexcept;
+[[nodiscard]] bool manual_ocr_allows_region(
+    bool manual_requested,
+    bool policy_suppressed,
+    bool cadence_due,
+    bool request_outstanding) noexcept;
+[[nodiscard]] bool manual_ocr_target_available(
+    std::uint32_t lifecycle_state,
+    bool latest_frame_available) noexcept;
+[[nodiscard]] bool manual_ocr_allows_signature(
+    bool manual_requested,
+    bool meaningfully_changed) noexcept;
 
 struct AdapterGpuBudget final
 {
@@ -69,6 +80,27 @@ struct OcrResultApplyResult final
     std::string error_code;
 };
 
+struct ManualOcrApplyResult final
+{
+    bool accepted{};
+    std::uint8_t status{};
+    std::uint32_t target_count{};
+    std::uint32_t region_count{};
+    std::string error_code;
+};
+
+struct ThumbnailApplyResult final
+{
+    bool accepted{};
+    std::array<std::byte, 16U> target_instance_id{};
+    std::uint64_t frame_sequence{};
+    std::uint32_t pixel_width{};
+    std::uint32_t pixel_height{};
+    std::string mime_type;
+    std::vector<std::byte> encoded_image;
+    std::string error_code;
+};
+
 class RuntimeCaptureController final
 {
 public:
@@ -96,6 +128,9 @@ public:
         const PolicyRevisionCommand& command) noexcept;
     [[nodiscard]] OcrResultApplyResult apply_ocr_result(
         const OcrResultCommand& command) noexcept;
+    [[nodiscard]] ManualOcrApplyResult request_manual_ocr() noexcept;
+    [[nodiscard]] ThumbnailApplyResult request_thumbnail(
+        const ThumbnailRequest& request) noexcept;
     [[nodiscard]] std::size_t target_count() const noexcept;
     [[nodiscard]] std::size_t capture_source_count() const noexcept;
     [[nodiscard]] bool try_get_gpu_budgets(

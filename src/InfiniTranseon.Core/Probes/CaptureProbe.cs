@@ -142,6 +142,8 @@ public sealed class CaptureProbe : ICaptureProbe
                 ErrorCode: null)
             {
                 NativeHandle = handle,
+                DesktopX = info.Monitor.Left,
+                DesktopY = info.Monitor.Top,
             });
             return true;
         }

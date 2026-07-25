@@ -86,6 +86,41 @@ public sealed class OcrTextGenerationGateTests
     }
 
     [Fact]
+    public void ManualResultBypassesStabilizationAndDuplicateSuppression()
+    {
+        Guid epoch = Guid.NewGuid();
+        var target = new TargetInstanceId(Guid.NewGuid());
+        var targetId = new CaptureTargetId(Guid.NewGuid());
+        Guid regionId = Guid.NewGuid();
+        ProfileRegion region = ProfileRegion.Create(
+            "Dialogue", new NormalizedRect(0, 0, 1, 1)) with { RegionId = regionId };
+        var gate = new OcrTextGenerationGate(new TextStabilizerOptions(
+            2, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)));
+        DateTimeOffset start = DateTimeOffset.UnixEpoch;
+
+        Assert.True(gate.TryCreate(
+            Result(epoch, target, regionId, 1, "same", isManual: true),
+            targetId,
+            region,
+            start,
+            1,
+            1,
+            out TextGeneration? first));
+        Assert.True(gate.TryCreate(
+            Result(epoch, target, regionId, 2, "same", isManual: true),
+            targetId,
+            region,
+            start.AddMilliseconds(10),
+            2,
+            2,
+            out TextGeneration? second));
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotEqual(first.SourceEventId, second.SourceEventId);
+    }
+
+    [Fact]
     public void RejectsTerminalOcrFailuresAndMismatchedRegions()
     {
         Guid epoch = Guid.NewGuid();
@@ -120,7 +155,8 @@ public sealed class OcrTextGenerationGateTests
         TargetInstanceId target,
         Guid regionId,
         long generation,
-        string text)
+        string text,
+        bool isManual = false)
     {
         var source = new SourceGenerationToken(
             epoch,
@@ -130,7 +166,7 @@ public sealed class OcrTextGenerationGateTests
             generation,
             1);
         return new OcrResultSnapshot(
-            new OcrExecutionToken(source, Guid.NewGuid(), 1, 1),
+            new OcrExecutionToken(source, Guid.NewGuid(), 1, 1, isManual),
             [new TextLine(text, new NormalizedRect(0.1, 0.2, 0.5, 0.2), 0.9)],
             "windows.media.ocr",
             "windows-11",

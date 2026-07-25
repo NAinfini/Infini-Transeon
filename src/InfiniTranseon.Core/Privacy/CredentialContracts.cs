@@ -135,13 +135,15 @@ public sealed class BoundCredentialStore : IBoundCredentialStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
         ArgumentNullException.ThrowIfNull(expectedBinding);
+        string? secret = await _inner.ReadSecretAsync(reference, cancellationToken).ConfigureAwait(false);
+        if (secret is null) return null;
         if (!_bindings.TryGetValue(reference, out CredentialBinding? actual) ||
             actual != expectedBinding.Normalize())
         {
             throw new CredentialBindingException(
                 "Credential origin, authentication purpose, or proxy policy changed; explicit reconfirmation is required.");
         }
-        return await _inner.ReadSecretAsync(reference, cancellationToken).ConfigureAwait(false);
+        return secret;
     }
 
     public async ValueTask DeleteAsync(string reference, CancellationToken cancellationToken)

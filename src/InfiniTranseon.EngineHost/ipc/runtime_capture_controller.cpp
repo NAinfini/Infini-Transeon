@@ -63,6 +63,35 @@ bool runtime_capacity_available(
     return current <= limit && requested <= limit - current;
 }
 
+bool manual_ocr_allows_region(
+    const bool manual_requested,
+    const bool policy_suppressed,
+    const bool cadence_due,
+    const bool request_outstanding) noexcept
+{
+    return !request_outstanding &&
+        (manual_requested || (!policy_suppressed && cadence_due));
+}
+
+bool manual_ocr_target_available(
+    const std::uint32_t lifecycle_state,
+    const bool latest_frame_available) noexcept
+{
+    if (!latest_frame_available) return false;
+    return lifecycle_state == 1U ||
+        lifecycle_state == 4U ||
+        lifecycle_state == 5U ||
+        lifecycle_state == 6U ||
+        lifecycle_state == 10U;
+}
+
+bool manual_ocr_allows_signature(
+    const bool manual_requested,
+    const bool meaningfully_changed) noexcept
+{
+    return manual_requested || meaningfully_changed;
+}
+
 namespace
 {
 using Microsoft::WRL::ComPtr;
@@ -357,6 +386,7 @@ struct RuntimeCaptureController::Implementation final
             ProcessingRegion region;
             OcrExecutionIdentity token;
             AdapterBinding binding;
+            bool forced{};
         };
 
         mutable std::mutex gate;
@@ -378,6 +408,8 @@ struct RuntimeCaptureController::Implementation final
         ocr_result_callback ocr_result;
         bool processing_supported{};
         std::optional<capture::pixel_rect> target_crop;
+        std::shared_ptr<capture::captured_frame> latest_frame;
+        bool manual_requested{};
         overlay::background_frame_cache background_cache{background_cache_bytes};
         overlay::background_blur_cache background_blurs;
         std::optional<target_key> non_user_background_key;
@@ -411,6 +443,7 @@ struct RuntimeCaptureController::Implementation final
             configuration = std::move(next);
             next_due.clear();
             ocr_regions.clear();
+            manual_requested = false;
             background_cache.clear();
             background_blurs.clear();
             non_user_background_key.reset();
@@ -445,7 +478,173 @@ struct RuntimeCaptureController::Implementation final
         void submit(std::shared_ptr<capture::captured_frame> frame) noexcept
         {
             if (!frame) return;
+            {
+                std::scoped_lock lock(gate);
+                latest_frame = frame;
+            }
             static_cast<void>(worker.submit(std::move(frame)));
+        }
+
+        [[nodiscard]] std::size_t manual_region_count() const noexcept
+        {
+            std::scoped_lock lock(gate);
+            if (!configuration || !processing_supported) return 0U;
+            return static_cast<std::size_t>(std::ranges::count_if(
+                configuration->regions,
+                [scan_remaining = configuration->scan_remaining_area](
+                    const ProcessingRegion& region)
+                {
+                    return region.area_mode != 2U || scan_remaining;
+                }));
+        }
+
+        [[nodiscard]] bool manual_frame_available() const noexcept
+        {
+            std::scoped_lock lock(gate);
+            return latest_frame != nullptr;
+        }
+
+        [[nodiscard]] bool manual_request_busy() const noexcept
+        {
+            const auto now = std::chrono::steady_clock::now();
+            std::scoped_lock lock(gate);
+            return manual_requested ||
+                std::ranges::any_of(
+                    ocr_regions,
+                    [now](const auto& entry)
+                    {
+                        return entry.second.outstanding_until > now;
+                    });
+        }
+
+        [[nodiscard]] bool queue_manual() noexcept
+        {
+            std::shared_ptr<capture::captured_frame> frame;
+            {
+                const auto now = std::chrono::steady_clock::now();
+                std::scoped_lock lock(gate);
+                if (manual_requested || !latest_frame || !configuration ||
+                    !processing_supported ||
+                    std::ranges::any_of(
+                        ocr_regions,
+                        [now](const auto& entry)
+                        {
+                            return entry.second.outstanding_until > now;
+                        }) ||
+                    std::ranges::none_of(
+                        configuration->regions,
+                        [scan_remaining = configuration->scan_remaining_area](
+                            const ProcessingRegion& region)
+                        {
+                            return region.area_mode != 2U || scan_remaining;
+                        }))
+                    return false;
+                manual_requested = true;
+                frame = latest_frame;
+            }
+            if (worker.submit(std::move(frame)) ==
+                scheduling::latest_worker_submit_status::stopped)
+            {
+                std::scoped_lock lock(gate);
+                manual_requested = false;
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] ThumbnailApplyResult make_thumbnail(
+            const target_key& target_instance_id,
+            const std::uint32_t maximum_long_edge) noexcept
+        {
+            ThumbnailApplyResult result{};
+            result.target_instance_id = target_instance_id;
+            std::shared_ptr<capture::captured_frame> frame;
+            AdapterBinding binding{};
+            capture::pixel_rect crop{};
+            {
+                std::scoped_lock lock(gate);
+                frame = latest_frame;
+                if (!frame)
+                {
+                    result.error_code = "thumbnail.frameUnavailable";
+                    return result;
+                }
+                crop = target_crop.value_or(capture::pixel_rect{
+                    0,
+                    0,
+                    static_cast<std::int32_t>(frame->width),
+                    static_cast<std::int32_t>(frame->height)});
+                const std::uint64_t adapter_key = capture::pack_adapter_luid(
+                    frame->adapter_luid.HighPart,
+                    frame->adapter_luid.LowPart);
+                const auto found = bindings.find(adapter_key);
+                if (found == bindings.end())
+                {
+                    result.error_code = "thumbnail.adapterUnavailable";
+                    return result;
+                }
+                binding = found->second;
+            }
+            if (crop.left < 0 || crop.top < 0 ||
+                crop.right <= crop.left || crop.bottom <= crop.top ||
+                crop.right > static_cast<std::int32_t>(frame->width) ||
+                crop.bottom > static_cast<std::int32_t>(frame->height))
+            {
+                result.error_code = "thumbnail.cropInvalid";
+                return result;
+            }
+
+            ocr::texture_crop_readback_result readback = ocr::readback_texture_crop(
+                binding.device,
+                *binding.runtime,
+                frame,
+                {
+                    static_cast<std::uint32_t>(crop.left),
+                    static_cast<std::uint32_t>(crop.top),
+                    static_cast<std::uint32_t>(crop.right - crop.left),
+                    static_cast<std::uint32_t>(crop.bottom - crop.top),
+                },
+                67'108'864U,
+                std::chrono::milliseconds(750));
+            if (readback.status != ocr::texture_crop_readback_status::succeeded)
+            {
+                result.error_code = "thumbnail.readbackFailed";
+                return result;
+            }
+
+            ocr::bgra_image scaled;
+            try
+            {
+                scaled = ocr::downscale_bgra(readback.image, maximum_long_edge);
+            }
+            catch (...)
+            {
+                SecureZeroMemory(
+                    readback.image.pixels.data(),
+                    readback.image.pixels.size());
+                result.error_code = "thumbnail.downscaleFailed";
+                return result;
+            }
+            SecureZeroMemory(
+                readback.image.pixels.data(),
+                readback.image.pixels.size());
+            const std::uint32_t width = scaled.width;
+            const std::uint32_t height = scaled.height;
+            ocr::cloud_crop_encode_result encoded =
+                ocr::encode_png(scaled, 4U * 1024U * 1024U);
+            SecureZeroMemory(scaled.pixels.data(), scaled.pixels.size());
+            if (encoded.status != ocr::cloud_crop_encode_status::succeeded)
+            {
+                result.error_code = "thumbnail.encodeFailed";
+                return result;
+            }
+            result.accepted = true;
+            result.frame_sequence = frame->identity.frame_sequence;
+            result.pixel_width = width;
+            result.pixel_height = height;
+            result.mime_type = "image/png";
+            result.encoded_image = std::move(encoded.bytes);
+            return result;
         }
 
         void store_background(
@@ -491,7 +690,8 @@ struct RuntimeCaptureController::Implementation final
         [[nodiscard]] bool should_process_signature(
             const target_key& region_id,
             const OcrExecutionIdentity& token,
-            const imaging::change_signature& signature) noexcept
+            const imaging::change_signature& signature,
+            const bool forced) noexcept
         {
             try
             {
@@ -505,7 +705,9 @@ struct RuntimeCaptureController::Implementation final
                 const bool comparable = previous.has_value() &&
                     previous->columns == signature.columns &&
                     previous->rows == signature.rows;
-                if (comparable && !imaging::meaningfully_changed(*previous, signature))
+                const bool changed = !comparable ||
+                    imaging::meaningfully_changed(*previous, signature);
+                if (!manual_ocr_allows_signature(forced, changed))
                 {
                     state->second.outstanding_until = {};
                     ++unchanged_regions_skipped;
@@ -543,6 +745,7 @@ struct RuntimeCaptureController::Implementation final
             const auto now = std::chrono::steady_clock::now();
             std::vector<ScheduledCloudRegion> scheduled;
             std::shared_ptr<const ProcessingConfigurationCommand> active_configuration;
+            bool forced_manual{};
             capture::pixel_rect active_crop{
                 0, 0,
                 static_cast<std::int32_t>(frame->width),
@@ -595,26 +798,40 @@ struct RuntimeCaptureController::Implementation final
                         effective_regions.push_back(std::move(automatic));
                     }
                 }
+                forced_manual = manual_requested;
+                if (forced_manual) manual_requested = false;
                 for (const ProcessingRegion& region : effective_regions)
                 {
                     const auto configured_policy = policy_actions.find(region.region_id);
                     const std::uint8_t actions = configured_policy == policy_actions.end()
                         ? 0U
                         : configured_policy->second;
-                    if ((actions & 1U) != 0U ||
-                        ((actions & (1U << 3U)) != 0U && region.area_mode == 2U))
+                    const bool policy_suppressed = (actions & 1U) != 0U ||
+                        ((actions & (1U << 3U)) != 0U && region.area_mode == 2U);
+                    if (!manual_ocr_allows_region(
+                        forced_manual, policy_suppressed, true, false))
                         continue;
-                    auto [due, inserted] = next_due.try_emplace(region.region_id, now);
-                    if (!inserted && due->second > now) continue;
-                    std::uint64_t interval = region.recognition_interval_milliseconds;
-                    if (((actions & (1U << 1U)) != 0U && region.priority >= 2U) ||
-                        ((actions & (1U << 2U)) != 0U && region.area_mode == 2U))
-                        interval = (std::min<std::uint64_t>)(interval * 2U, 3'600'000U);
-                    due->second = now + std::chrono::milliseconds(
-                        interval);
-                    ++scheduled_regions;
+                    bool cadence_due = true;
+                    if (!forced_manual)
+                    {
+                        auto [due, inserted] = next_due.try_emplace(region.region_id, now);
+                        cadence_due = inserted || due->second <= now;
+                        if (!cadence_due) continue;
+                        std::uint64_t interval = region.recognition_interval_milliseconds;
+                        if (((actions & (1U << 1U)) != 0U && region.priority >= 2U) ||
+                            ((actions & (1U << 2U)) != 0U && region.area_mode == 2U))
+                            interval = (std::min<std::uint64_t>)(
+                                interval * 2U, 3'600'000U);
+                        due->second = now + std::chrono::milliseconds(interval);
+                    }
                     OcrRegionState& region_state = ocr_regions[region.region_id];
-                    if (region_state.outstanding_until > now) continue;
+                    if (!manual_ocr_allows_region(
+                        forced_manual,
+                        policy_suppressed,
+                        cadence_due,
+                        region_state.outstanding_until > now))
+                        continue;
+                    ++scheduled_regions;
                     if (!nonzero_identity(region_state.text_track_id))
                     {
                         const auto identity = create_identity();
@@ -638,6 +855,7 @@ struct RuntimeCaptureController::Implementation final
                     token.runtime_epoch = runtime_epoch;
                     token.target_instance_id = active_configuration->target_instance_id;
                     token.area_kind = region.area_mode;
+                    token.manual = forced_manual;
                     if (region.area_mode == 0U) token.region_id = region.region_id;
                     token.text_track_id = region_state.text_track_id;
                     token.source_generation = region_state.generation;
@@ -646,7 +864,7 @@ struct RuntimeCaptureController::Implementation final
                     region_state.ocr_run_id = *run_id;
                     token.attempt = 1U;
                     token.result_sequence = 1U;
-                    scheduled.push_back({region, token, binding->second});
+                    scheduled.push_back({region, token, binding->second, forced_manual});
                 }
             }
             for (ScheduledCloudRegion& work : scheduled)
@@ -722,7 +940,7 @@ struct RuntimeCaptureController::Implementation final
                     continue;
                 }
                 if (!should_process_signature(
-                    work.region.region_id, work.token, signature))
+                    work.region.region_id, work.token, signature, work.forced))
                 {
                     SecureZeroMemory(readback.image.pixels.data(),
                         readback.image.pixels.size());
@@ -1474,6 +1692,75 @@ struct RuntimeCaptureController::Implementation final
         return targets.contains(target_instance_id);
     }
 
+    [[nodiscard]] ManualOcrApplyResult request_manual_ocr()
+    {
+        constexpr std::uint8_t scheduled = 1U;
+        constexpr std::uint8_t no_targets = 2U;
+        constexpr std::uint8_t no_regions = 3U;
+        constexpr std::uint8_t busy = 4U;
+        constexpr std::uint8_t runtime_failure = 5U;
+        constexpr std::uint8_t target_unavailable = 6U;
+        if (targets.empty())
+            return {false, no_targets, 0U, 0U, "ocr.manual.noTargets"};
+
+        std::vector<ProcessingState*> eligible;
+        std::size_t region_count{};
+        bool found_regions{};
+        eligible.reserve(targets.size());
+        for (auto& [_, target] : targets)
+        {
+            const std::size_t target_regions =
+                target.processing_state->manual_region_count();
+            if (target_regions == 0U) continue;
+            found_regions = true;
+            if (!manual_ocr_target_available(
+                    target.status->state.load(),
+                    target.processing_state->manual_frame_available()))
+                continue;
+            if (target.processing_state->manual_request_busy())
+                return {false, busy, 0U, 0U, "ocr.manual.busy"};
+            eligible.push_back(target.processing_state.get());
+            region_count += target_regions;
+        }
+        if (eligible.empty())
+        {
+            if (!found_regions)
+                return {false, no_regions, 0U, 0U, "ocr.manual.noRegions"};
+            return {false, target_unavailable, 0U, 0U,
+                "ocr.manual.targetUnavailable"};
+        }
+
+        for (ProcessingState* state : eligible)
+        {
+            if (!state->queue_manual())
+                return {false, runtime_failure, 0U, 0U,
+                    "ocr.manual.scheduleFailed"};
+        }
+        return {
+            true,
+            scheduled,
+            static_cast<std::uint32_t>(eligible.size()),
+            static_cast<std::uint32_t>(region_count),
+            {},
+        };
+    }
+
+    [[nodiscard]] ThumbnailApplyResult request_thumbnail(
+        const ThumbnailRequest& request)
+    {
+        const auto target = targets.find(request.target_instance_id);
+        if (target == targets.end())
+        {
+            ThumbnailApplyResult result{};
+            result.target_instance_id = request.target_instance_id;
+            result.error_code = "thumbnail.targetUnavailable";
+            return result;
+        }
+        return target->second.processing_state->make_thumbnail(
+            request.target_instance_id,
+            request.maximum_long_edge);
+    }
+
     [[nodiscard]] std::size_t target_count() const noexcept
     {
         return targets.size();
@@ -1842,6 +2129,45 @@ OcrResultApplyResult RuntimeCaptureController::apply_ocr_result(
     catch (...)
     {
         return {false, 6U, "ocr.result.runtimeFailure"};
+    }
+}
+
+ManualOcrApplyResult RuntimeCaptureController::request_manual_ocr() noexcept
+{
+    try
+    {
+        return implementation_->request_manual_ocr();
+    }
+    catch (const std::bad_alloc&)
+    {
+        return {false, 5U, 0U, 0U, "ocr.manual.outOfMemory"};
+    }
+    catch (...)
+    {
+        return {false, 5U, 0U, 0U, "ocr.manual.runtimeFailure"};
+    }
+}
+
+ThumbnailApplyResult RuntimeCaptureController::request_thumbnail(
+    const ThumbnailRequest& request) noexcept
+{
+    try
+    {
+        return implementation_->request_thumbnail(request);
+    }
+    catch (const std::bad_alloc&)
+    {
+        ThumbnailApplyResult result{};
+        result.target_instance_id = request.target_instance_id;
+        result.error_code = "thumbnail.outOfMemory";
+        return result;
+    }
+    catch (...)
+    {
+        ThumbnailApplyResult result{};
+        result.target_instance_id = request.target_instance_id;
+        result.error_code = "thumbnail.runtimeFailure";
+        return result;
     }
 }
 

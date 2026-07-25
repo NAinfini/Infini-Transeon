@@ -53,14 +53,21 @@ public sealed class AnthropicTranslationProvider : ITranslationProvider
         _credentials = credentials;
     }
 
-    public CredentialBinding CreateCredentialBinding() => new(
-        ProviderId,
-        "api-key",
-        "https",
-        _options.Endpoint.IdnHost,
-        _options.Endpoint.IsDefaultPort ? 443 : _options.Endpoint.Port,
-        "x-api-key",
-        _options.ProxyPolicy);
+    public CredentialBinding CreateCredentialBinding() =>
+        CreateCredentialBinding(_options);
+
+    public static CredentialBinding CreateCredentialBinding(AnthropicProviderOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new CredentialBinding(
+            ProviderId,
+            "api-key",
+            "https",
+            options.Endpoint.IdnHost,
+            options.Endpoint.IsDefaultPort ? 443 : options.Endpoint.Port,
+            "x-api-key",
+            options.ProxyPolicy);
+    }
 
     public async IAsyncEnumerable<ProviderWireEvent> StreamAsync(
         TranslationRequest request,
@@ -213,7 +220,7 @@ public sealed class AnthropicTranslationProvider : ITranslationProvider
             writer.WriteString("model", _options.Model);
             writer.WriteNumber("max_tokens", request.MaximumOutputTokens);
             writer.WriteBoolean("stream", true);
-            writer.WriteString("system", TranslationPromptPayload.SystemPrompt);
+            writer.WriteString("system", TranslationPromptPayload.CreateSystemPrompt(request));
             writer.WriteStartArray("messages");
             writer.WriteStartObject();
             writer.WriteString("role", "user");

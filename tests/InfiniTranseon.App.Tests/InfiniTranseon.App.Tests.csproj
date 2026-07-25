@@ -15,6 +15,7 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +32,7 @@
     <Compile Include="..\..\src\InfiniTranseon.App\Presentation\**\*.cs" LinkBase="AppSources\Presentation" />
     <Compile Include="..\..\src\InfiniTranseon.App\State\**\*.cs" LinkBase="AppSources\State" />
     <Compile Include="..\..\src\InfiniTranseon.App\Composition\**\*.cs" LinkBase="AppSources\Composition" />
+    <Compile Include="..\..\src\InfiniTranseon.App\Deployment\**\*.cs" LinkBase="AppSources\Deployment" />
     <Compile Include="..\..\src\InfiniTranseon.App\Controls\StatusSeverity.cs" Link="AppSources\Controls\StatusSeverity.cs" />
     <Compile Include="..\..\src\InfiniTranseon.App\Shell\NavigationMap.cs" Link="AppSources\Shell\NavigationMap.cs" />
   </ItemGroup>

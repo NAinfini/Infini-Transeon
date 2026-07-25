@@ -24,6 +24,13 @@ public sealed record CaptureProbeTarget(
 
     /// <summary>Owning process image name for window targets, when resolvable.</summary>
     public string? ProcessName { get; init; }
+
+    /// <summary>
+    /// Top-left pixel position in virtual-desktop coordinates for monitor targets.
+    /// Values may be negative when a monitor is left of or above the primary display.
+    /// </summary>
+    public int DesktopX { get; init; }
+    public int DesktopY { get; init; }
 }
 
 public sealed record CaptureProbeResult(IReadOnlyList<CaptureProbeTarget> Targets);

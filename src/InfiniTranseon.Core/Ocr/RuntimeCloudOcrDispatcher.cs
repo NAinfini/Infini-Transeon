@@ -84,6 +84,7 @@ public sealed class RuntimeCloudOcrDispatcher
             if (crop.DeadlineUtc > runtimeEvent.DeadlineUtc)
                 throw new OcrRoutingException(
                     "ocr.runtime.deadlineMismatch", "Cloud OCR crop exceeds its runtime envelope deadline.");
+            _router.AdoptAttempt(crop.ExecutionToken);
             var request = new CloudOcrRouteRequest(
                 crop.ExecutionToken,
                 crop.MimeType,

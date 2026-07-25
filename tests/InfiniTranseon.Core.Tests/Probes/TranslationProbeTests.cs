@@ -44,10 +44,13 @@ public sealed class TranslationProbeTests
     }
 
     [Fact]
-    public async Task ReportsRebindRequiredWhenBindingWasNeverStored()
+    public async Task ReportsRebindRequiredWhenSecretExistsWithoutBindingMetadata()
     {
         var registry = Registry(new StubProvider(new ProviderDone(0, ProviderUsage.None)));
-        var store = new BoundCredentialStore(new MemoryCredentialStore());
+        var inner = new MemoryCredentialStore();
+        await inner.WriteSecretAsync(
+            "ref", "orphaned-secret", TestContext.Current.CancellationToken);
+        var store = new BoundCredentialStore(inner);
         var probe = new TranslationProbe(
             registry, ProviderId, credentialStore: store,
             credentialBinding: Binding, credentialReference: "ref");

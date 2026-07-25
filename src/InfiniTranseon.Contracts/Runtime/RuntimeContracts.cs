@@ -142,7 +142,12 @@ public sealed record SourceGenerationToken
 
 public sealed record OcrExecutionToken
 {
-    public OcrExecutionToken(SourceGenerationToken source, Guid ocrRunId, int attempt, long resultSequence)
+    public OcrExecutionToken(
+        SourceGenerationToken source,
+        Guid ocrRunId,
+        int attempt,
+        long resultSequence,
+        bool isManual = false)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (ocrRunId == Guid.Empty) throw new ArgumentException("OCR run cannot be empty.", nameof(ocrRunId));
@@ -152,12 +157,14 @@ public sealed record OcrExecutionToken
         OcrRunId = ocrRunId;
         Attempt = attempt;
         ResultSequence = resultSequence;
+        IsManual = isManual;
     }
 
     public SourceGenerationToken Source { get; }
     public Guid OcrRunId { get; }
     public int Attempt { get; }
     public long ResultSequence { get; }
+    public bool IsManual { get; }
 }
 
 public sealed record ChannelExecutionToken

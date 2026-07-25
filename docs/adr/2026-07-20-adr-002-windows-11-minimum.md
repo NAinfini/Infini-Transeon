@@ -17,7 +17,7 @@ ADR-001 与四份规划文档最初把 Windows 10 build 19041 定为技术 API �
 
 1. v1 最低支持平台为 **Windows 11 x64**，API 基线 **build 22621（22H2）**；发布测试矩阵覆盖当前仍受微软支持的 Windows 11 版本。
 2. **不支持 Windows 10**。安装器与便携版启动时必须检测并明确拒绝不受支持的系统版本，给出本地化提示，不得静默降级运行。
-3. 捕获边框策略随之确定：通过 `IsBorderRequired = false` 关闭边框，前置 `GraphicsCaptureAccess.RequestAccessAsync(Borderless)` 一次性用户授权；拒绝授权时边框保留并在 UI 如实告知。`graphicsCaptureWithoutBorder` 属于受限能力，安装版与便携版都必须先建立 package identity 并在 manifest 中声明该能力。授权流程、拒绝行为、重启持久性以及便携版身份的注册、升级、移动目录与清理生命周期由后端 Task 0 spike 实测落档。
+3. 捕获边框策略随之确定：受信任签名的发布通过 package identity 声明 `graphicsCaptureWithoutBorder`，再请求 `GraphicsCaptureAccess.RequestAccessAsync(Borderless)` 一次性用户授权并设置 `IsBorderRequired = false`；拒绝授权时边框保留并在 UI 如实告知。当前无签名发布不能获得可信 package identity，因此明确显示并记录该降级且保留系统边框。签名版的授权、重启持久性与身份注册生命周期仍由后端 Task 0 真机实测落档。
 4. 较新的 Windows 11 API（高于 22621 基线的能力）仍必须运行时检测，不得静态假设。
 5. 便携版 package identity 是发布前置条件而非可选优化；若普通用户权限下不能可靠建立该身份，必须修订便携分发承诺，不得静默降级为带捕获边框的“便携版”。部署身份不得渗透到 Core、Contracts 或 Engine.Native 的业务合同。
 
