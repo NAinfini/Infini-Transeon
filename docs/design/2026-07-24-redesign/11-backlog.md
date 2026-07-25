@@ -169,3 +169,38 @@ Unhandled exception: ...\bin\Release\net10.0-windows\GameOcrBench.exe ... 系统
 **验证:** 清空 `benchmarks/GameOcrBench` 与 `tests/InfiniTranseon.Bench.Tests` 的 `bin`/`obj` 后,按 CI 原样跑 `dotnet restore` → `dotnet test -c Release --no-restore`(784/784)→ Release 产物出现 → `dotnet run --no-build` 冒烟 **exit 0**,`artifacts/game-ocr-bench-smoke.json` 正常写出。
 
 **教训:** 这两条(`.gitignore` 吞源码、sln 掉项目)都属于"本机全绿、别人全红"的同一类——本机磁盘上的既有状态掩盖了仓库内容的缺失。第三轮之前从未有人看过 CI 结果。
+
+## 第五轮:200 用户模拟发现的问题与修复(2026-07-25)
+
+上一轮把"能不能构建、能不能发布"修绿了。本轮问的是**用户能不能把这个程序用起来**:沿着「下载 → 启动 → 建档案 → 选目标 → 配服务商 → 划区域 → 试 OCR → 启动 → 看到译文」逐关做代码级判读,找出会让人卡死的断点。
+
+### 已修(代码验证)
+
+| # | 断点 | 根因 | 处置 |
+|---|---|---|---|
+| 1 | 向导里按「测试翻译」测的不是用户选的服务商 | `PresentationComposition` 在组合期把 `ITranslationProbe` 写死成 DeepL 的 provider id + 凭据绑定,`SelectedProvider` 完全没有参与 | 新增 `CatalogTranslationProbe`:按 `TranslationProbeRequest.ProviderId` 路由,并逐条检查该服务商声明的**全部**凭据(Yandex/Baidu/Youdao/Alibaba 都是多凭据) |
+| 2 | DeepL 只提供 Pro 端点 | `BuiltInProviderDefinitions.DeepL(freeEndpoint: false)`。DeepL API Free 密钥(免信用卡、最容易拿到的一把)在 `api.deepl.com` 上一律 403 | Free 独立成 `translation.deepl-free` 服务商。**凭据引用必须全局唯一**(测试 `CatalogCredentialReferencesAreGloballyUniqueAndBoundToTheirProvider` 当场抓到):共用 `api-key` 槽位会让填入的 Free 密钥直接覆盖已保存的 Pro 密钥 |
+| 3 | 错误码原样进 UI(`translation.probe.credentialMissing`) | 636 条 resw 里没有任何一条覆盖探针/服务商错误码 | `ProbeErrorPresenter` **按族**映射(`.authorization` / `.rateLimited` / `http5xx` …),新服务商自动继承正确文案;**机器码始终附在句子后面**,截图仍可诊断 |
+| 4 | 工作区就绪清单没有凭据行 | `WorkspaceOverviewPage` 只查目标/语言/区域三项 | 新增凭据行 + `IProfileService.GetTranslationProviderIdsAsync`(含 fallback 与精修步骤引用的服务商);未就绪时启动按钮禁用并指向「服务商」页 |
+| 5 | 只配了「扫描剩余区域」的档案报 0 个区域、拒绝启动 | `RealProfileService.ToCard` 的 `RegionCount` 漏掉 `RemainingAreaRegion` | 区域数与通道数都改为包含剩余区域 |
+| 6 | 向导第 1 步永远出不了图,第 3 步在空白矩形上划区域,「试跑 OCR」按钮**结构上不可能成功** | 三者都走 `RequestThumbnailAsync`,而它只对**引擎正在捕获**的目标返回像素——新建档案永远不是 | 新增 `IStillFrameProbe` / `StillFrameProbe`:进程内 GDI 取一帧(窗口用 `PrintWindow` + `PW_RENDERFULLCONTENT`,显示器用 `BitBlt` + `CAPTUREBLT`,`HALFTONE` 缩放)。同一帧同时供预览、区域画布底图与 OCR 裁剪 |
+| 7 | 无边框捕获不可用时全程零解释 | 结论只写进了 status log | 向导第 1 步(选目标的地方)直接说明三种情形,并说清"仍能工作,只是有黄框" |
+| 8 | 身份注册助手 `catch { ExitCode = 1; }` | 吞掉唯一的诊断信息 | 异常写 stderr 后再置退出码 |
+
+**`StillFrameProbe` 的真实验证**(不是代码走读):对当前桌面全量枚举后逐个抓帧 —— 8 个窗口成功 6 个、2 个显示器全部成功,非黑像素占比 62.9%–100%。两个失败的正是文档写明的限制:其中一个是**真实 DirectX 游戏(燕云十六声)**,`PrintWindow` 对它永远返回空帧。这类目标抛 `capture.stillFrame.targetRefusedToRender`,UI 明确告诉用户改用显示器捕获——**黑屏预览和"这程序坏了"在用户眼里没有区别**,所以不允许静默显示空帧。
+
+### 有意不修(附理由)
+
+- **向导里不加「扫描剩余区域」开关。** 该开关在工作区「捕获」页已完整可用,而向导现在能出真图,划区域不再是盲划;把它塞进向导需要把 `RealWorkbenchService` 里那段按模板复制翻译通道、保留 ChannelId/StageId 的逻辑复制一份到 `RealProfileService`,收益不抵重复。
+- **未改 `RequestThumbnailAsync` 让它自己回落到静帧。** 那会把两条语义不同的路径(引擎实时帧 / 进程内静帧)混成一条,调用方再也分不清拿到的是什么。页面显式先问引擎、再问静帧探针。
+
+### 仍然挡在 80% 前面、且不是代码能解决的
+
+| 项 | 影响 | 需要谁决定 |
+|---|---|---|
+| 二进制未签名 | SmartScreen「Windows 已保护你的电脑」,首次运行流失最大的单一来源 | 购买 EV/OV 证书 |
+| `build-release.yml` 一次都没跑过 | 没有任何可下载的产物;tag 正则 `^v\d+\.\d+\.\d+$` 还拒绝 `-rc` 后缀 | 推一个 tag |
+| Windows 10 直接拒绝启动(要求 build 22621) | 按当前份额约三分之一的潜在用户在第 0 关出局 | 产品决策 |
+| 端到端「捕获→OCR→翻译→叠加」从未跑通过一次 | **"这个程序能翻译"仍是未经证实的断言** | 需要真实凭据 + 一次真实运行 |
+
+**因此:"80% 用户能达成目的"在当前状态下无法只靠改代码达成**,上表四项里前三项都在我的权限之外。本轮把**代码层面**会导致卡死的断点清完了;剩下的是发布与验证工作。
