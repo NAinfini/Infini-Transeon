@@ -127,7 +127,21 @@ if (-not [string]::IsNullOrWhiteSpace($ModelCatalogPath) -and
     (Test-Path -LiteralPath $ModelCatalogPath)) {
     $catalog = Get-Content -LiteralPath $ModelCatalogPath -Raw | ConvertFrom-Json
     foreach ($model in @($catalog.models)) {
-        Assert-CompatibleLicense -Component ([string]$model.modelId) -Expressions @([string]$model.licenseSpdx)
+        $expression = [string]$model.licenseSpdx
+        Assert-CompatibleLicense -Component ([string]$model.modelId) -Expressions @($expression)
+        # Downloadable models are redistributed by this application, so Apache-2.0 attribution
+        # applies to them exactly as it does to the linked libraries. Checking the licence
+        # without emitting a notice left the shipped file silent about every model.
+        $notices.Add([ordered]@{
+            name = [string]$model.modelId
+            version = [string]$model.version
+            licenses = @($expression)
+            downloadOrigins = if ($model.PSObject.Properties.Name -contains 'downloadOrigins') {
+                @($model.downloadOrigins | ForEach-Object { [string]$_ })
+            } else {
+                @()
+            }
+        })
     }
 }
 

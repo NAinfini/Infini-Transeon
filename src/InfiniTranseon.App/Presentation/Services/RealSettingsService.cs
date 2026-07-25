@@ -2,6 +2,7 @@ using CoreSettings = InfiniTranseon.Core.Settings.ApplicationSettings;
 using CoreSettingsRepository = InfiniTranseon.Core.Settings.ApplicationSettingsRepository;
 using CoreHistoryRetention = InfiniTranseon.Core.Settings.HistoryRetentionPolicy;
 using CoreHotkeySetting = InfiniTranseon.Core.Settings.HotkeySetting;
+using CoreOcrBackend = InfiniTranseon.Core.Settings.OcrBackendPreference;
 using CorePerformancePreset = InfiniTranseon.Core.Scheduling.PerformancePreset;
 using CoreThemePreference = InfiniTranseon.Core.Settings.ThemePreference;
 
@@ -19,6 +20,7 @@ public sealed class RealSettingsService : ISettingsService
     private readonly IReadOnlyList<CatalogProvider> _providers;
     private readonly CustomRestAdapterStore? _customAdapters;
     private readonly LocalModelManagementService? _localModels;
+    private readonly OcrBackendPreferenceSource? _ocrBackend;
 
     public RealSettingsService(
         CoreSettingsRepository coreRepository,
@@ -29,7 +31,8 @@ public sealed class RealSettingsService : ISettingsService
             secrets,
             ProviderCatalog.Default,
             customAdapters,
-            localModels: null)
+            localModels: null,
+            ocrBackend: null)
     {
     }
 
@@ -37,13 +40,15 @@ public sealed class RealSettingsService : ISettingsService
         CoreSettingsRepository coreRepository,
         ISecretReferenceService secrets,
         CustomRestAdapterStore customAdapters,
-        LocalModelManagementService localModels)
+        LocalModelManagementService localModels,
+        OcrBackendPreferenceSource? ocrBackend = null)
         : this(
             coreRepository,
             secrets,
             ProviderCatalog.Default,
             customAdapters,
-            localModels)
+            localModels,
+            ocrBackend)
     {
     }
 
@@ -56,7 +61,8 @@ public sealed class RealSettingsService : ISettingsService
             secrets,
             providers,
             customAdapters: null,
-            localModels: null)
+            localModels: null,
+            ocrBackend: null)
     {
     }
 
@@ -65,7 +71,8 @@ public sealed class RealSettingsService : ISettingsService
         ISecretReferenceService secrets,
         IReadOnlyList<CatalogProvider> providers,
         CustomRestAdapterStore? customAdapters,
-        LocalModelManagementService? localModels)
+        LocalModelManagementService? localModels,
+        OcrBackendPreferenceSource? ocrBackend)
     {
         ArgumentNullException.ThrowIfNull(coreRepository);
         ArgumentNullException.ThrowIfNull(secrets);
@@ -75,11 +82,15 @@ public sealed class RealSettingsService : ISettingsService
         _providers = providers;
         _customAdapters = customAdapters;
         _localModels = localModels;
+        _ocrBackend = ocrBackend;
     }
 
     public async Task<ApplicationSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
         CoreSettings core = await _coreRepository.LoadAsync(cancellationToken).ConfigureAwait(false);
+        // The OCR probe routes synchronously on the frame path and cannot await this read, so the
+        // persisted choice is republished here and in UpdateAsync.
+        _ocrBackend?.Publish(FromCoreOcrBackend(core.OcrBackend));
         return new ApplicationSettings(
             FromCoreTheme(core.Theme),
             core.StrictOffline,
@@ -93,7 +104,8 @@ public sealed class RealSettingsService : ISettingsService
             new Dictionary<string, string>(core.ProviderEndpoints, StringComparer.Ordinal),
             core.CloseToTray,
             core.CloseToTrayConfirmed,
-            [.. core.PinnedProfileIds]);
+            [.. core.PinnedProfileIds],
+            FromCoreOcrBackend(core.OcrBackend));
     }
 
     public async Task UpdateAsync(ApplicationSettings settings, CancellationToken cancellationToken = default)
@@ -106,6 +118,7 @@ public sealed class RealSettingsService : ISettingsService
                 UiLanguage = settings.UiLanguage,
                 Theme = ToCoreTheme(settings.Theme),
                 StrictOffline = settings.StrictOffline,
+                OcrBackend = ToCoreOcrBackend(settings.OcrBackend),
                 HistoryRetention = ToCoreRetention(settings.HistoryRetention),
                 Hotkeys = settings.EffectiveHotkeys.Select(ToCoreHotkey).ToArray(),
                 ProviderEndpoints = new Dictionary<string, string>(
@@ -122,6 +135,7 @@ public sealed class RealSettingsService : ISettingsService
                 },
             }, cancellationToken)
             .ConfigureAwait(false);
+        _ocrBackend?.Publish(settings.OcrBackend);
     }
 
     public async Task<IReadOnlyList<ProviderRow>> GetProvidersAsync(CancellationToken cancellationToken = default)
@@ -395,6 +409,20 @@ public sealed class RealSettingsService : ISettingsService
         HistoryRetention.Off => CoreHistoryRetention.Off,
         HistoryRetention.Days90 => CoreHistoryRetention.Days90,
         _ => CoreHistoryRetention.Days30,
+    };
+
+    private static AppOcrBackend FromCoreOcrBackend(CoreOcrBackend backend) => backend switch
+    {
+        CoreOcrBackend.Windows => AppOcrBackend.Windows,
+        CoreOcrBackend.Local => AppOcrBackend.Local,
+        _ => AppOcrBackend.Automatic,
+    };
+
+    private static CoreOcrBackend ToCoreOcrBackend(AppOcrBackend backend) => backend switch
+    {
+        AppOcrBackend.Windows => CoreOcrBackend.Windows,
+        AppOcrBackend.Local => CoreOcrBackend.Local,
+        _ => CoreOcrBackend.Automatic,
     };
 
     private static CoreHotkeySetting ToCoreHotkey(AppHotkeyBinding hotkey) =>

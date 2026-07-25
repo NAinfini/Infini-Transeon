@@ -6,6 +6,7 @@ using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.App.Theme;
 using InfiniTranseon.Core.Diagnostics;
+using InfiniTranseon.Core.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
@@ -189,6 +190,7 @@ public partial class App : Application
             _window.Activate();
             shell.ApplyActivationRoute(Program.LaunchActivation);
             _ = CheckForUpdatesAfterLaunchAsync();
+            _ = MaintainOcrModelsAfterLaunchAsync(settings.StrictOffline);
         }
         catch (Exception exception)
         {
@@ -275,5 +277,28 @@ public partial class App : Application
         await updates.CheckAsync(
             explicitUserAction: false,
             mainUiVisible: true);
+    }
+
+    /// <summary>
+    /// Downloads and updates the OCR models the saved profiles need, and retires superseded copies.
+    /// The user is never asked and never shown progress; the outcome goes to the status log, where
+    /// the activity feed already surfaces model events for anyone who looks.
+    ///
+    /// Failures are recorded inside the service rather than thrown, because nothing is waiting on
+    /// this: an unreachable network simply means the next launch tries again, and the app still runs
+    /// with whatever is already on disk.
+    /// </summary>
+    private static async Task MaintainOcrModelsAfterLaunchAsync(bool strictOffline)
+    {
+        var profiles = Services.GetRequiredService<ProfileRepository>();
+        var provisioning = Services.GetRequiredService<OcrModelProvisioningService>();
+        string[] languages =
+        [
+            .. (await profiles.ListAsync())
+                .Select(profile => profile.SourceLanguage)
+                .Where(language => !string.IsNullOrWhiteSpace(language))
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+        ];
+        await provisioning.EnsureAsync(languages, strictOffline, CancellationToken.None);
     }
 }

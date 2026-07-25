@@ -481,6 +481,11 @@
   <data name="PerformanceEco.Content" xml:space="preserve"><value>节能</value></data>
   <data name="PerformanceBalanced.Content" xml:space="preserve"><value>均衡</value></data>
   <data name="PerformanceHigh.Content" xml:space="preserve"><value>高性能</value></data>
+  <data name="OcrBackendLabel.Text" xml:space="preserve"><value>文字识别引擎</value></data>
+  <data name="OcrBackendHint.Text" xml:space="preserve"><value>自动模式对本机已能识别的语言使用 Windows 识别器，其余语言使用下载的模型。下载的模型会自行获取并保持最新；离线模式会停止该行为。</value></data>
+  <data name="OcrBackendAutomatic.Content" xml:space="preserve"><value>自动</value></data>
+  <data name="OcrBackendWindows.Content" xml:space="preserve"><value>Windows</value></data>
+  <data name="OcrBackendLocal.Content" xml:space="preserve"><value>下载的模型</value></data>
   <data name="SetupSummaryTargetsLabel.Text" xml:space="preserve"><value>捕获目标：</value></data>
   <data name="WorkbenchAddChannelButton.Content" xml:space="preserve"><value>添加翻译通道</value></data>
   <data name="WorkbenchNoRefinerOption" xml:space="preserve"><value>无</value></data>

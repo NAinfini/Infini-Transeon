@@ -71,6 +71,12 @@ public sealed partial class SettingsPage : Page
                 AppPerformancePreset.Performance => 2,
                 _ => 1,
             };
+            OcrBackendSelector.SelectedIndex = settings.OcrBackend switch
+            {
+                AppOcrBackend.Windows => 1,
+                AppOcrBackend.Local => 2,
+                _ => 0,
+            };
             RefreshUpdateUi();
             RefreshHotkeyRows();
 
@@ -152,6 +158,22 @@ public sealed partial class SettingsPage : Page
             _ => HistoryRetention.Days30,
         };
         await ViewModel.UpdateHistoryRetentionAsync(retention);
+    }
+
+    private async void OnOcrBackendChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        AppOcrBackend backend = OcrBackendSelector.SelectedIndex switch
+        {
+            1 => AppOcrBackend.Windows,
+            2 => AppOcrBackend.Local,
+            _ => AppOcrBackend.Automatic,
+        };
+        await ViewModel.UpdateOcrBackendAsync(backend);
     }
 
     private async void OnReducedMotionToggled(object sender, RoutedEventArgs e)

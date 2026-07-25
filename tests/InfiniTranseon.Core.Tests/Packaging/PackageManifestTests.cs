@@ -195,6 +195,9 @@ public sealed class PackageManifestTests
         Assert.DoesNotContain("InfiniTranseon.Identity.msix", required);
         Assert.Contains("resources.pri", required);
         Assert.Contains("InfiniTranseon.ModelRuntime.Native.dll", required);
+        // Local OCR is entirely in-process on ONNX Runtime; a publish that drops this library
+        // fails only on the user's machine, and only for the languages Windows cannot read.
+        Assert.Contains("onnxruntime.dll", required);
         Assert.Contains("model-catalog.json", required);
         Assert.Contains("sbom.json", required);
         Assert.Contains("THIRD-PARTY-NOTICES.json", required);

@@ -23,6 +23,14 @@ public enum AppPerformancePreset
     Performance,
 }
 
+/// <summary>Presentation mirror of <see cref="Core.Settings.OcrBackendPreference"/>.</summary>
+public enum AppOcrBackend
+{
+    Automatic,
+    Windows,
+    Local,
+}
+
 public sealed record ApplicationSettings(
     UiThemePreference Theme,
     bool StrictOffline,
@@ -34,7 +42,8 @@ public sealed record ApplicationSettings(
     IReadOnlyDictionary<string, string>? ProviderEndpoints = null,
     bool CloseToTray = true,
     bool CloseToTrayConfirmed = false,
-    IReadOnlyList<Guid>? PinnedProfileIds = null)
+    IReadOnlyList<Guid>? PinnedProfileIds = null,
+    AppOcrBackend OcrBackend = AppOcrBackend.Automatic)
 {
     public IReadOnlyList<AppHotkeyBinding> EffectiveHotkeys =>
         Hotkeys ?? HotkeyDefaults.Create();

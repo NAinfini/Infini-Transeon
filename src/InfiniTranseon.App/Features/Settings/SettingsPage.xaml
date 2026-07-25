@@ -240,6 +240,20 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                     </ComboBox>
                                 </Grid>
                             </Border>
+                            <Border x:Name="OcrBackendSettingRow" Style="{StaticResource SettingRowStyle}">
+                                <Grid ColumnSpacing="{StaticResource SpaceXL}">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="{StaticResource SpaceXS}">
+                                        <TextBlock x:Name="OcrBackendLabel" x:Uid="OcrBackendLabel" Style="{StaticResource BodyTextStyle}" />
+                                        <TextBlock x:Uid="OcrBackendHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" MaxWidth="620" />
+                                    </StackPanel>
+                                    <ComboBox x:Name="OcrBackendSelector" AutomationProperties.LabeledBy="{x:Bind OcrBackendLabel}" Grid.Column="1" MinWidth="160" SelectionChanged="OnOcrBackendChanged">
+                                        <ComboBoxItem x:Uid="OcrBackendAutomatic" />
+                                        <ComboBoxItem x:Uid="OcrBackendWindows" />
+                                        <ComboBoxItem x:Uid="OcrBackendLocal" />
+                                    </ComboBox>
+                                </Grid>
+                            </Border>
                         </StackPanel>
 
                         <StackPanel x:Name="AboutPanel" Spacing="{StaticResource SpaceS}" Visibility="Collapsed">

@@ -4,6 +4,7 @@ using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
 using InfiniTranseon.Contracts.Probes;
+using InfiniTranseon.Core.Ocr;
 using InfiniTranseon.Core.Privacy;
 using InfiniTranseon.Core.Probes;
 using InfiniTranseon.Core.Settings;
@@ -124,11 +125,13 @@ public static class PresentationComposition
                     .Concat(customAdapters.GetCatalogProviders())
                     .ToArray());
         });
+        services.AddSingleton<OcrBackendPreferenceSource>();
         services.AddSingleton<ISettingsService>(provider => new RealSettingsService(
             provider.GetRequiredService<ApplicationSettingsRepository>(),
             provider.GetRequiredService<ISecretReferenceService>(),
             provider.GetRequiredService<CustomRestAdapterStore>(),
-            provider.GetRequiredService<LocalModelManagementService>()));
+            provider.GetRequiredService<LocalModelManagementService>(),
+            provider.GetRequiredService<OcrBackendPreferenceSource>()));
         services.AddSingleton<IReleaseUpdateClient>(_ =>
             ReleaseUpdateComposition.CreateClient(options));
         services.AddSingleton<IAppUpdateService>(provider => new RealAppUpdateService(
@@ -138,9 +141,22 @@ public static class PresentationComposition
             options,
             ReleaseUpdateComposition.CurrentApplicationVersion(),
             provider.GetRequiredService<AppStatusLog>()));
+        // Saving a profile is the moment the app learns which language it must be able to read, so
+        // it is also the moment the models for it are fetched. Nothing is shown and nothing waits:
+        // the save returns immediately and the download finishes, or does not, in the background.
         services.AddSingleton<IProfileService>(provider => new RealProfileService(
             provider.GetRequiredService<ProfileRepository>(),
-            options.DatabasePath));
+            options.DatabasePath,
+            async sourceLanguage =>
+            {
+                Presentation.ApplicationSettings current = await provider
+                    .GetRequiredService<ISettingsService>()
+                    .GetSettingsAsync()
+                    .ConfigureAwait(false);
+                await provider.GetRequiredService<OcrModelProvisioningService>()
+                    .EnsureAsync([sourceLanguage], current.StrictOffline, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }));
         services.AddSingleton<IWorkbenchService>(provider => new RealWorkbenchService(
             provider.GetRequiredService<ProfileRepository>(),
             provider.GetRequiredService<IRuntimeControlService>(),
@@ -162,8 +178,34 @@ public static class PresentationComposition
         // that provider's own credential bindings — the same ones the runtime uses.
         services.AddSingleton<ICaptureProbe, CaptureProbe>();
         services.AddSingleton<IStillFrameProbe, StillFrameProbe>();
-        services.AddSingleton<IOcrProbe, WindowsMediaOcrProbe>();
         services.AddSingleton<IOverlayPreviewRenderer, OverlayPreviewRenderer>();
+
+        // OCR has two backends. Windows is the default and needs nothing installed; the PP-OCR
+        // models cover the languages this machine's Windows cannot read, and are the only path that
+        // keeps working with no connection. Which one runs is decided per recognition, because both
+        // sides change while the app is open.
+        services.AddSingleton<IPaddleOcrModelCatalog>(
+            _ => new ManagedPaddleOcrModelCatalog(options.ModelDirectory));
+        services.AddSingleton<IOcrLanguageAvailability>(provider =>
+        {
+            IPaddleOcrModelCatalog catalog = provider.GetRequiredService<IPaddleOcrModelCatalog>();
+            return new WindowsOcrLanguageAvailability(
+                installedModelLanguages: () => catalog.InstalledLanguageTags);
+        });
+        services.AddSingleton<OcrModelProvisioningService>(provider =>
+            new OcrModelProvisioningService(
+                provider.GetRequiredService<LocalModelManagementService>(),
+                provider.GetRequiredService<AppStatusLog>()));
+        services.AddSingleton<IOcrProbe>(provider =>
+        {
+            OcrBackendPreferenceSource preference =
+                provider.GetRequiredService<OcrBackendPreferenceSource>();
+            return new SelectingOcrProbe(
+                new WindowsMediaOcrProbe(),
+                new PaddleOcrProbe(provider.GetRequiredService<IPaddleOcrModelCatalog>()),
+                provider.GetRequiredService<IOcrLanguageAvailability>(),
+                () => preference.Current);
+        });
         services.AddSingleton<ITranslationProbe>(provider => new CatalogTranslationProbe(
             provider.GetRequiredService<IBoundCredentialStore>(),
             provider.GetRequiredService<CustomRestAdapterStore>()));

@@ -23,6 +23,23 @@ public enum HistoryRetentionPolicy
     Days90,
 }
 
+/// <summary>Which engine reads text off the screen.</summary>
+public enum OcrBackendPreference
+{
+    /// <summary>
+    /// Windows when it holds a recognizer for the source language, the downloaded local models
+    /// otherwise. This is the default because the Windows recognizer costs nothing to install and is
+    /// faster, while the local models cover the languages Windows cannot read on this machine.
+    /// </summary>
+    Automatic,
+
+    /// <summary>Always Windows, and fail plainly when it has no recognizer for the language.</summary>
+    Windows,
+
+    /// <summary>Always the downloaded PP-OCR models, even where Windows would also work.</summary>
+    Local,
+}
+
 public sealed record HotkeySetting(
     string Action,
     string Gesture,
@@ -70,6 +87,7 @@ public sealed record ApplicationSettings
     public string? FormattingRegion { get; init; }
     public ThemePreference Theme { get; init; } = ThemePreference.System;
     public bool StrictOffline { get; init; }
+    public OcrBackendPreference OcrBackend { get; init; } = OcrBackendPreference.Automatic;
     public HistoryRetentionPolicy HistoryRetention { get; init; } = HistoryRetentionPolicy.Days30;
     public IReadOnlyList<HotkeySetting>? Hotkeys { get; init; }
     public IReadOnlyDictionary<string, string> ProviderEndpoints { get; init; } =
@@ -95,7 +113,7 @@ public sealed record ApplicationSettings
         {
             throw new InvalidDataException("An explicit formatting region is required.");
         }
-        if (!Enum.IsDefined(Theme) || !Enum.IsDefined(HistoryRetention))
+        if (!Enum.IsDefined(Theme) || !Enum.IsDefined(HistoryRetention) || !Enum.IsDefined(OcrBackend))
         {
             throw new InvalidDataException("Application presentation settings are invalid.");
         }

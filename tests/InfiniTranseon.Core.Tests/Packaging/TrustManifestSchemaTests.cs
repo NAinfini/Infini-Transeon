@@ -232,20 +232,39 @@ public sealed class TrustManifestSchemaTests
                 await File.ReadAllBytesAsync(
                     output,
                     TestContext.Current.CancellationToken));
-            ModelCatalogEntry model = Assert.Single(catalog.Models);
+            ModelCatalogEntry model = Assert.Single(
+                catalog.Models,
+                entry => entry.ModelId == "madlad");
 
             Assert.Equal(17, catalog.CatalogSequence);
-            Assert.Equal("madlad", model.ModelId);
             Assert.Equal("ctranslate2-madlad-v1", model.Runtime);
             Assert.Equal(4, model.Files.Count);
-            Assert.All(model.Files, file => Assert.DoesNotContain(
-                Path.GetExtension(file.RelativePath),
-                new[] { ".dll", ".exe", ".ps1", ".py" },
-                StringComparer.OrdinalIgnoreCase));
+            Assert.All(
+                catalog.Models.SelectMany(entry => entry.Files),
+                file => Assert.DoesNotContain(
+                    Path.GetExtension(file.RelativePath),
+                    new[] { ".dll", ".exe", ".ps1", ".py" },
+                    StringComparer.OrdinalIgnoreCase));
             Assert.Contains(model.Files, file =>
                 file.RelativePath == "model.bin" &&
                 file.ByteSize == 2_950_208_290L &&
                 file.Sha256 == "890ed3b7e4654dcf1b9e7f2ce6ce641447462e782881e81aac443568eb1ca702");
+
+            // OCR ships as a shared detector plus one recognizer per language, so a user who reads
+            // two languages downloads the 5 MB detector once rather than twice.
+            ModelCatalogEntry detector = Assert.Single(
+                catalog.Models,
+                entry => entry.ModelId == "ppocr-v4-base");
+            Assert.Equal("ppocr-onnx-v4", detector.Runtime);
+            Assert.Equal(
+                ["det/ch_PP-OCRv4_det_mobile.onnx", "cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx"],
+                detector.Files.Select(file => file.RelativePath));
+            Assert.Equal(
+                ["ppocr-v4-rec-en", "ppocr-v4-rec-ja", "ppocr-v4-rec-zh-hans"],
+                catalog.Models
+                    .Where(entry => entry.Runtime == "ppocr-onnx-v4" && entry.ModelId != "ppocr-v4-base")
+                    .Select(entry => entry.ModelId)
+                    .Order(StringComparer.Ordinal));
         }
         finally
         {

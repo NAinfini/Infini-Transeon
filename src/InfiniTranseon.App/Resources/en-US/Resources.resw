@@ -481,6 +481,11 @@
   <data name="PerformanceEco.Content" xml:space="preserve"><value>Eco</value></data>
   <data name="PerformanceBalanced.Content" xml:space="preserve"><value>Balanced</value></data>
   <data name="PerformanceHigh.Content" xml:space="preserve"><value>Performance</value></data>
+  <data name="OcrBackendLabel.Text" xml:space="preserve"><value>Text recognition engine</value></data>
+  <data name="OcrBackendHint.Text" xml:space="preserve"><value>Automatic uses the Windows recognizer for the languages this PC can already read, and the downloaded models for the rest. The downloaded models are fetched and kept up to date on their own; offline mode stops that.</value></data>
+  <data name="OcrBackendAutomatic.Content" xml:space="preserve"><value>Automatic</value></data>
+  <data name="OcrBackendWindows.Content" xml:space="preserve"><value>Windows</value></data>
+  <data name="OcrBackendLocal.Content" xml:space="preserve"><value>Downloaded models</value></data>
   <data name="SetupSummaryTargetsLabel.Text" xml:space="preserve"><value>Capture targets:</value></data>
   <data name="WorkbenchAddChannelButton.Content" xml:space="preserve"><value>Add translation channel</value></data>
   <data name="WorkbenchNoRefinerOption" xml:space="preserve"><value>None</value></data>

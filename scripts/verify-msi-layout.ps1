@@ -28,6 +28,10 @@ try {
         'InfiniTranseon.EngineHost.exe',
         'InfiniTranseon.ModelWorker.exe',
         'InfiniTranseon.ModelRuntime.Native.dll',
+        # Local OCR runs in-process on ONNX Runtime. Without this native library the PP-OCR
+        # backend throws DllNotFoundException on the user's machine, and only for the languages
+        # Windows OCR cannot read, so a dropped payload would ship unnoticed.
+        'onnxruntime.dll',
         'model-catalog.json',
         'resources.pri',
         'LICENSE',

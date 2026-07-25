@@ -42,6 +42,90 @@
           "sha256": "ef11ac9a22c7503492f56d48dce53be20e339b63605983e9f27d2cd0e0f3922c"
         }
       ]
+    },
+    {
+      "modelId": "ppocr-v4-base",
+      "version": "4.0.0",
+      "displayName": "PP-OCRv4 text detection",
+      "licenseSpdx": "Apache-2.0",
+      "runtime": "ppocr-onnx-v4",
+      "opset": 12,
+      "architectures": ["win-x64"],
+      "downloadOrigins": [
+        "https://huggingface.co/sukode/RapidOCR/resolve/327b631738f91239c310a1b848c5dbd6a7f41690/onnx/PP-OCRv4/"
+      ],
+      "files": [
+        {
+          "relativePath": "det/ch_PP-OCRv4_det_mobile.onnx",
+          "byteSize": 4745517,
+          "sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9"
+        },
+        {
+          "relativePath": "cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "byteSize": 585532,
+          "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c"
+        }
+      ]
+    },
+    {
+      "modelId": "ppocr-v4-rec-ja",
+      "version": "4.0.0",
+      "displayName": "PP-OCRv4 Japanese recognition",
+      "licenseSpdx": "Apache-2.0",
+      "runtime": "ppocr-onnx-v4",
+      "opset": 14,
+      "architectures": ["win-x64"],
+      "sourceLanguages": ["ja"],
+      "downloadOrigins": [
+        "https://huggingface.co/sukode/RapidOCR/resolve/327b631738f91239c310a1b848c5dbd6a7f41690/onnx/PP-OCRv4/"
+      ],
+      "files": [
+        {
+          "relativePath": "rec/japan_PP-OCRv4_rec_mobile.onnx",
+          "byteSize": 9753335,
+          "sha256": "e1075a67dba758ecfc7ebc78a10ae61c95ac8fb66a9c86fab5541e33f085cb7a"
+        }
+      ]
+    },
+    {
+      "modelId": "ppocr-v4-rec-zh-hans",
+      "version": "4.0.0",
+      "displayName": "PP-OCRv4 Simplified Chinese recognition",
+      "licenseSpdx": "Apache-2.0",
+      "runtime": "ppocr-onnx-v4",
+      "opset": 12,
+      "architectures": ["win-x64"],
+      "sourceLanguages": ["zh-Hans"],
+      "downloadOrigins": [
+        "https://huggingface.co/sukode/RapidOCR/resolve/327b631738f91239c310a1b848c5dbd6a7f41690/onnx/PP-OCRv4/"
+      ],
+      "files": [
+        {
+          "relativePath": "rec/ch_PP-OCRv4_rec_mobile.onnx",
+          "byteSize": 10857958,
+          "sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b"
+        }
+      ]
+    },
+    {
+      "modelId": "ppocr-v4-rec-en",
+      "version": "4.0.0",
+      "displayName": "PP-OCRv4 English recognition",
+      "licenseSpdx": "Apache-2.0",
+      "runtime": "ppocr-onnx-v4",
+      "opset": 14,
+      "architectures": ["win-x64"],
+      "sourceLanguages": ["en"],
+      "downloadOrigins": [
+        "https://huggingface.co/sukode/RapidOCR/resolve/327b631738f91239c310a1b848c5dbd6a7f41690/onnx/PP-OCRv4/"
+      ],
+      "files": [
+        {
+          "relativePath": "rec/en_PP-OCRv4_rec_mobile.onnx",
+          "byteSize": 7653044,
+          "sha256": "e8770c967605983d1570cdf5352041dfb68fa0c21664f49f47b155abd3e0e318"
+        }
+      ]
     }
   ]
 }

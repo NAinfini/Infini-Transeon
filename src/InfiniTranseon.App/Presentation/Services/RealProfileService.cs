@@ -16,13 +16,24 @@ public sealed class RealProfileService : IProfileService
 {
     private readonly ProfileRepository _repository;
     private readonly string _databasePath;
+    private readonly Func<string, Task>? _onSourceLanguageSaved;
 
-    public RealProfileService(ProfileRepository repository, string databasePath)
+    /// <param name="onSourceLanguageSaved">
+    /// Invoked, without being awaited, after a profile is written with a non-empty source language.
+    /// The composition root uses it to fetch the OCR models that language needs. It must not throw
+    /// for an expected condition — nothing observes the returned task — and it must never be made
+    /// blocking: a save has to complete at UI speed even when a download is starting behind it.
+    /// </param>
+    public RealProfileService(
+        ProfileRepository repository,
+        string databasePath,
+        Func<string, Task>? onSourceLanguageSaved = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         _repository = repository;
         _databasePath = Path.GetFullPath(databasePath);
+        _onSourceLanguageSaved = onSourceLanguageSaved;
     }
 
     public async Task<IReadOnlyList<ProfileCard>> GetProfilesAsync(CancellationToken cancellationToken = default)
@@ -85,6 +96,12 @@ public sealed class RealProfileService : IProfileService
 
         ProfileDocument document = Apply(existing, profile);
         await _repository.SaveAsync(document, cancellationToken).ConfigureAwait(false);
+        if (_onSourceLanguageSaved is not null &&
+            !string.IsNullOrWhiteSpace(document.SourceLanguage))
+        {
+            _ = _onSourceLanguageSaved(document.SourceLanguage);
+        }
+
         return document.ProfileId;
     }
 

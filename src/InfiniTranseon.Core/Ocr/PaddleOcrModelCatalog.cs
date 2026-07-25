@@ -36,8 +36,8 @@ public interface IPaddleOcrModelCatalog
 /// </summary>
 public sealed class ManagedPaddleOcrModelCatalog : IPaddleOcrModelCatalog
 {
-    internal const string BaseModelId = "ppocr-v4-base";
-    internal const string RecognitionModelIdPrefix = "ppocr-v4-rec-";
+    public const string BaseModelId = "ppocr-v4-base";
+    public const string RecognitionModelIdPrefix = "ppocr-v4-rec-";
 
     private const string PackagesDirectory = "packages";
     private const string DetectionDirectory = "det";
@@ -120,7 +120,7 @@ public sealed class ManagedPaddleOcrModelCatalog : IPaddleOcrModelCatalog
     /// script is meant; the mapping is the usual one and anything unrecognised is left as simplified,
     /// which is what a game shipped without a script subtag overwhelmingly is.
     /// </summary>
-    internal static string NormalizeLanguageTag(string languageTag)
+    public static string NormalizeLanguageTag(string languageTag)
     {
         string[] parts = languageTag.Split('-', StringSplitOptions.RemoveEmptyEntries);
         string primary = parts[0].ToLowerInvariant();
@@ -192,7 +192,7 @@ public sealed class ManagedPaddleOcrModelCatalog : IPaddleOcrModelCatalog
     }
 
     /// <summary>Dotted numeric segments compare numerically; anything else falls back to ordinal.</summary>
-    internal static int CompareVersions(string left, string right)
+    public static int CompareVersions(string left, string right)
     {
         string[] leftParts = left.Split('.');
         string[] rightParts = right.Split('.');

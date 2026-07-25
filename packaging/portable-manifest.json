@@ -9,6 +9,7 @@
     "InfiniTranseon.EngineHost.exe",
     "InfiniTranseon.ModelWorker.exe",
     "InfiniTranseon.ModelRuntime.Native.dll",
+    "onnxruntime.dll",
     "model-catalog.json",
     "resources.pri",
     "LICENSE",

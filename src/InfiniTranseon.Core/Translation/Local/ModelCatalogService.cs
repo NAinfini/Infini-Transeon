@@ -178,6 +178,11 @@ public sealed class ModelCatalogService
                             StringComparison.Ordinal)))))
                 throw new InvalidDataException(
                     $"CTranslate2 model '{model.ModelId}' is missing a required data file.");
+            if (string.Equals(
+                    model.Runtime,
+                    LocalModelRuntimeAvailability.PpOcrOnnxRuntime,
+                    StringComparison.Ordinal))
+                ValidatePpOcrPackage(model);
             long totalBytes = 0;
             foreach (ModelCatalogFile file in model.Files)
             {
@@ -202,6 +207,41 @@ public sealed class ModelCatalogService
                         $"Model '{model.ModelId}' contains executable content. Model packages may contain data only.");
             }
         }
+    }
+
+    /// <summary>
+    /// A PP-OCR package is either the shared detector — detection plus an optional angle classifier
+    /// — or a single language recognizer. The split keeps the 5 MB detector from being downloaded
+    /// once per language, and the resolver that finds the files on disk expects exactly one model in
+    /// each slot. Enforcing it here means a mis-authored catalog is rejected at load, not at the
+    /// first frame the user tries to read.
+    /// </summary>
+    private static void ValidatePpOcrPackage(ModelCatalogEntry model)
+    {
+        var slots = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["det"] = 0,
+            ["cls"] = 0,
+            ["rec"] = 0,
+        };
+        foreach (ModelCatalogFile file in model.Files)
+        {
+            string[] parts = file.RelativePath.Split('/');
+            if (parts.Length != 2 ||
+                !slots.ContainsKey(parts[0]) ||
+                !parts[1].EndsWith(".onnx", StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    $"PP-OCR model '{model.ModelId}' contains '{file.RelativePath}', which is not a " +
+                    "det/, cls/ or rec/ ONNX model.");
+            slots[parts[0]]++;
+        }
+
+        bool isRecognizer = slots["rec"] == 1 && slots["det"] == 0 && slots["cls"] == 0;
+        bool isDetector = slots["det"] == 1 && slots["cls"] <= 1 && slots["rec"] == 0;
+        if (model.Opset == 0 || !(isRecognizer || isDetector))
+            throw new InvalidDataException(
+                $"PP-OCR model '{model.ModelId}' must declare an opset and be either one detector " +
+                "with an optional classifier, or exactly one language recognizer.");
     }
 
     private static bool IsIdentifier(string value) => value.Length is > 0 and <= 64 &&

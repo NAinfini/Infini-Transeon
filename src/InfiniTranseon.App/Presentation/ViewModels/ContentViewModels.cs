@@ -881,6 +881,11 @@ public sealed partial class SettingsViewModel : PageViewModelBase
         CancellationToken cancellationToken = default) =>
         ApplyAsync(Settings with { PerformancePreset = preset }, cancellationToken);
 
+    public Task UpdateOcrBackendAsync(
+        AppOcrBackend backend,
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(Settings with { OcrBackend = backend }, cancellationToken);
+
     public Task UpdateReducedMotionAsync(
         bool reducedMotion,
         CancellationToken cancellationToken = default) =>

@@ -49,12 +49,37 @@ public sealed record LocalModelOperationProgress(
     long TotalBytes);
 
 /// <summary>
+/// The subset of model management that callers other than the settings UI need. It exists so a
+/// service that maintains packages on the user's behalf can be tested without a signed catalog and
+/// a real download; the approval and strict-offline arguments are part of the seam precisely so
+/// they cannot be quietly dropped by an implementation that wants to skip them.
+/// </summary>
+public interface IManagedModelGateway
+{
+    LocalModelCatalogView GetSnapshot();
+
+    ValueTask<LocalModelPackageView> InstallAsync(
+        string modelId,
+        string version,
+        bool userApproved,
+        bool strictOffline,
+        IProgress<LocalModelOperationProgress>? progress,
+        CancellationToken cancellationToken);
+
+    ValueTask RemoveAsync(
+        string modelId,
+        string version,
+        bool userConfirmed,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Concrete application facade over the signed catalog and transactional package installer. It
 /// deliberately exposes no automatic install path: the only network-capable method requires the
 /// caller to pass explicit approval, and strict-offline mode is forwarded to Core before any
 /// HttpClient is created.
 /// </summary>
-public sealed class LocalModelManagementService
+public sealed class LocalModelManagementService : IManagedModelGateway
 {
     private const string CatalogFileName = "model-catalog.json";
     private readonly ModelCatalogService _catalogs;

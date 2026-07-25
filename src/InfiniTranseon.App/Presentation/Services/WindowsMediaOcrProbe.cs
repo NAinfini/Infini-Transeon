@@ -25,6 +25,9 @@ public sealed class OcrProbeUnavailableException(string errorCode, string messag
     /// <summary>The crop could not be decoded as an image.</summary>
     public const string UndecodableCropCode = "ocr.probe.undecodableCrop";
 
+    /// <summary>A recognised line carried no usable geometry, so it cannot be placed on the overlay.</summary>
+    public const string DegenerateLineBoundsCode = "ocr.probe.degenerateLineBounds";
+
     public string ErrorCode { get; } = errorCode;
 }
 
@@ -139,13 +142,24 @@ public sealed class WindowsMediaOcrProbe : IOcrProbe
             bottom = Math.Max(bottom, (word.BoundingRect.Y + word.BoundingRect.Height) / height);
         }
 
-        NormalizedRect bounds = line.Words.Count == 0
-            ? new NormalizedRect(0, 0, 0, 0)
-            : new NormalizedRect(
-                Math.Clamp(left, 0, 1),
-                Math.Clamp(top, 0, 1),
-                Math.Clamp(right - left, 0, 1),
-                Math.Clamp(bottom - top, 0, 1));
-        return new TextLine(line.Text, bounds, Confidence: 0d);
+        double boxLeft = Math.Clamp(left, 0, 1);
+        double boxTop = Math.Clamp(top, 0, 1);
+        double boxWidth = Math.Clamp(right - left, 0, 1 - boxLeft);
+        double boxHeight = Math.Clamp(bottom - top, 0, 1 - boxTop);
+        // A line with no words, or whose words all report an empty rectangle, has nothing the overlay
+        // can be positioned over. NormalizedRect rejects a zero extent, and the exception it raises
+        // names the "x" parameter, which points at the wrong cause; say what actually happened.
+        if (boxWidth <= 0 || boxHeight <= 0)
+        {
+            throw new OcrProbeUnavailableException(
+                OcrProbeUnavailableException.DegenerateLineBoundsCode,
+                $"Windows OCR returned the line '{line.Text}' with no measurable bounds " +
+                $"({line.Words.Count} word(s)), so it cannot be placed on the overlay.");
+        }
+
+        return new TextLine(
+            line.Text,
+            new NormalizedRect(boxLeft, boxTop, boxWidth, boxHeight),
+            Confidence: 0d);
     }
 }
