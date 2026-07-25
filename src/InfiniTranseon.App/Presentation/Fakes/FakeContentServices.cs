@@ -35,6 +35,14 @@ public sealed class FakeProfileService : IProfileService
         return Task.FromResult(model);
     }
 
+    public Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(
+            _profiles.Any(profile => profile.ProfileId == profileId)
+                ? ["translation.deepl"]
+                : []);
+
     public Task<Guid> SaveAsync(ProfileEditModel profile, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(profile);

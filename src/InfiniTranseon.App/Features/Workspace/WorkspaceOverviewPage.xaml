@@ -81,6 +81,24 @@
                                             Style="{StaticResource BodyTextStyle}" />
                                     </Grid>
                                 </HyperlinkButton>
+                                <HyperlinkButton
+                                    x:Name="CredentialReadinessRow"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Click="OnCredentialReadinessClick">
+                                    <Grid ColumnSpacing="{StaticResource SpaceS}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon x:Name="CredentialReadinessIcon" />
+                                        <TextBlock
+                                            x:Name="CredentialReadinessText"
+                                            Grid.Column="1"
+                                            TextWrapping="Wrap"
+                                            Style="{StaticResource BodyTextStyle}" />
+                                    </Grid>
+                                </HyperlinkButton>
                             </StackPanel>
                         </Border>
                     </StackPanel>

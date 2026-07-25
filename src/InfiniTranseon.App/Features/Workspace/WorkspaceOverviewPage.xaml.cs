@@ -1,5 +1,6 @@
 using InfiniTranseon.App.Controls;
 using InfiniTranseon.App.Presentation;
+using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
 using Microsoft.UI.Xaml;
@@ -16,6 +17,7 @@ public sealed partial class WorkspaceOverviewPage : Page
         ResourceLoader.GetDefaultResourceFilePath(),
         "Resources");
     private readonly IProfileService _profiles;
+    private readonly ISecretReferenceService _secrets;
     private readonly AppNavigationState _navigation;
     private readonly RunningTargetsViewModel _runtime;
     private Guid _profileId;
@@ -24,6 +26,7 @@ public sealed partial class WorkspaceOverviewPage : Page
     public WorkspaceOverviewPage()
     {
         _profiles = App.GetService<IProfileService>();
+        _secrets = App.GetService<ISecretReferenceService>();
         _navigation = App.GetService<AppNavigationState>();
         _runtime = App.GetService<RunningTargetsViewModel>();
         InitializeComponent();
@@ -51,7 +54,7 @@ public sealed partial class WorkspaceOverviewPage : Page
 
             Shell.Title = _profile.Name;
             Shell.Subtitle = Strings.GetString("WorkspaceOverviewSubtitle");
-            ApplyReadiness(_profile);
+            await ApplyReadinessAsync(_profile);
             TargetNameText.Text = _profile.TargetDescription;
             TargetDetailText.Text = _profile.Resolution;
             await _runtime.InitializeAsync();
@@ -71,7 +74,7 @@ public sealed partial class WorkspaceOverviewPage : Page
     /// icon, colour and text; a fixed green tick would have claimed readiness for a profile with no
     /// regions, no channels or an unmatched target.
     /// </summary>
-    private void ApplyReadiness(ProfileCard profile)
+    private async Task ApplyReadinessAsync(ProfileCard profile)
     {
         bool targetReady = profile.MatchSeverity == StatusSeverity.Success;
         ApplyReadinessRow(
@@ -104,12 +107,70 @@ public sealed partial class WorkspaceOverviewPage : Page
                 profile.ChannelCount),
             RegionReadinessRow);
 
-        bool ready = targetReady && languageReady && regionsReady;
+        // A profile can pass every structural check and still be unable to translate a single line
+        // because the provider's key was never entered, was rotated, or was cleared. Resolving this
+        // only at the first frame produced three green ticks over an unusable profile.
+        string[] providerIds =
+            [.. await _profiles.GetTranslationProviderIdsAsync(profile.ProfileId)];
+        string[] unconfigured = [.. await FindUnconfiguredProvidersAsync(providerIds)];
+        bool credentialsReady = providerIds.Length > 0 && unconfigured.Length == 0;
+        ApplyReadinessRow(
+            CredentialReadinessIcon,
+            CredentialReadinessText,
+            credentialsReady,
+            providerIds.Length == 0
+                ? Strings.GetString("WorkspaceCredentialsNoProvider")
+                : credentialsReady
+                    ? string.Format(
+                        Strings.GetString("WorkspaceCredentialsReady"),
+                        string.Join("、", providerIds.Select(DisplayNameFor)))
+                    : string.Format(
+                        Strings.GetString("WorkspaceCredentialsNotReady"),
+                        string.Join("、", unconfigured.Select(DisplayNameFor))),
+            CredentialReadinessRow);
+
+        bool ready = targetReady && languageReady && regionsReady && credentialsReady;
         StartButton.IsEnabled = ready;
         ToolTipService.SetToolTip(
             StartButton,
             ready ? null : Strings.GetString("WorkspaceStartBlocked"));
     }
+
+    /// <summary>
+    /// Provider ids with at least one credential the store does not hold.
+    /// <see cref="ISecretReferenceService.HasSecretAsync"/> already returns false when *any* of a
+    /// provider's credentials is absent, but it also returns false for providers that use none at
+    /// all (local models), so those are excluded by consulting the catalog first.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FindUnconfiguredProvidersAsync(
+        IReadOnlyList<string> providerIds)
+    {
+        List<string> unconfigured = [];
+        foreach (string providerId in providerIds)
+        {
+            if (FindCatalogProvider(providerId) is not { RequiresCredential: true })
+            {
+                continue;
+            }
+            if (!await _secrets.HasSecretAsync(providerId))
+            {
+                unconfigured.Add(providerId);
+            }
+        }
+        return unconfigured;
+    }
+
+    /// <summary>Built-in providers plus imported custom REST adapters, matched by id or display
+    /// name — the same resolution the secret service performs.</summary>
+    private static CatalogProvider? FindCatalogProvider(string providerId) =>
+        ProviderCatalog.Default
+            .Concat(App.GetService<CustomRestAdapterStore>().GetCatalogProviders())
+            .FirstOrDefault(provider =>
+                string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(provider.DisplayName, providerId, StringComparison.OrdinalIgnoreCase));
+
+    private static string DisplayNameFor(string providerId) =>
+        FindCatalogProvider(providerId)?.DisplayName ?? providerId;
 
     private static void ApplyReadinessRow(
         FontIcon icon,
@@ -155,6 +216,9 @@ public sealed partial class WorkspaceOverviewPage : Page
 
     private void OnLanguageReadinessClick(object sender, RoutedEventArgs e) =>
         _navigation.NavigateToProfile(_profileId, WorkspaceSection.Language);
+
+    private void OnCredentialReadinessClick(object sender, RoutedEventArgs e) =>
+        _navigation.Navigate(GlobalDestination.Providers);
 
     private void OnRegionReadinessClick(object sender, RoutedEventArgs e) =>
         _navigation.NavigateToProfile(

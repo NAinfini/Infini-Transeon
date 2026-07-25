@@ -14,8 +14,9 @@ public sealed class ProviderCompositionTests
                 provider.Capability == CatalogProviderCapability.Translation)
             .ToArray();
 
-        Assert.Equal(14, choices.Length);
+        Assert.Equal(15, choices.Length);
         Assert.Contains(choices, provider => provider.DisplayName == "DeepL");
+        Assert.Contains(choices, provider => provider.DisplayName == "DeepL API Free");
         Assert.Contains(choices, provider => provider.DisplayName == "Baidu Translate");
         Assert.Contains(choices, provider => provider.DisplayName == "Alibaba Cloud Translation");
         Assert.Contains(choices, provider => provider.DisplayName == "Azure AI Translator");
@@ -39,6 +40,7 @@ public sealed class ProviderCompositionTests
 
         string[] ids = registry.Descriptors.Select(descriptor => descriptor.Id).ToArray();
         Assert.Contains("translation.deepl", ids);
+        Assert.Contains("translation.deepl-free", ids);
         Assert.Contains("translation.baidu", ids);
         Assert.Contains("translation.alibaba", ids);
         Assert.Contains("translation.azure-ai", ids);

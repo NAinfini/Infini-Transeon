@@ -29,13 +29,30 @@ public sealed class ProviderContractTests
     [Fact]
     public void DeepLBuiltInUsesPostHeaderCredentialAndCurrentTextResponseShape()
     {
-        DeclarativeRestAdapterDefinition definition = BuiltInProviderDefinitions.DeepL(freeEndpoint: true);
+        DeclarativeRestAdapterDefinition free = BuiltInProviderDefinitions.DeepL(freeEndpoint: true);
 
-        Assert.Equal(RestHttpMethod.Post, definition.Method);
-        Assert.Equal("api-free.deepl.com", definition.Endpoint.Host);
-        Assert.Contains("{{credential:api-key}}", definition.Headers["Authorization"], StringComparison.Ordinal);
-        Assert.Equal("/translations/0/text", definition.ResponseTextJsonPointer);
-        Assert.Equal("provider.deepl.quotaExceeded", definition.StatusMappings[456].ErrorCode);
+        Assert.Equal(RestHttpMethod.Post, free.Method);
+        Assert.Equal("api-free.deepl.com", free.Endpoint.Host);
+        Assert.Contains(
+            "{{credential:translation.deepl-free.api-key}}",
+            free.Headers["Authorization"],
+            StringComparison.Ordinal);
+        Assert.Equal("/translations/0/text", free.ResponseTextJsonPointer);
+        Assert.Equal("provider.deepl.quotaExceeded", free.StatusMappings[456].ErrorCode);
+    }
+
+    /// <summary>The two DeepL tiers reject each other's keys, so they must stay distinct providers
+    /// with distinct credential slots — sharing either would silently overwrite a stored key.</summary>
+    [Fact]
+    public void DeepLFreeAndProAreDistinctProvidersWithDistinctCredentialSlots()
+    {
+        DeclarativeRestAdapterDefinition free = BuiltInProviderDefinitions.DeepL(freeEndpoint: true);
+        DeclarativeRestAdapterDefinition pro = BuiltInProviderDefinitions.DeepL(freeEndpoint: false);
+
+        Assert.Equal("translation.deepl-free", free.Id);
+        Assert.Equal("translation.deepl", pro.Id);
+        Assert.Equal("api.deepl.com", pro.Endpoint.Host);
+        Assert.Empty(free.CredentialReferences.Intersect(pro.CredentialReferences, StringComparer.Ordinal));
     }
 
     [Fact]

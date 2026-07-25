@@ -44,6 +44,37 @@ public sealed class RealProfileService : IProfileService
         return document is null ? null : ToEditModel(document);
     }
 
+    public async Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        if (profileId == Guid.Empty)
+        {
+            return [];
+        }
+
+        ProfileDocument? document =
+            await _repository.LoadAsync(profileId, cancellationToken).ConfigureAwait(false);
+        if (document is null)
+        {
+            return [];
+        }
+
+        return document.Targets
+            .SelectMany(target => target.RemainingAreaRegion is null
+                ? target.Regions
+                : target.Regions.Append(target.RemainingAreaRegion))
+            .Where(region => region.Enabled && region.TranslationEnabled)
+            .SelectMany(region => region.TranslationChannels)
+            .Where(channel => channel.Enabled)
+            .SelectMany(channel => new[] { channel.InitialProviderId }
+                .Concat(channel.FallbackProviderIds)
+                .Concat(channel.RefinementSteps.Select(step => step.ProviderId)))
+            .Where(providerId => !string.IsNullOrWhiteSpace(providerId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     public async Task<Guid> SaveAsync(ProfileEditModel profile, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -211,9 +242,15 @@ public sealed class RealProfileService : IProfileService
     private static ProfileCard ToCard(ProfileDocument document)
     {
         ProfileTarget? target = document.Targets.FirstOrDefault();
-        int regionCount = document.Targets.Sum(current => current.Regions.Count);
+        // The "scan remaining area" region is a real, translatable region — it is simply stored
+        // outside the explicit list. Excluding it made a profile configured with nothing but that
+        // region report zero regions, which the workspace readiness check then reads as unusable.
+        IEnumerable<ProfileRegion> AllRegions(ProfileTarget current) => current.RemainingAreaRegion is null
+            ? current.Regions
+            : current.Regions.Append(current.RemainingAreaRegion);
+        int regionCount = document.Targets.Sum(current => AllRegions(current).Count());
         int channelCount = document.Targets.Sum(current =>
-            current.Regions.Sum(region => region.TranslationChannels.Count));
+            AllRegions(current).Sum(region => region.TranslationChannels.Count));
         string resolution = ProfileDocumentData.ReadResolution(document);
         return new ProfileCard(
             document.ProfileId,

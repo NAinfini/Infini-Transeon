@@ -34,22 +34,35 @@ public static class BuiltInProviderDefinitions
             "llm.baidu-qianfan", "https://qianfan.baidubce.com/v2/chat/completions",
             model, credentialReference, proxyPolicy);
 
+    /// <summary>
+    /// DeepL has two mutually exclusive endpoints, and a key issued for one is rejected with 403 by
+    /// the other. Free keys (the suffixed ":fx" ones anybody can get without a card) only work
+    /// against api-free.deepl.com. The two therefore have to be two distinct providers with distinct
+    /// ids, so each gets its own credential slot and the user picks the tier explicitly instead of
+    /// being told "authorization failed" with no way to act on it.
+    /// </summary>
     public static DeclarativeRestAdapterDefinition DeepL(bool freeEndpoint) => new(
         schemaVersion: 1,
-        id: "translation.deepl",
-        displayName: "DeepL",
+        id: freeEndpoint ? "translation.deepl-free" : "translation.deepl",
+        displayName: freeEndpoint ? "DeepL API Free" : "DeepL",
         endpoint: new Uri(freeEndpoint
             ? "https://api-free.deepl.com/v2/translate"
             : "https://api.deepl.com/v2/translate"),
         method: RestHttpMethod.Post,
         headers: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Authorization"] = "DeepL-Auth-Key {{credential:api-key}}",
+            // Credential references are the Credential Manager keys and must stay globally unique,
+            // so the two tiers cannot share the bare "api-key" slot — entering a free key would
+            // overwrite the Pro one. The Pro reference keeps its original unqualified name so
+            // already-stored keys are not orphaned; only the new tier is fully qualified.
+            ["Authorization"] = freeEndpoint
+                ? "DeepL-Auth-Key {{credential:translation.deepl-free.api-key}}"
+                : "DeepL-Auth-Key {{credential:api-key}}",
         },
         bodyTemplate: "{\"text\":[\"{{sourceText}}\"],\"target_lang\":\"{{targetLanguage}}\"}",
         responseTextJsonPointer: "/translations/0/text",
         responseErrorJsonPointer: "/message",
-        credentialReferences: ["api-key"],
+        credentialReferences: freeEndpoint ? ["translation.deepl-free.api-key"] : ["api-key"],
         statusMappings: new Dictionary<int, RestStatusMapping>
         {
             [400] = new("provider.deepl.badRequest", false),

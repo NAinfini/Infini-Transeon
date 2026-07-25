@@ -156,20 +156,14 @@ public static class PresentationComposition
 
         // Real probes: capture enumerates live windows/monitors; OCR crop and overlay pixel preview
         // are not carried by protocol v1 and throw the typed unsupported exception; the translation
-        // probe exercises the same DeepL provider + credential binding the runtime uses.
+        // probe exercises the provider the caller selected, with that provider's own credential
+        // bindings — the same ones the runtime uses.
         services.AddSingleton<ICaptureProbe, CaptureProbe>();
         services.AddSingleton<IOcrProbe, OcrProbe>();
         services.AddSingleton<IOverlayPreviewRenderer, OverlayPreviewRenderer>();
-        services.AddSingleton<ITranslationProbe>(provider => new TranslationProbe(
-            EngineRuntimeComposition.BuildProviderRegistry(
-                provider.GetRequiredService<IBoundCredentialStore>()),
-            EngineRuntimeComposition.DeepLDefinition.Id,
-            timeout: null,
+        services.AddSingleton<ITranslationProbe>(provider => new CatalogTranslationProbe(
             provider.GetRequiredService<IBoundCredentialStore>(),
-            Core.Translation.Rest.DeclarativeRestProvider.CreateBinding(
-                EngineRuntimeComposition.DeepLDefinition,
-                EngineRuntimeComposition.DeepLDefinition.CredentialReferences[0]),
-            EngineRuntimeComposition.DeepLDefinition.CredentialReferences[0]));
+            provider.GetRequiredService<CustomRestAdapterStore>()));
 
         // Real engine runtime facade: locates/launches EngineHost per start, streams live targets.
         services.AddSingleton<IRuntimeControlService>(provider => new RealRuntimeControlService(

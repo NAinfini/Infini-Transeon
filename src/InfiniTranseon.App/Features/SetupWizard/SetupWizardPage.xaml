@@ -145,6 +145,14 @@
                             <TextBox x:Uid="SetupProfileNameBox" Text="{x:Bind ViewModel.ProfileName, Mode=TwoWay}"
                                      MaxWidth="420" HorizontalAlignment="Left" />
                             <TextBlock x:Uid="SetupStep1Body" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
+                            <!-- Borderless capture consent needs package identity. Without it the OS
+                                 draws its capture border over the game, which users read as a bug in
+                                 this app. Say so here rather than only in the status log. -->
+                            <InfoBar
+                                x:Name="BorderlessCaptureInfoBar"
+                                Severity="Informational"
+                                IsClosable="True"
+                                IsOpen="False" />
                             <ListView
                                       x:Name="CaptureTargetList"
                                       AutomationProperties.LabeledBy="{x:Bind SetupStep1Heading}"
@@ -319,7 +327,7 @@
                                     Severity="Error"
                                     IsClosable="False"
                                     IsOpen="{x:Bind HasText(ViewModel.TranslationTestError), Mode=OneWay}"
-                                    Message="{x:Bind ViewModel.TranslationTestError, Mode=OneWay}" />
+                                    Message="{x:Bind DescribeTranslationTestError(ViewModel.TranslationTestError, ViewModel.TranslationTestErrorDetail), Mode=OneWay}" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

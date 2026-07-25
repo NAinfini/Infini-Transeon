@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using InfiniTranseon.App.Controls;
+using InfiniTranseon.App.Deployment;
 using InfiniTranseon.App.Features.Settings;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
@@ -75,12 +76,39 @@ public sealed partial class SetupWizardPage : Page
             await ViewModel.LoadForEditAsync(_editProfileId);
         }
 
+        ShowBorderlessCaptureState();
         SynchronizeLanguageBoxes();
         SynchronizeTargetSelection();
         Canvas.SelectedRegion = ViewModel.SelectedRegion;
         RefreshInspector();
         RefreshStepBar();
         await RefreshTargetPreviewAsync();
+    }
+
+    /// <summary>
+    /// States the real borderless-capture verdict on the page where the user picks a capture target.
+    /// The verdict was already recorded in the status log at startup, but nothing on screen said it,
+    /// so a user whose captures carry the OS capture border had no way to learn why.
+    /// </summary>
+    private void ShowBorderlessCaptureState()
+    {
+        BorderlessCaptureAuthorizationStatus? status = Program.BorderlessCaptureAuthorization;
+        if (status is null or BorderlessCaptureAuthorizationStatus.Allowed)
+        {
+            BorderlessCaptureInfoBar.IsOpen = false;
+            return;
+        }
+
+        BorderlessCaptureInfoBar.Title = Strings.GetString("SetupBorderlessCaptureTitle");
+        BorderlessCaptureInfoBar.Message = Strings.GetString(status switch
+        {
+            BorderlessCaptureAuthorizationStatus.DeniedByUser =>
+                "SetupBorderlessCaptureDeniedByUser",
+            BorderlessCaptureAuthorizationStatus.DeniedBySystem =>
+                "SetupBorderlessCaptureDeniedBySystem",
+            _ => "SetupBorderlessCaptureNoIdentity",
+        });
+        BorderlessCaptureInfoBar.IsOpen = true;
     }
 
     // -- Step bar / gating ----------------------------------------------------------------------
@@ -742,4 +770,16 @@ public sealed partial class SetupWizardPage : Page
     private string FormatLatency(TimeSpan value) => string.Format(
         Strings.GetString("SetupTestTranslationLatencyFormat"),
         (int)value.TotalMilliseconds);
+
+    /// <summary>Turns the probe's machine code into a sentence, keeping the code and — when the
+    /// probe threw rather than returned — the exception text visible for diagnosis.</summary>
+    private string DescribeTranslationTestError(string? errorCode, string? detail)
+    {
+        if (string.IsNullOrEmpty(errorCode))
+        {
+            return string.Empty;
+        }
+        string message = ProbeErrorPresenter.Describe(errorCode, Strings.GetString);
+        return string.IsNullOrEmpty(detail) ? message : $"{message}\n{detail}";
+    }
 }

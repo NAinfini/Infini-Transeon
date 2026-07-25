@@ -57,11 +57,18 @@ public interface IOcrProbe
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A one-shot translation test. <paramref name="ProviderId"/> selects which configured provider to
+/// exercise; implementations that were constructed for a single fixed provider ignore it. It is
+/// optional only so existing callers keep compiling — a probe that routes by provider must reject a
+/// missing value rather than silently testing some other provider than the one on screen.
+/// </summary>
 public sealed record TranslationProbeRequest(
     string SourceText,
     string SourceLanguage,
     string TargetLanguage,
-    string? Context);
+    string? Context,
+    string? ProviderId = null);
 
 public sealed record TranslationProbeResult(
     string ProviderId,

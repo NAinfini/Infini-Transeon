@@ -782,6 +782,11 @@ public sealed class RealServiceIntegrationTests
         public Task<ProfileEditModel?> LoadForEditAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             Task.FromResult<ProfileEditModel?>(null);
 
+        public Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+            Guid profileId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
         public Task<Guid> SaveAsync(ProfileEditModel profile, CancellationToken cancellationToken = default)
         {
             LastSaved = profile;

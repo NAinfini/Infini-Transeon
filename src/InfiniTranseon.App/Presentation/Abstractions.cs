@@ -55,6 +55,13 @@ public interface IProfileService
     // Loads an existing profile as an editable draft, or null when the id is unknown.
     Task<ProfileEditModel?> LoadForEditAsync(Guid profileId, CancellationToken cancellationToken = default);
 
+    // Distinct translation provider ids every enabled channel of this profile would call, including
+    // fallbacks and refinement steps. The workspace readiness check needs these to tell the user a
+    // credential is missing *before* the run starts instead of failing on the first frame.
+    Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default);
+
     // Persists a new (ProfileId == Guid.Empty) or existing profile and returns its id.
     Task<Guid> SaveAsync(ProfileEditModel profile, CancellationToken cancellationToken = default);
 

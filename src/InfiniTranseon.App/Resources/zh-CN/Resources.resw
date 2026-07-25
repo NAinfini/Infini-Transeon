@@ -533,6 +533,36 @@
   <data name="WorkspaceTargetNotReady" xml:space="preserve"><value>捕获目标未就绪:{0}</value></data>
   <data name="WorkspaceLanguageNotReady" xml:space="preserve"><value>尚未设置源语言与目标语言</value></data>
   <data name="WorkspaceRegionsNotReady" xml:space="preserve"><value>{0} 个区域 · {1} 条翻译通道 —— 两者至少各需一个</value></data>
+  <data name="SetupBorderlessCaptureTitle" xml:space="preserve"><value>捕获画面会出现 Windows 捕获边框</value></data>
+  <data name="SetupBorderlessCaptureNoIdentity" xml:space="preserve"><value>当前版本没有注册包标识，Windows 无法授予无边框捕获权限。捕获与翻译仍可正常工作，只是被捕获的窗口或屏幕周围会出现黄色边框。</value></data>
+  <data name="SetupBorderlessCaptureDeniedByUser" xml:space="preserve"><value>无边框图形捕获权限被拒绝。捕获与翻译仍可正常工作，只是被捕获的窗口或屏幕周围会出现黄色边框。可在 Windows 隐私设置中更改。</value></data>
+  <data name="SetupBorderlessCaptureDeniedBySystem" xml:space="preserve"><value>系统策略禁止无边框图形捕获。捕获与翻译仍可正常工作，只是被捕获的窗口或屏幕周围会出现黄色边框。</value></data>
+  <data name="ProbeErrorProviderNotSelected" xml:space="preserve"><value>请先选择一个翻译服务商。</value></data>
+  <data name="ProbeErrorProviderUnknown" xml:space="preserve"><value>该翻译服务商已不存在，请另选一个。</value></data>
+  <data name="ProbeErrorProviderNotRegistered" xml:space="preserve"><value>服务商已配置，但引擎没有加载它。请附上下方代码反馈。</value></data>
+  <data name="ProbeErrorNoOutput" xml:space="preserve"><value>服务商没有返回任何内容。</value></data>
+  <data name="ProbeErrorUnexpected" xml:space="preserve"><value>测试在到达服务商之前就失败了。</value></data>
+  <data name="ProbeErrorCredentialMissing" xml:space="preserve"><value>尚未保存该服务商的密钥，请点「配置」填写。</value></data>
+  <data name="ProbeErrorCredentialRebind" xml:space="preserve"><value>已保存的密钥绑定到了不同的端点，请重新输入以确认。</value></data>
+  <data name="ProbeErrorAuthorization" xml:space="preserve"><value>服务商拒绝了该密钥。请确认密钥正确、且与所选套餐一致 —— DeepL 免费版密钥在 Pro 端点上无效，反之亦然。</value></data>
+  <data name="ProbeErrorRateLimited" xml:space="preserve"><value>服务商正在限流，请稍后重试。</value></data>
+  <data name="ProbeErrorQuotaExceeded" xml:space="preserve"><value>该账号的翻译额度已用尽。</value></data>
+  <data name="ProbeErrorRequestTooLarge" xml:space="preserve"><value>请求体积超出该服务商的上限。</value></data>
+  <data name="ProbeErrorBadRequest" xml:space="preserve"><value>服务商拒绝了该请求，可能是不支持这组语言。</value></data>
+  <data name="ProbeErrorUnavailable" xml:space="preserve"><value>翻译服务暂时不可用。</value></data>
+  <data name="ProbeErrorTimeout" xml:space="preserve"><value>服务商在超时前没有响应。</value></data>
+  <data name="ProbeErrorServer" xml:space="preserve"><value>翻译服务报告了内部错误。</value></data>
+  <data name="ProbeErrorNetwork" xml:space="preserve"><value>与翻译服务的连接失败。</value></data>
+  <data name="ProbeErrorRedirectRejected" xml:space="preserve"><value>服务尝试重定向请求；出于安全考虑已拒绝。</value></data>
+  <data name="ProbeErrorMalformedResponse" xml:space="preserve"><value>无法解析服务商返回的内容。</value></data>
+  <data name="ProbeErrorLimitExceeded" xml:space="preserve"><value>响应超出安全上限，已中止。</value></data>
+  <data name="ProbeErrorOffline" xml:space="preserve"><value>严格离线模式禁止使用该云端服务商。</value></data>
+  <data name="ProbeErrorCostBudget" xml:space="preserve"><value>该服务商配置的费用预算已耗尽。</value></data>
+  <data name="ProbeErrorCancelled" xml:space="preserve"><value>测试已取消。</value></data>
+  <data name="ProbeErrorUnknown" xml:space="preserve"><value>翻译测试失败。</value></data>
+  <data name="WorkspaceCredentialsReady" xml:space="preserve"><value>凭据已就绪：{0}</value></data>
+  <data name="WorkspaceCredentialsNotReady" xml:space="preserve"><value>{0} 尚未保存凭据 —— 请到「服务商」页填写密钥</value></data>
+  <data name="WorkspaceCredentialsNoProvider" xml:space="preserve"><value>还没有任何通道指定翻译服务商</value></data>
   <data name="WorkspaceStartBlocked" xml:space="preserve"><value>完成就绪清单后才能启动。</value></data>
   <data name="WorkspaceStartUnavailable" xml:space="preserve"><value>引擎当前无法启动此档案:{0}</value></data>
   <data name="TrayTooltip" xml:space="preserve"><value>Infini-Transeon 游戏翻译</value></data>

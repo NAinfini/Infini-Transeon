@@ -41,6 +41,11 @@ internal static class BuiltInProviderSpecs
                     EngineRuntimeComposition.DeepLDefinition.Endpoint,
                     ProxyPolicy.System),
                 credentials)),
+        DeclarativeRestTranslation(
+            EngineRuntimeComposition.DeepLFreeDefinition,
+            "NMT · cloud",
+            "deepl-v2-free",
+            "DeepL API Free key (ends with :fx) · free keys are rejected by the Pro endpoint"),
         Translation(
             new CatalogProvider(
                 EngineRuntimeComposition.NiuTransDefinition.Id,
@@ -378,6 +383,35 @@ internal static class BuiltInProviderSpecs
                 ProviderDescriptor.Online(catalog.Id, kind, modelId),
                 () => createProvider(credentials)),
             CreateOcrRegistration: null);
+
+    /// <summary>Projects a declarative REST definition into a catalog entry plus runtime
+    /// registration, with one catalog credential per declared credential reference.</summary>
+    private static BuiltInProviderSpec DeclarativeRestTranslation(
+        DeclarativeRestAdapterDefinition definition,
+        string kind,
+        string modelId,
+        string detail) =>
+        Translation(
+            new CatalogProvider(
+                definition.Id,
+                definition.DisplayName,
+                kind,
+                definition.CredentialReferences
+                    .Select(reference => new CatalogCredential(
+                        reference,
+                        "API key",
+                        DeclarativeRestProvider.CreateBinding(definition, reference)))
+                    .ToArray(),
+                detail),
+            ProviderKind.Translation,
+            modelId,
+            credentials => new DeclarativeRestProvider(
+                definition,
+                EngineRuntimeComposition.ClientFor(
+                    definition.Id,
+                    definition.Endpoint,
+                    ProxyPolicy.System),
+                credentials));
 
     private static BuiltInProviderSpec OpenAiCompatible(
         OpenAiCompatibleOptions options,

@@ -37,6 +37,11 @@ public static class EngineRuntimeComposition
     public static DeclarativeRestAdapterDefinition DeepLDefinition { get; } =
         BuiltInProviderDefinitions.DeepL(freeEndpoint: false);
 
+    /// <summary>DeepL API Free endpoint. A free key is rejected by the Pro host, so it is a separate
+    /// provider with its own id and credential slot rather than a hidden endpoint switch.</summary>
+    public static DeclarativeRestAdapterDefinition DeepLFreeDefinition { get; } =
+        BuiltInProviderDefinitions.DeepL(freeEndpoint: true);
+
     /// <summary>NiuTrans HTTPS text translation endpoint with automatic source detection.</summary>
     public static DeclarativeRestAdapterDefinition NiuTransDefinition { get; } =
         BuiltInProviderDefinitions.NiuTrans();

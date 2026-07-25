@@ -153,6 +153,12 @@ public static class Program
             _ => AppActivationParseResult.None,
         };
 
+    /// <summary>
+    /// Elevated/child-process helper that registers the sparse identity package. It has no window, so
+    /// the only channel back to the caller is the exit code and standard error — a bare
+    /// <c>catch { ExitCode = 1; }</c> discarded the one piece of information needed to work out why
+    /// borderless capture never became available.
+    /// </summary>
     private static void RunIdentityRegistrationHelper()
     {
         try
@@ -164,8 +170,9 @@ public static class Program
                 .GetResult();
             Environment.ExitCode = 0;
         }
-        catch
+        catch (Exception exception)
         {
+            Console.Error.WriteLine(exception.ToString());
             Environment.ExitCode = 1;
         }
     }

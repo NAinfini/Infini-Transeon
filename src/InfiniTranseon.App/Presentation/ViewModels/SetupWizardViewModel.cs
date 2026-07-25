@@ -196,8 +196,14 @@ public sealed partial class SetupWizardViewModel : ObservableObject
     [ObservableProperty]
     public partial string TranslationTestResult { get; set; } = string.Empty;
 
+    /// <summary>Machine error code only — the page localizes it through
+    /// <see cref="ProbeErrorPresenter"/>. Never prose, so the mapping cannot silently miss.</summary>
     [ObservableProperty]
     public partial string TranslationTestError { get; set; } = string.Empty;
+
+    /// <summary>Raw exception text when the probe threw; empty for a normal probe failure.</summary>
+    [ObservableProperty]
+    public partial string TranslationTestErrorDetail { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial TimeSpan TranslationTestLatency { get; set; }
@@ -480,11 +486,17 @@ public sealed partial class SetupWizardViewModel : ObservableObject
         const string sampleText = "Hello, adventurer.";
         IsTranslationTestBusy = true;
         TranslationTestError = string.Empty;
+        TranslationTestErrorDetail = string.Empty;
         TranslationTestResult = string.Empty;
         try
         {
             TranslationProbeResult result = await _translationProbe.TranslateAsync(
-                new TranslationProbeRequest(sampleText, SourceLanguage, TargetLanguage, Context: null),
+                new TranslationProbeRequest(
+                    sampleText,
+                    SourceLanguage,
+                    TargetLanguage,
+                    Context: null,
+                    ProviderId: SelectedProvider.Name),
                 CancellationToken.None).ConfigureAwait(true);
             if (result.ErrorCode is not null)
             {
@@ -498,7 +510,8 @@ public sealed partial class SetupWizardViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            TranslationTestError = exception.Message;
+            TranslationTestError = ProbeErrorPresenter.UnexpectedExceptionCode;
+            TranslationTestErrorDetail = exception.ToString();
         }
         finally
         {

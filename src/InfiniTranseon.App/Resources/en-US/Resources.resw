@@ -533,6 +533,36 @@
   <data name="WorkspaceTargetNotReady" xml:space="preserve"><value>Capture target is not ready: {0}</value></data>
   <data name="WorkspaceLanguageNotReady" xml:space="preserve"><value>Source and target languages are not set</value></data>
   <data name="WorkspaceRegionsNotReady" xml:space="preserve"><value>{0} regions · {1} translation channels — at least one of each is required</value></data>
+  <data name="SetupBorderlessCaptureTitle" xml:space="preserve"><value>Captures will show the Windows capture border</value></data>
+  <data name="SetupBorderlessCaptureNoIdentity" xml:space="preserve"><value>This build runs without a registered package identity, so Windows cannot grant borderless capture. Capture and translation still work; a yellow border is drawn around the captured window or screen.</value></data>
+  <data name="SetupBorderlessCaptureDeniedByUser" xml:space="preserve"><value>Borderless graphics capture was declined. Capture and translation still work; a yellow border is drawn around the captured window or screen. You can change this in Windows privacy settings.</value></data>
+  <data name="SetupBorderlessCaptureDeniedBySystem" xml:space="preserve"><value>Borderless graphics capture is blocked by system policy. Capture and translation still work; a yellow border is drawn around the captured window or screen.</value></data>
+  <data name="ProbeErrorProviderNotSelected" xml:space="preserve"><value>Pick a translator first.</value></data>
+  <data name="ProbeErrorProviderUnknown" xml:space="preserve"><value>That translator no longer exists. Pick another one.</value></data>
+  <data name="ProbeErrorProviderNotRegistered" xml:space="preserve"><value>The translator is configured but the engine did not load it. Report this with the code below.</value></data>
+  <data name="ProbeErrorNoOutput" xml:space="preserve"><value>The translator returned nothing at all.</value></data>
+  <data name="ProbeErrorUnexpected" xml:space="preserve"><value>The test failed before it reached the translator.</value></data>
+  <data name="ProbeErrorCredentialMissing" xml:space="preserve"><value>No key is stored for this translator yet. Use "Configure" to enter it.</value></data>
+  <data name="ProbeErrorCredentialRebind" xml:space="preserve"><value>The stored key was bound to a different endpoint. Re-enter it to confirm.</value></data>
+  <data name="ProbeErrorAuthorization" xml:space="preserve"><value>The translator rejected the key. Check that it is correct and issued for this exact service tier — a DeepL Free key does not work on the Pro endpoint, and vice versa.</value></data>
+  <data name="ProbeErrorRateLimited" xml:space="preserve"><value>The translator is rate-limiting the request. Wait and try again.</value></data>
+  <data name="ProbeErrorQuotaExceeded" xml:space="preserve"><value>The account's translation quota is used up.</value></data>
+  <data name="ProbeErrorRequestTooLarge" xml:space="preserve"><value>The request was too large for this translator.</value></data>
+  <data name="ProbeErrorBadRequest" xml:space="preserve"><value>The translator rejected the request. The language pair may not be supported.</value></data>
+  <data name="ProbeErrorUnavailable" xml:space="preserve"><value>The translation service is temporarily unavailable.</value></data>
+  <data name="ProbeErrorTimeout" xml:space="preserve"><value>The translator did not answer in time.</value></data>
+  <data name="ProbeErrorServer" xml:space="preserve"><value>The translation service reported an internal error.</value></data>
+  <data name="ProbeErrorNetwork" xml:space="preserve"><value>The connection to the translation service failed.</value></data>
+  <data name="ProbeErrorRedirectRejected" xml:space="preserve"><value>The service tried to redirect the request; redirects are refused for security.</value></data>
+  <data name="ProbeErrorMalformedResponse" xml:space="preserve"><value>The translator's response could not be parsed.</value></data>
+  <data name="ProbeErrorLimitExceeded" xml:space="preserve"><value>The response exceeded a safety limit and was stopped.</value></data>
+  <data name="ProbeErrorOffline" xml:space="preserve"><value>Strict offline mode blocks this cloud translator.</value></data>
+  <data name="ProbeErrorCostBudget" xml:space="preserve"><value>The configured cost budget for this translator is exhausted.</value></data>
+  <data name="ProbeErrorCancelled" xml:space="preserve"><value>The test was cancelled.</value></data>
+  <data name="ProbeErrorUnknown" xml:space="preserve"><value>The translation test failed.</value></data>
+  <data name="WorkspaceCredentialsReady" xml:space="preserve"><value>Credentials ready: {0}</value></data>
+  <data name="WorkspaceCredentialsNotReady" xml:space="preserve"><value>No credential stored for {0} — open Providers and enter the key</value></data>
+  <data name="WorkspaceCredentialsNoProvider" xml:space="preserve"><value>No translator is assigned to any channel yet</value></data>
   <data name="WorkspaceStartBlocked" xml:space="preserve"><value>Complete the readiness checklist before starting.</value></data>
   <data name="WorkspaceStartUnavailable" xml:space="preserve"><value>The engine cannot start this profile right now: {0}</value></data>
   <data name="TrayTooltip" xml:space="preserve"><value>Infini-Transeon game translation</value></data>
