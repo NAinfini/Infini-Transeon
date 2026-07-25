@@ -21,8 +21,12 @@ jobs:
           dotnet restore InfiniTranseon.sln
       - name: Native Debug tests
         shell: pwsh
+        # INFINI_ENABLE_LOCAL_MODEL_RUNTIME defaults to OFF, so without this flag the
+        # CTranslate2/SentencePiece runtime that build-release.yml ships was never compiled by CI
+        # and the release job was the first thing to ever build it. Match the release configuration
+        # here instead, at the cost of fetching and building CTranslate2 on every run.
         run: |
-          cmake --preset windows-x64
+          cmake --preset windows-x64 -DINFINI_ENABLE_LOCAL_MODEL_RUNTIME=ON
           cmake --build --preset windows-x64-debug
           ctest --test-dir artifacts/cmake/windows-x64 -C Debug --output-on-failure
       - name: Native Release tests
@@ -36,6 +40,8 @@ jobs:
         run: dotnet run --project benchmarks/GameOcrBench/GameOcrBench.csproj -c Release --no-build -- benchmarks/GameOcrBench/smoke-samples.json artifacts/game-ocr-bench-smoke.json
       - name: Native AddressSanitizer tests
         shell: pwsh
+        # Left at the default INFINI_ENABLE_LOCAL_MODEL_RUNTIME=OFF: instrumenting vendored
+        # CTranslate2 costs far more than it finds, and this repository's code is the target.
         run: |
           cmake --preset windows-x64-asan
           cmake --build --preset windows-x64-asan

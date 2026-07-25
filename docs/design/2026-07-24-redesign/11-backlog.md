@@ -136,3 +136,19 @@
 **原生侧:** `artifacts/cmake/windows-x64` 的旧缓存里 `INFINI_ENABLE_LOCAL_MODEL_RUNTIME=ON`(该选项默认 OFF,预设也不设),导致 `cmake --preset windows-x64` 进入 vendored ctranslate2/spdlog 并在 MSVC 14.51 上编译失败——失败发生在第三方代码,不是本仓代码。用 `-DINFINI_ENABLE_LOCAL_MODEL_RUNTIME=OFF` 重新配置后构建通过,CTest **12/12 全绿**(含两条 PowerShell 引擎宿主测试)。
 
 **仍未验证:** G1 三断点视觉走查(需人眼),以及任何需要真实翻译服务凭据的端到端路径(G4)。UIA 走查只证明"页面能打开且进程不死",不证明布局与视觉正确。
+
+## 生产就绪评审(2026-07-25 第四轮:CI 与发布链路)
+
+前三轮全部在本机验证。本轮改看**别人的机器**能不能构建、发布流水线能不能跑。
+
+| 发现 | 性质 | 根因 | 处置 |
+|---|---|---|---|
+| `main` 从干净检出编译不过:`GitHubReleaseUpdateService.cs(4,27): error CS0234 'Artifacts' 命名空间不存在` | **阻断级**(本机全绿,CI 全红) | `.gitignore` 里 `artifacts/` 未锚定,匹配任意层级同名目录;Windows Git 大小写不敏感,于是 `src/InfiniTranseon.Core/Artifacts/VerifiedArtifactWriter.cs` 从未被提交 | 全部只在根目录出现的输出改为 `/artifacts/`、`/build/`、`/out/` 等锚定写法(`bin/`/`obj/`/`TestResults/` 按项目分布必须保持不锚定,已注释说明);补提交该文件 |
+| `INFINI_ENABLE_LOCAL_MODEL_RUNTIME=ON` 时 Debug 构建必失败(vendored `spdlog/fmt/bundled/format.h` 报 C2653/C2061/C3613/C3646/C2988/C2059) | 配置不可用 | 该 pin 的 fmt 8.x 在 `_SECURE_SCL` 打开时(即每个 MSVC Debug 构建)走 `stdext::checked_array_iterator`,该类型已从 MSVC STL 移除(14.51 中不存在)。Release 走 `#else` 分支所以一直没事 | `cmake/patches/ctranslate2-vendored-fmt-msvc.cmake` 作为 `PATCH_COMMAND` 幂等禁用该分支(上游 fmt 后续版本同样删除了它,`#else` 正是 Release 一直在编的代码);pin 变动时脚本 `FATAL_ERROR` 而非静默跳过 |
+| `build-release.yml` 用 `-DINFINI_ENABLE_LOCAL_MODEL_RUNTIME=ON`,而 `quality.yml` 用默认 OFF | 覆盖盲区 | 发布产物里的 CTranslate2/SentencePiece 运行时从未被 CI 编译过一次,发布作业将是第一次 | `quality.yml` 原生配置改为 ON,与发布配置一致(ASAN 预设保持 OFF,已注释理由) |
+
+**前一轮的判断需要更正:** 第三轮记为"stale cache 导致 ON 编译失败"并不准确。清空缓存重新配置后,ON 的 **Release** 构建与测试完全正常(13/13);真正失败的只有 **Debug**,原因如上表第二行。
+
+**验证:** 打补丁后 Debug/Release 双配置 `ON` 均构建通过,CTest **13/13**(新增 `infini_model_runtime_abi_tests`);`dotnet test InfiniTranseon.sln -c Release` **784/784**;`build-release.yml` 从 `_deps` 拷贝的九份第三方许可证路径逐一确认存在。
+
+**仍未验证(与本轮无关,继续挂账):** `build-release.yml` 全流程**一次都没跑过**(MSI 打包、SBOM、模型目录签名、release-manifest 签名、五个 `verify-*.ps1`);任何需要真实凭据的端到端翻译路径(G4);G1 三断点视觉走查。**"这个程序能翻译"目前仍是未经证实的断言。**

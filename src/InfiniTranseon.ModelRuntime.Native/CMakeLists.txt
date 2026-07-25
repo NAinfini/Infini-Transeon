@@ -28,6 +28,10 @@ FetchContent_Declare(
         third_party/spdlog
     GIT_SUBMODULES_RECURSE TRUE
     GIT_PROGRESS TRUE
+    # The vendored fmt inside this pin's spdlog cannot compile in Debug on a current MSVC STL.
+    # See the patch script for the exact symbol and how to drop the patch.
+    PATCH_COMMAND ${CMAKE_COMMAND} -P
+        "${CMAKE_SOURCE_DIR}/cmake/patches/ctranslate2-vendored-fmt-msvc.cmake"
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(ctranslate2)

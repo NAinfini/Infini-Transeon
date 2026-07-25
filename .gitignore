@@ -1,12 +1,18 @@
-.vs/
-.superpowers/
-.impeccable/
-artifacts/
-.packages/
+# Root-only outputs are anchored with a leading slash. An unanchored "artifacts/" matched
+# src/InfiniTranseon.Core/Artifacts/ (Git is case-insensitive on Windows) and silently kept
+# VerifiedArtifactWriter.cs out of the repository, so a clean checkout did not compile.
+/.vs/
+/.superpowers/
+/.impeccable/
+/artifacts/
+/.packages/
+/build/
+/out/
+/*.obj
+/CMakeUserPresets.json
+
+# Per-project outputs: these legitimately appear at every project level, so they stay unanchored.
+# Do not add a source directory named bin, obj, or TestResults.
 bin/
 obj/
-/*.obj
-build/
-out/
 TestResults/
-CMakeUserPresets.json
