@@ -4,6 +4,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!-- Local OCR: PP-OCR detection/classification/recognition run in-process on ONNX Runtime.
+         System.Drawing decodes the PNG crop the probe contract carries. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
   <ItemGroup>
