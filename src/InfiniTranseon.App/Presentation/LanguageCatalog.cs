@@ -9,7 +9,17 @@ namespace InfiniTranseon.App.Presentation;
 public sealed record LanguageOption(
     string Code,
     string DisplayName,
-    string SearchText);
+    string SearchText)
+{
+    /// <summary>
+    /// Whether this machine can actually recognise the language, as one short line. Set only for
+    /// source languages, and only by the presentation layer — the catalog itself stays free of
+    /// WinRT so it remains a pure, testable list.
+    /// </summary>
+    public string? OcrNote { get; init; }
+
+    public bool HasOcrNote => !string.IsNullOrEmpty(OcrNote);
+}
 
 /// <summary>
 /// Shared language choices for profile editors. The catalog intentionally covers common game

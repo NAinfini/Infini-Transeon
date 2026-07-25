@@ -410,6 +410,10 @@
   <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>试跑 OCR</value></data>
   <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>识别文本：</value></data>
   <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>无法从该目标取得画面，因此没有可供 OCR 的内容。原因见预览区旁的说明。</value></data>
+  <data name="SetupOcrLanguageSystem" xml:space="preserve"><value>可识别 · 系统识别包 {0}</value></data>
+  <data name="SetupOcrLanguageLocalModel" xml:space="preserve"><value>可识别 · 本地 OCR 模型</value></data>
+  <data name="SetupOcrLanguageMissing" xml:space="preserve"><value>未安装识别包 · 目前无法识别该语言</value></data>
+  <data name="SetupOcrLanguageAuto" xml:space="preserve"><value>由 Windows 按账户语言选择识别包，可能与游戏语言不符</value></data>
   <data name="SetupOcrAutoLanguage" xml:space="preserve"><value>源语言为「自动」，Windows 使用 {0} 模型进行了识别。若上方文本不正确，请显式指定源语言——用英文模型识别日文不会报错，只会返回看似合理的乱码。</value></data>
   <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 1 步：捕获目标</value></data>
   <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>前往第 2 步：语言与服务</value></data>

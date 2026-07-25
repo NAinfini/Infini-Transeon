@@ -3,6 +3,7 @@ using InfiniTranseon.App.Controls;
 using InfiniTranseon.App.Deployment;
 using InfiniTranseon.App.Features.Settings;
 using InfiniTranseon.App.Presentation;
+using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
 using InfiniTranseon.Contracts.Probes;
@@ -37,8 +38,10 @@ public sealed partial class SetupWizardPage : Page
         ResourceLoader.GetDefaultResourceFilePath(),
         "Resources");
 
+    // Source options carry a recognizer-availability note; target options do not, because the target
+    // language is translated into, never read off the screen.
     private readonly IReadOnlyList<LanguageOption> _sourceLanguages =
-        LanguageCatalog.CreateSourceOptions();
+        AnnotateSourceLanguages(LanguageCatalog.CreateSourceOptions());
     private readonly IReadOnlyList<LanguageOption> _targetLanguages =
         LanguageCatalog.CreateTargetOptions();
     private readonly AppNavigationState _navigation;
@@ -342,6 +345,30 @@ public sealed partial class SetupWizardPage : Page
     }
 
     // -- Step 2: language & service ----------------------------------------------------------
+
+    /// <summary>
+    /// Labels every source language with where its recognition would come from. Windows only ships
+    /// recognizers for the account's own languages, so on a Chinese machine "日语" silently cannot be
+    /// read — and the picker used to present all 28 catalog languages as equally valid.
+    /// </summary>
+    private static IReadOnlyList<LanguageOption> AnnotateSourceLanguages(
+        IReadOnlyList<LanguageOption> options)
+    {
+        var availability = new WindowsOcrLanguageAvailability();
+        return [.. options.Select(option => option with
+        {
+            OcrNote = string.Equals(option.Code, "auto", StringComparison.OrdinalIgnoreCase)
+                ? Strings.GetString("SetupOcrLanguageAuto")
+                : availability.StatusFor(option.Code) switch
+                {
+                    { Source: OcrLanguageSource.WindowsRecognizer, RecognizerTag: { } tag } =>
+                        string.Format(Strings.GetString("SetupOcrLanguageSystem"), tag),
+                    { Source: OcrLanguageSource.LocalModel } =>
+                        Strings.GetString("SetupOcrLanguageLocalModel"),
+                    _ => Strings.GetString("SetupOcrLanguageMissing"),
+                },
+        })];
+    }
 
     private void OnLanguageBoxGotFocus(object sender, RoutedEventArgs e)
     {

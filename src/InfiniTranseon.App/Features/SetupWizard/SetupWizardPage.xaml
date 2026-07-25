@@ -267,7 +267,22 @@
                                             LostFocus="OnSourceLanguageLostFocus"
                                             TextChanged="OnSourceLanguageTextChanged"
                                             SuggestionChosen="OnSourceLanguageSuggestionChosen"
-                                            QuerySubmitted="OnSourceLanguageQuerySubmitted" />
+                                            QuerySubmitted="OnSourceLanguageQuerySubmitted">
+                                <!-- The second line says whether this machine can read the language
+                                     at all; without it the picker presents unreadable languages as
+                                     equally valid choices. -->
+                                <AutoSuggestBox.ItemTemplate>
+                                    <DataTemplate x:DataType="data:LanguageOption">
+                                        <StackPanel Padding="0,4">
+                                            <TextBlock Text="{x:Bind DisplayName}" />
+                                            <TextBlock Text="{x:Bind OcrNote}"
+                                                       Visibility="{x:Bind HasOcrNote}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </AutoSuggestBox.ItemTemplate>
+                            </AutoSuggestBox>
                             <AutoSuggestBox x:Name="TargetLanguageBox" x:Uid="SetupTargetLanguageBox"
                                             Grid.Column="1" QueryIcon="Find" TextMemberPath="DisplayName"
                                             GotFocus="OnLanguageBoxGotFocus"

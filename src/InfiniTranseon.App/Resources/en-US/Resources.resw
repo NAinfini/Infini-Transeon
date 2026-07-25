@@ -410,6 +410,10 @@
   <data name="SetupTestOcrButton.Content" xml:space="preserve"><value>Test OCR</value></data>
   <data name="SetupOcrTestResultLabel.Text" xml:space="preserve"><value>Recognized text:</value></data>
   <data name="SetupOcrTestUnavailable" xml:space="preserve"><value>No frame could be taken from this target, so there is nothing to run OCR on. See the reason next to the preview.</value></data>
+  <data name="SetupOcrLanguageSystem" xml:space="preserve"><value>Readable — Windows recognizer {0}</value></data>
+  <data name="SetupOcrLanguageLocalModel" xml:space="preserve"><value>Readable — local OCR model</value></data>
+  <data name="SetupOcrLanguageMissing" xml:space="preserve"><value>No recognizer installed — this language cannot be read yet</value></data>
+  <data name="SetupOcrLanguageAuto" xml:space="preserve"><value>Windows picks a recognizer from your account languages, which may not match the game</value></data>
   <data name="SetupOcrAutoLanguage" xml:space="preserve"><value>Source language is "auto", so Windows recognised this with its {0} model. If the text above is wrong, set the source language explicitly — an English model reading Japanese returns plausible nonsense, not an error.</value></data>
   <data name="SetupCaptureReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 1: capture targets</value></data>
   <data name="SetupLanguagesReadyButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Go to step 2: languages &amp; services</value></data>
