@@ -152,3 +152,20 @@
 **验证:** 打补丁后 Debug/Release 双配置 `ON` 均构建通过,CTest **13/13**(新增 `infini_model_runtime_abi_tests`);`dotnet test InfiniTranseon.sln -c Release` **784/784**;`build-release.yml` 从 `_deps` 拷贝的九份第三方许可证路径逐一确认存在。
 
 **仍未验证(与本轮无关,继续挂账):** `build-release.yml` 全流程**一次都没跑过**(MSI 打包、SBOM、模型目录签名、release-manifest 签名、五个 `verify-*.ps1`);任何需要真实凭据的端到端翻译路径(G4);G1 三断点视觉走查。**"这个程序能翻译"目前仍是未经证实的断言。**
+
+### 第四轮续:CI 变红的第二个原因
+
+修掉 `.gitignore` 后 CI 推进到基准冒烟步骤才失败:
+
+```
+dotnet run --project benchmarks/GameOcrBench/GameOcrBench.csproj -c Release --no-build
+Unhandled exception: ...\bin\Release\net10.0-windows\GameOcrBench.exe ... 系统找不到指定的文件
+```
+
+| 发现 | 性质 | 根因 | 处置 |
+|---|---|---|---|
+| `GameOcrBench` 与 `InfiniTranseon.PlatformSpike` 被 `8c1e225` 从 `InfiniTranseon.sln` 中删除(提交说明未提及,应为 IDE 保存解决方案的副作用) | 回归 | 解决方案构建按 `CurrentSolutionConfigurationContents` 为 `ProjectReference` 分配配置;**不在 sln 里的项目拿不到映射,回落到默认的 `Debug`**。于是 `dotnet test -c Release` 经 `Bench.Tests` 把 GameOcrBench 编成了 Debug,而 `dotnet run -c Release --no-build` 去 Release 目录找,找不到 | 两个项目重新加回 sln(各自恢复原有平台映射);未改 CI 命令——去掉 `--no-build` 只会掩盖 sln 的问题 |
+
+**验证:** 清空 `benchmarks/GameOcrBench` 与 `tests/InfiniTranseon.Bench.Tests` 的 `bin`/`obj` 后,按 CI 原样跑 `dotnet restore` → `dotnet test -c Release --no-restore`(784/784)→ Release 产物出现 → `dotnet run --no-build` 冒烟 **exit 0**,`artifacts/game-ocr-bench-smoke.json` 正常写出。
+
+**教训:** 这两条(`.gitignore` 吞源码、sln 掉项目)都属于"本机全绿、别人全红"的同一类——本机磁盘上的既有状态掩盖了仓库内容的缺失。第三轮之前从未有人看过 CI 结果。
