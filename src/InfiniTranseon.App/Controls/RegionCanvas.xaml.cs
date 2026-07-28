@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Linq;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -313,16 +312,15 @@ public sealed partial class RegionCanvas : UserControl
                 Width = region.Width * width,
                 Height = region.Height * height,
                 Tag = new RegionHandle(region, Resize: false),
-                Background = new SolidColorBrush(
-                    region.Enabled
-                        ? ColorHelper.FromArgb(36, 96, 205, 255)
-                        : ColorHelper.FromArgb(28, 128, 128, 128)),
-                BorderBrush = new SolidColorBrush(
+                Background = ThemeBrush(region.Enabled
+                    ? "RegionCanvasEnabledFillBrush"
+                    : "RegionCanvasDisabledFillBrush"),
+                BorderBrush = ThemeBrush(
                     ReferenceEquals(region, SelectedRegion)
-                        ? Colors.White
+                        ? "RegionCanvasSelectedBorderBrush"
                         : region.Enabled
-                            ? ColorHelper.FromArgb(255, 96, 205, 255)
-                            : Colors.Gray),
+                            ? "RegionCanvasEnabledBorderBrush"
+                            : "RegionCanvasDisabledBorderBrush"),
                 BorderThickness = new Thickness(
                     ReferenceEquals(region, SelectedRegion) ? 4 : 2),
             };
@@ -331,11 +329,11 @@ public sealed partial class RegionCanvas : UserControl
             var labelText = new TextBlock
             {
                 Text = $"{region.Name} · {region.Priority}",
-                Foreground = new SolidColorBrush(Colors.White),
+                Foreground = ThemeBrush("RegionCanvasLabelForegroundBrush"),
             };
             var label = new Border
             {
-                Background = new SolidColorBrush(ColorHelper.FromArgb(190, 20, 20, 20)),
+                Background = ThemeBrush("RegionCanvasLabelBackgroundBrush"),
                 Padding = new Thickness(8, 4, 8, 4),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
@@ -347,7 +345,7 @@ public sealed partial class RegionCanvas : UserControl
                 Width = 22,
                 Height = 22,
                 CornerRadius = new CornerRadius(11),
-                Background = new SolidColorBrush(Colors.White),
+                Background = ThemeBrush("RegionCanvasResizeFillBrush"),
                 BorderBrush = frame.BorderBrush,
                 BorderThickness = new Thickness(4),
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -499,4 +497,7 @@ public sealed partial class RegionCanvas : UserControl
         PreviewViewbox.HorizontalAlignment = HorizontalAlignment.Stretch;
         PreviewViewbox.VerticalAlignment = VerticalAlignment.Stretch;
     }
+
+    private static Brush ThemeBrush(string key) =>
+        (Brush)Application.Current.Resources[key];
 }

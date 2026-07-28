@@ -24,7 +24,7 @@
     "screenshots/**",
     "*.pdb"
   ],
-  "userDataLocation": "%LOCALAPPDATA%\\Infini-Transeon",
+  "userDataLocation": "%LOCALAPPDATA%\\InfiniTranseon",
   "secretsInPortableDirectory": false,
   "updatePolicy": {
     "checkByDefault": true,

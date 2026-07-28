@@ -70,7 +70,9 @@ public sealed class RealWorkbenchService : IWorkbenchService
                 .Where(provider => provider.IsSelectable)
                 .Select(provider => provider.Id) ?? [])
             .Concat(existing.Targets
-                .SelectMany(target => target.Regions)
+                .SelectMany(target => target.RemainingAreaRegion is null
+                    ? target.Regions
+                    : target.Regions.Append(target.RemainingAreaRegion))
                 .SelectMany(region => region.TranslationChannels)
                 .SelectMany(channel => channel.FallbackProviderIds
                     .Append(channel.InitialProviderId)
@@ -136,7 +138,15 @@ public sealed class RealWorkbenchService : IWorkbenchService
                         channel.DisplayOrder,
                         channel.RefinementSteps
                             .Select(step => step.ProviderId)
-                            .ToArray()))
+                            .ToArray(),
+                        channel.AttemptTimeoutMilliseconds,
+                        channel.RetryCount,
+                        channel.FallbackProviderIds.ToArray(),
+                        channel.IncludeGameContext,
+                        channel.IncludeRecentContext,
+                        channel.MemoryCacheEnabled,
+                        channel.PersistentCacheEnabled,
+                        channel.TranslationGroupId))
                     .ToArray(),
                 region.LineBreakMode.ToString(),
                 region.CustomLineSeparator,
@@ -152,14 +162,34 @@ public sealed class RealWorkbenchService : IWorkbenchService
                 region.LockDegradation,
                 region.Overlay.PreferredFontSize,
                 region.Overlay.OutlineColor,
-                region.Overlay.OutlineWidth))
+                region.Overlay.OutlineWidth,
+                region.Overlay.MaximumHeight,
+                region.Overlay.AutomaticShrink,
+                region.Overlay.NoScrollOverflow))
                 .ToArray()))
-            .ToArray());
+            .ToArray(),
+        profile.TranslationGroups
+            .Select(group => new WorkbenchTranslationGroupDraft(
+                group.TranslationGroupId, group.Name))
+            .ToArray(),
+        profile.ActiveTranslationGroupId);
 
     private static ProfileDocument Apply(
         ProfileDocument existing,
         WorkbenchProfileDraft draft)
     {
+        ProfileTranslationGroup[] groups = draft.EffectiveTranslationGroups
+            .Select(group => new ProfileTranslationGroup
+            {
+                TranslationGroupId = group.TranslationGroupId == Guid.Empty
+                    ? Guid.NewGuid()
+                    : group.TranslationGroupId,
+                Name = group.Name.Trim(),
+            })
+            .ToArray();
+        Guid activeGroup = draft.ActiveTranslationGroupId == Guid.Empty
+            ? groups[0].TranslationGroupId
+            : draft.ActiveTranslationGroupId;
         var existingTargets = existing.Targets.ToDictionary(target => target.TargetId);
         List<ProfileTarget> targets = draft.Targets.Select(target =>
         {
@@ -183,10 +213,20 @@ public sealed class RealWorkbenchService : IWorkbenchService
                             ChannelId = channel.ChannelId == Guid.Empty
                                 ? Guid.NewGuid()
                                 : channel.ChannelId,
+                            TranslationGroupId = channel.TranslationGroupId == Guid.Empty
+                                ? existing.ActiveTranslationGroupId
+                                : channel.TranslationGroupId,
                             InitialProviderId = channel.ProviderId,
                             DisplayLabel = channel.Label,
                             Enabled = channel.Enabled,
                             DisplayOrder = index,
+                            AttemptTimeoutMilliseconds = channel.AttemptTimeoutMilliseconds,
+                            RetryCount = channel.RetryCount,
+                            FallbackProviderIds = channel.EffectiveFallbackProviderIds.Take(2).ToList(),
+                            IncludeGameContext = channel.IncludeGameContext,
+                            IncludeRecentContext = channel.IncludeRecentContext,
+                            MemoryCacheEnabled = channel.MemoryCacheEnabled,
+                            PersistentCacheEnabled = channel.PersistentCacheEnabled,
                             RefinementSteps = channel.EffectiveRefinementProviderIds
                                 .Take(2)
                                 .Select((providerId, refinementIndex) =>
@@ -229,6 +269,9 @@ public sealed class RealWorkbenchService : IWorkbenchService
                     PreferredFontSize = region.PreferredFontSize,
                     OutlineColor = EmptyToNull(region.OutlineColor),
                     OutlineWidth = region.OutlineWidth,
+                    MaximumHeight = region.OverlayMaximumHeight,
+                    AutomaticShrink = region.OverlayAutomaticShrink,
+                    NoScrollOverflow = region.OverlayNoScrollOverflow,
                 };
                 return (preservedRegion ?? ProfileRegion.Create(
                     region.Name,
@@ -270,24 +313,12 @@ public sealed class RealWorkbenchService : IWorkbenchService
                 ProfileRegion? template = regions
                     .OrderBy(region => region.Priority)
                     .FirstOrDefault();
-                List<ProfileTranslationChannel> channels = template?.TranslationChannels
-                    .Select((channel, index) =>
-                    {
-                        ProfileTranslationChannel? preservedChannel =
-                            remainingArea?.TranslationChannels.ElementAtOrDefault(index);
-                        return channel with
-                        {
-                            ChannelId = preservedChannel?.ChannelId ?? Guid.NewGuid(),
-                            RefinementSteps = channel.RefinementSteps
-                                .Select((step, refinementIndex) => step with
-                                {
-                                    StageId = preservedChannel?.RefinementSteps
-                                        .ElementAtOrDefault(refinementIndex)?.StageId ?? Guid.NewGuid(),
-                                })
-                                .ToList(),
-                        };
-                    })
-                    .ToList() ?? [];
+                List<ProfileTranslationChannel> channels =
+                    ReconcileRemainingAreaChannels(
+                        remainingArea,
+                        template,
+                        groups,
+                        existing.ActiveTranslationGroupId);
                 remainingArea = (remainingArea ?? ProfileRegion.Create(
                     "Remaining area",
                     new NormalizedRect(0, 0, 1, 1))) with
@@ -345,7 +376,79 @@ public sealed class RealWorkbenchService : IWorkbenchService
                 RecentLineCount = draft.RecentLineCount,
             },
             Targets = targets,
+            TranslationGroups = groups.ToList(),
+            ActiveTranslationGroupId = activeGroup,
         };
+    }
+
+    private static List<ProfileTranslationChannel> ReconcileRemainingAreaChannels(
+        ProfileRegion? remainingArea,
+        ProfileRegion? template,
+        IReadOnlyList<ProfileTranslationGroup> groups,
+        Guid sourceGroupId)
+    {
+        IReadOnlyList<ProfileTranslationChannel> existingChannels =
+            remainingArea?.TranslationChannels ?? [];
+        IReadOnlyList<ProfileTranslationChannel> templateChannels =
+            template?.TranslationChannels ?? [];
+        IReadOnlyList<ProfileTranslationChannel> fallbackChannels =
+            templateChannels
+                .Where(channel => channel.TranslationGroupId == sourceGroupId)
+                .OrderBy(channel => channel.DisplayOrder)
+                .ToArray();
+        if (fallbackChannels.Count == 0)
+        {
+            fallbackChannels = existingChannels
+                .Where(channel => channel.TranslationGroupId == sourceGroupId)
+                .OrderBy(channel => channel.DisplayOrder)
+                .ToArray();
+        }
+        if (fallbackChannels.Count == 0)
+        {
+            fallbackChannels = templateChannels
+                .Concat(existingChannels)
+                .GroupBy(channel => channel.TranslationGroupId)
+                .Select(group => group.OrderBy(channel => channel.DisplayOrder).ToArray())
+                .FirstOrDefault(group => group.Length > 0) ?? [];
+        }
+
+        var result = new List<ProfileTranslationChannel>();
+        foreach (ProfileTranslationGroup group in groups)
+        {
+            ProfileTranslationChannel[] preserved = existingChannels
+                .Where(channel => channel.TranslationGroupId == group.TranslationGroupId)
+                .OrderBy(channel => channel.DisplayOrder)
+                .ToArray();
+            ProfileTranslationChannel[] configured = templateChannels
+                .Where(channel => channel.TranslationGroupId == group.TranslationGroupId)
+                .OrderBy(channel => channel.DisplayOrder)
+                .ToArray();
+            IReadOnlyList<ProfileTranslationChannel> source = configured.Length > 0
+                ? configured
+                : preserved.Length > 0
+                    ? preserved
+                    : fallbackChannels;
+            for (int index = 0; index < source.Count; index++)
+            {
+                ProfileTranslationChannel sourceChannel = source[index];
+                ProfileTranslationChannel? preservedChannel =
+                    preserved.ElementAtOrDefault(index);
+                result.Add(sourceChannel with
+                {
+                    ChannelId = preservedChannel?.ChannelId ?? Guid.NewGuid(),
+                    TranslationGroupId = group.TranslationGroupId,
+                    DisplayOrder = index,
+                    RefinementSteps = sourceChannel.RefinementSteps
+                        .Select((step, refinementIndex) => step with
+                        {
+                            StageId = preservedChannel?.RefinementSteps
+                                .ElementAtOrDefault(refinementIndex)?.StageId ?? Guid.NewGuid(),
+                        })
+                        .ToList(),
+                });
+            }
+        }
+        return result;
     }
 
     private static T Parse<T>(string value, T fallback) where T : struct, Enum =>

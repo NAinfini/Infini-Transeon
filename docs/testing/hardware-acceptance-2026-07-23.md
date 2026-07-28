@@ -19,7 +19,7 @@ package identity, or cloud credential. A missing prerequisite is never converted
 | Check | Result | Evidence |
 |---|---|---|
 | Managed build | Pass | `dotnet build InfiniTranseon.sln -c Debug --no-restore`: 0 warnings, 0 errors |
-| Managed tests | Pass | 647 passed, 0 failed, 0 skipped |
+| Managed tests | Pass | Latest Release run: 886 passed, 0 failed, 0 skipped |
 | Native build | Pass | `cmake --build --preset windows-x64-debug` |
 | Native tests | Pass | 13/13 passed |
 | Runtime hot apply | Pass (automated) | Coordinator replaces processing and translation configuration without restarting capture; workbench persists every target and region |
@@ -36,7 +36,7 @@ package identity, or cloud credential. A missing prerequisite is never converted
 | Settings-to-tray focus | Pass | Test settings window, tray transition and overlay did not change the foreground, focus or capture state |
 | Capture exclusion pixels | Manual observation still required | API passed, but this run did not independently record both a window-capture and display-capture image |
 | Mixed-DPI inventory | Pass | Live windows reported DPI 168 on display 1 and DPI 120 on display 2 |
-| Package identity | Blocked | The original arbitrary OID correctly failed with `0x80073D2C`. Non-elevated registration with the Microsoft unsigned-namespace marker failed validation; Microsoft documents that unsigned packages with executable content generally require administrator privilege. The UAC-assisted registration was not approved/completed, and no package remained registered |
+| Package identity | Not applicable (release decision) | The unsigned GitHub distribution intentionally ships without package identity. The app must start without registration or UAC, retain the Windows capture border, and record `capture.borderless.unavailableWithoutPackageIdentity` instead of silently degrading |
 
 The unsigned namespace rules are documented by Microsoft:
 <https://learn.microsoft.com/windows/msix/package/unsigned-package>.
@@ -49,18 +49,19 @@ portable first launch cannot promise a silent, non-admin identity registration.
 | Area | Status | Exact prerequisite and acceptance evidence |
 |---|---|---|
 | Windowed real game | Not run | Open a game and bind at least two regions; prove preview, OCR, translation, overlay alignment, resize tracking and hot apply |
-| Borderless-fullscreen game | Not run | Complete package registration and grant `GraphicsCaptureAccessKind.Borderless`; prove border disabled, no focus loss, resize/recreate recovery |
+| Borderless-fullscreen game | Not run | Use the unsigned identity-free build; prove capture and overlay alignment with the Windows capture border retained, no focus loss, and resize/recreate recovery. Confirm the downgrade is visible and logged |
 | Mixed DPI migration | Partially run | Inventory passed; move a running game and overlay between the 175% and 125% displays and record region alignment before/after |
 | Multi-window capture | Not run | Open two eligible target windows simultaneously; prove both remain live, independently pausable and bounded by configured performance budgets |
 | Cloud translation/OCR | Not run | Add credentials in the app; test at least one US/global translation service, one China translation service and one cloud OCR service without exposing secrets |
-| Consent persistence | Not run | Grant, restart, verify retained status, revoke, restart, and verify the explicit failure state |
+| Border downgrade persistence | Not run | Restart the unsigned build and verify package identity is still absent, capture remains usable with the system border, and the explicit downgrade status is shown and logged again |
 
 ## Exit rule
 
 The workbench and hot-apply implementation may be treated as code-complete, but the product is not
-hardware-release-approved until every `Not run`, `Partially run`, `Blocked`, and manual-observation
-row above has evidence from a real game session. The Windows 11 support matrix must then repeat the
-session on each supported release.
+hardware-release-approved until every `Not run`, `Partially run`, and manual-observation row above
+has evidence from a real game session. A row explicitly marked not applicable by the unsigned
+distribution decision is not a failure. The Windows 11 support matrix must then repeat the session
+on each supported release.
 
 ## 2026-07-24 follow-up
 
@@ -94,3 +95,22 @@ session on each supported release.
   therefore recorded 12/13 with the ABI CLI probe not started; the other 12 tests passed. The ACL
   was not weakened or bypassed. GitHub Actions and a clean non-sandbox Win11 machine must run the
   final packaged EngineHost.
+
+## 2026-07-28 `0.1.0` release-candidate follow-up
+
+- The complete managed Release suite passed 886/886 with no failures or skips.
+- A fresh local-model-enabled native Release build completed in
+  `artifacts/cmake/release-candidate`. Twelve of thirteen CTest processes passed; the remaining ABI
+  executable was not started because this Codex/OneDrive path removed execute permission. Its
+  assertions did not run and are not recorded as a pass. The prior clean `C:\tmp` run remains the
+  13/13 evidence, and the tagged GitHub Actions run is required before publication.
+- The deterministic OCR benchmark contract smoke passed two synthetic samples with CER 0, line
+  accuracy 1, and local P95 48 ms. This proves the report and threshold plumbing, not real-model
+  OCR quality.
+- The unsigned MSI and portable archive were built locally and checked for required files, native
+  dependencies, Per-Monitor-V2 EngineHost manifest, empty model payload, SBOM/license allowlist,
+  Authenticode `NotSigned` status, and Ed25519 model-catalog signature. All nine immutable
+  model-catalog URLs returned HTTP 200 with their declared byte sizes.
+- These automated results do not change the manual rows above. Real-game windowed and borderless
+  capture, mixed-DPI movement, simultaneous multi-window use, capture-exclusion pixels, and
+  credentialed US/China translation plus cloud OCR remain release-owner acceptance decisions.

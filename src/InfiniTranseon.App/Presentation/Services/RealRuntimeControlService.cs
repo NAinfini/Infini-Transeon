@@ -80,6 +80,8 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
     private ProfileDocument? _activeProfile;
     private RuntimeProfileBinding? _activeBinding;
     private EngineRuntimeStatusChange? _lastChange;
+    private readonly HashSet<Guid> _pausedProfileTargets = [];
+    private readonly HashSet<Guid> _hiddenProfileTargets = [];
     private bool _isPaused;
     private bool _isOverlayVisible = true;
 
@@ -201,6 +203,31 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             .ToArray();
     }
 
+    public IReadOnlyList<RuntimeTargetDescriptor> GetRuntimeTargetDescriptors()
+    {
+        ProfileDocument? profile = _activeProfile;
+        RuntimeProfileBinding? binding = _activeBinding;
+        if (profile is null || binding is null)
+        {
+            return [];
+        }
+
+        return binding.Targets.Select(target => new RuntimeTargetDescriptor(
+            new AppHotkeyTargetReference(profile.ProfileId, target.ProfileTarget.TargetId),
+            target.TargetInstanceId,
+            target.ProfileTarget.Kind switch
+            {
+                CaptureTargetKind.Window => RuntimeCaptureTargetKind.Window,
+                CaptureTargetKind.Display => RuntimeCaptureTargetKind.Monitor,
+                CaptureTargetKind.DesktopFixedRegion => RuntimeCaptureTargetKind.DesktopRegion,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(target.ProfileTarget.Kind),
+                    target.ProfileTarget.Kind,
+                    null),
+            },
+            target.NativeHandle)).ToArray();
+    }
+
     public async Task StartAsync(Guid profileId, CancellationToken cancellationToken = default)
     {
         if (profileId == Guid.Empty)
@@ -255,6 +282,8 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
 
             _isPaused = false;
             _isOverlayVisible = true;
+            _pausedProfileTargets.Clear();
+            _hiddenProfileTargets.Clear();
             TargetsChanged?.Invoke(this, EventArgs.Empty);
         }
         finally
@@ -285,45 +314,77 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
 
     public async Task SetPausedAsync(bool paused, CancellationToken cancellationToken = default)
     {
-        IEngineRuntime engine = RequireEngine();
-        if (paused)
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await engine.PauseAllAsync(cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await engine.ResumeAllAsync(cancellationToken).ConfigureAwait(false);
-        }
-        _isPaused = paused;
-        _statusLog?.Record(new StatusEvent(
-            DateTimeOffset.UtcNow,
-            "runtime.control",
-            paused ? "runtime.control.paused" : "runtime.control.resumed",
-            "status.runtime.control.pause",
-            StatusEventSeverity.Information,
-            new Dictionary<string, object?>
+            IEngineRuntime engine = RequireEngine();
+            RuntimeProfileBinding binding = RequireBinding();
+            if (paused)
             {
-                ["paused"] = paused,
-            }));
-        TargetsChanged?.Invoke(this, EventArgs.Empty);
+                await engine.PauseAllAsync(cancellationToken).ConfigureAwait(false);
+                _pausedProfileTargets.UnionWith(
+                    binding.Targets.Select(target => target.ProfileTarget.TargetId));
+            }
+            else
+            {
+                await engine.ResumeAllAsync(cancellationToken).ConfigureAwait(false);
+                _pausedProfileTargets.Clear();
+            }
+            UpdateAggregateControlState(binding);
+            _statusLog?.Record(new StatusEvent(
+                DateTimeOffset.UtcNow,
+                "runtime.control",
+                paused ? "runtime.control.paused" : "runtime.control.resumed",
+                "status.runtime.control.pause",
+                StatusEventSeverity.Information,
+                new Dictionary<string, object?>
+                {
+                    ["paused"] = paused,
+                    ["targetCount"] = binding.Targets.Count,
+                }));
+            TargetsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task SetOverlayVisibleAsync(bool visible, CancellationToken cancellationToken = default)
     {
-        IEngineRuntime engine = RequireEngine();
-        await engine.SetOverlayVisibleAsync(visible, cancellationToken).ConfigureAwait(false);
-        _isOverlayVisible = visible;
-        _statusLog?.Record(new StatusEvent(
-            DateTimeOffset.UtcNow,
-            "runtime.control",
-            visible ? "runtime.overlay.shown" : "runtime.overlay.hidden",
-            "status.runtime.control.overlay",
-            StatusEventSeverity.Information,
-            new Dictionary<string, object?>
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            IEngineRuntime engine = RequireEngine();
+            RuntimeProfileBinding binding = RequireBinding();
+            await engine.SetOverlayVisibleAsync(visible, cancellationToken).ConfigureAwait(false);
+            if (visible)
             {
-                ["visible"] = visible,
-            }));
-        TargetsChanged?.Invoke(this, EventArgs.Empty);
+                _hiddenProfileTargets.Clear();
+            }
+            else
+            {
+                _hiddenProfileTargets.UnionWith(
+                    binding.Targets.Select(target => target.ProfileTarget.TargetId));
+            }
+            UpdateAggregateControlState(binding);
+            _statusLog?.Record(new StatusEvent(
+                DateTimeOffset.UtcNow,
+                "runtime.control",
+                visible ? "runtime.overlay.shown" : "runtime.overlay.hidden",
+                "status.runtime.control.overlay",
+                StatusEventSeverity.Information,
+                new Dictionary<string, object?>
+                {
+                    ["visible"] = visible,
+                    ["targetCount"] = binding.Targets.Count,
+                }));
+            TargetsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task RequestManualOcrAsync(CancellationToken cancellationToken = default)
@@ -370,6 +431,280 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         }
     }
 
+    public async Task<IReadOnlyList<TranslationGroupOption>> GetActiveTranslationGroupsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return _activeProfile?.TranslationGroups
+                .OrderByDescending(group => group.TranslationGroupId ==
+                    _activeProfile.ActiveTranslationGroupId)
+                .Select(group => new TranslationGroupOption(group.TranslationGroupId, group.Name))
+                .ToArray() ?? [];
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<TranslationGroupSwitchResult> SwitchTranslationGroupAsync(
+        Guid translationGroupId,
+        CancellationToken cancellationToken = default)
+    {
+        if (translationGroupId == Guid.Empty)
+            throw new ArgumentException("Translation group ID cannot be empty.", nameof(translationGroupId));
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ProfileDocument? previous = _activeProfile;
+            if (previous is null || _engine?.Status != EngineRuntimeStatus.Running)
+                return new(false, "translationGroup.noRunningProfile", 0, 0);
+            if (!previous.TranslationGroups.Any(group =>
+                    group.TranslationGroupId == translationGroupId))
+                return new(false, "translationGroup.unknown", 0, 0);
+            if (previous.ActiveTranslationGroupId == translationGroupId)
+                return new(true, "translationGroup.alreadyActive", 0, 0);
+
+            ProfileDocument updated = previous with
+            {
+                ActiveTranslationGroupId = translationGroupId,
+            };
+            await _profiles.SaveAsync(updated, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ProfileRuntimeApplyResult applyResult = await ApplyProfileLockedAsync(
+                    updated.ProfileId,
+                    cancellationToken).ConfigureAwait(false);
+                if (applyResult == ProfileRuntimeApplyResult.SavedOnly)
+                {
+                    throw new InvalidOperationException("translationGroup.runtimeStopped");
+                }
+                RuntimeVisibleReplayResult replay =
+                    (_engine as ITranslationGroupReplayResultSource)?.LastTranslationGroupReplay
+                    ?? new RuntimeVisibleReplayResult(
+                        ReplayedTargetCount: 0,
+                        WaitingTargetCount: GetRuntimeTargetDescriptors().Count);
+                int replayed = replay.ReplayedTargetCount;
+                int waiting = replay.WaitingTargetCount;
+                string status = waiting > 0
+                    ? "translationGroup.appliedWaitingForOcr"
+                    : "translationGroup.appliedAndRetranslated";
+                _statusLog?.Record(new StatusEvent(
+                    DateTimeOffset.UtcNow,
+                    "runtime.translationGroup",
+                    status,
+                    "status.runtime.translationGroup",
+                    StatusEventSeverity.Information,
+                    new Dictionary<string, object?>
+                    {
+                        ["profileId"] = updated.ProfileId,
+                        ["translationGroupId"] = translationGroupId,
+                        ["replayedTargetCount"] = replayed,
+                        ["waitingTargetCount"] = waiting,
+                    }));
+                return new(true, status, replayed, waiting);
+            }
+            catch (Exception switchingFailure)
+            {
+                var rollbackFailures = new List<Exception>();
+                try
+                {
+                    await _profiles.SaveAsync(previous, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception rollbackFailure)
+                {
+                    rollbackFailures.Add(rollbackFailure);
+                }
+                try
+                {
+                    await ApplyProfileLockedAsync(previous.ProfileId, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception rollbackFailure)
+                {
+                    rollbackFailures.Add(rollbackFailure);
+                }
+                if (rollbackFailures.Count > 0)
+                {
+                    throw new AggregateException(
+                        "Translator-group switching failed and rollback was incomplete.",
+                        [switchingFailure, .. rollbackFailures]);
+                }
+                throw;
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<RuntimeScopedControlResult> TogglePausedAsync(
+        RuntimeTargetSelection selection,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            IEngineRuntime engine = RequireEngine();
+            RuntimeProfileBinding binding = RequireBinding();
+            RuntimeTargetBinding[] targets = ResolveSelection(selection, binding);
+            if (targets.Length == 0)
+            {
+                return RecordNoMatchingTarget("pause", selection);
+            }
+
+            bool pause = !targets.All(target =>
+                _pausedProfileTargets.Contains(target.ProfileTarget.TargetId));
+            if (selection.Mode == RuntimeTargetSelectionMode.AllTargets)
+            {
+                if (pause)
+                {
+                    await engine.PauseAllAsync(cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await engine.ResumeAllAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                ITargetScopedEngineRuntime targetScoped = RequireTargetScoped(engine);
+                await targetScoped.SetTargetsPausedAsync(
+                    targets.Select(target => target.TargetInstanceId).ToArray(),
+                    pause,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (RuntimeTargetBinding target in targets)
+            {
+                if (pause) _pausedProfileTargets.Add(target.ProfileTarget.TargetId);
+                else _pausedProfileTargets.Remove(target.ProfileTarget.TargetId);
+            }
+            UpdateAggregateControlState(binding);
+            RecordScopedApplied("pause", selection, targets.Length, pause);
+            TargetsChanged?.Invoke(this, EventArgs.Empty);
+            return new RuntimeScopedControlResult(
+                true,
+                pause ? "runtime.control.paused" : "runtime.control.resumed",
+                targets.Length);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<RuntimeScopedControlResult> ToggleOverlayAsync(
+        RuntimeTargetSelection selection,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            IEngineRuntime engine = RequireEngine();
+            RuntimeProfileBinding binding = RequireBinding();
+            RuntimeTargetBinding[] targets = ResolveSelection(selection, binding);
+            if (targets.Length == 0)
+            {
+                return RecordNoMatchingTarget("overlay", selection);
+            }
+
+            bool visible = !targets.All(target =>
+                !_hiddenProfileTargets.Contains(target.ProfileTarget.TargetId));
+            if (selection.Mode == RuntimeTargetSelectionMode.AllTargets)
+            {
+                await engine.SetOverlayVisibleAsync(visible, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                ITargetScopedEngineRuntime targetScoped = RequireTargetScoped(engine);
+                await targetScoped.SetTargetsOverlayVisibleAsync(
+                    targets.Select(target => target.TargetInstanceId).ToArray(),
+                    visible,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (RuntimeTargetBinding target in targets)
+            {
+                if (visible) _hiddenProfileTargets.Remove(target.ProfileTarget.TargetId);
+                else _hiddenProfileTargets.Add(target.ProfileTarget.TargetId);
+            }
+            UpdateAggregateControlState(binding);
+            RecordScopedApplied("overlay", selection, targets.Length, visible);
+            TargetsChanged?.Invoke(this, EventArgs.Empty);
+            return new RuntimeScopedControlResult(
+                true,
+                visible ? "runtime.overlay.shown" : "runtime.overlay.hidden",
+                targets.Length);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<RuntimeScopedControlResult> RequestManualOcrAsync(
+        RuntimeTargetSelection selection,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            IEngineRuntime engine = RequireEngine();
+            RuntimeProfileBinding binding = RequireBinding();
+            RuntimeTargetBinding[] targets = ResolveSelection(selection, binding);
+            if (targets.Length == 0)
+            {
+                return RecordNoMatchingTarget("manualOcr", selection);
+            }
+
+            RuntimeManualOcrRequest request =
+                selection.Mode == RuntimeTargetSelectionMode.AllTargets
+                    ? RuntimeManualOcrRequest.AllTargets
+                    : RuntimeManualOcrRequest.Explicit(
+                        targets.Select(target => target.TargetInstanceId));
+            await RequireTargetScoped(engine)
+                .RequestManualOcrAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+            RecordScopedApplied(
+                "manualOcr",
+                selection,
+                targets.Length,
+                state: true);
+            return new RuntimeScopedControlResult(
+                true,
+                "runtime.ocr.manual.scheduled",
+                targets.Length);
+        }
+        catch (EngineRuntimeCommandRejectedException exception)
+        {
+            _statusLog?.Record(new StatusEvent(
+                DateTimeOffset.UtcNow,
+                "runtime.control",
+                exception.ErrorCode,
+                "status.runtime.control.manualOcrRejected",
+                StatusEventSeverity.Warning,
+                new Dictionary<string, object?>
+                {
+                    ["operation"] = exception.OperationKey,
+                    ["scope"] = selection.Mode.ToString(),
+                }));
+            throw;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<ProfileRuntimeApplyResult> ApplyProfileAsync(
         Guid profileId,
         CancellationToken cancellationToken = default)
@@ -380,97 +715,99 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            ProfileDocument updated =
-                await _profiles.LoadAsync(profileId, cancellationToken).ConfigureAwait(false)
-                ?? throw new EngineStartException("profileNotFound", profileId.ToString("D"));
-            if (_engine is null ||
-                _engine.Status != EngineRuntimeStatus.Running ||
-                _activeProfile?.ProfileId != profileId ||
-                _activeBinding is null)
-            {
-                return ProfileRuntimeApplyResult.SavedOnly;
-            }
-
-            if (_engine is IHotConfigurableEngineRuntime hot &&
-                TryCreateHotBinding(updated, _activeBinding, out RuntimeProfileBinding? binding))
-            {
-                try
-                {
-                    await hot.ApplyProfileAsync(binding!, cancellationToken)
-                        .ConfigureAwait(false);
-                    _activeProfile = updated;
-                    _activeBinding = binding;
-                    _statusLog?.Record(new StatusEvent(
-                        DateTimeOffset.UtcNow,
-                        "runtime.configuration",
-                        "runtime.configuration.hotApplied",
-                        "status.runtime.configuration.hotApplied",
-                        StatusEventSeverity.Information,
-                        new Dictionary<string, object?>
-                        {
-                            ["profileId"] = profileId,
-                            ["profileRevision"] = binding!.ProfileRevision,
-                        }));
-                    TargetsChanged?.Invoke(this, EventArgs.Empty);
-                    return ProfileRuntimeApplyResult.HotApplied;
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    _statusLog?.Record(new StatusEvent(
-                        DateTimeOffset.UtcNow,
-                        "runtime.configuration",
-                        "runtime.configuration.hotApplyFailed",
-                        "status.runtime.configuration.restartFallback",
-                        StatusEventSeverity.Warning,
-                        new Dictionary<string, object?>
-                        {
-                            ["profileId"] = profileId,
-                            ["exceptionType"] = exception.GetType().Name,
-                        }));
-                }
-            }
-
-            bool paused = _isPaused;
-            bool overlayVisible = _isOverlayVisible;
-            await DisposeEngineAsync().ConfigureAwait(false);
-            RuntimeProfileBinding restartedBinding =
-                await ResolveBindingAsync(updated, cancellationToken).ConfigureAwait(false);
-            ApplicationSettings applicationSettings =
-                await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
-            IRuntimeTranslationRecordSink? historySink =
-                CreateHistorySink(applicationSettings);
-            IEngineRuntime restarted = _engineFactory(
-                updated,
-                restartedBinding,
-                historySink,
-                applicationSettings);
-            Subscribe(restarted);
-            _engine = restarted;
-            _activeProfile = updated;
-            _activeBinding = restartedBinding;
-            try
-            {
-                await restarted.StartAsync(cancellationToken).ConfigureAwait(false);
-                if (paused)
-                    await restarted.PauseAllAsync(cancellationToken).ConfigureAwait(false);
-                if (!overlayVisible)
-                    await restarted.SetOverlayVisibleAsync(
-                        false,
-                        cancellationToken).ConfigureAwait(false);
-                _isPaused = paused;
-                _isOverlayVisible = overlayVisible;
-                TargetsChanged?.Invoke(this, EventArgs.Empty);
-                return ProfileRuntimeApplyResult.Restarted;
-            }
-            catch
-            {
-                await DisposeEngineAsync().ConfigureAwait(false);
-                throw;
-            }
+            return await ApplyProfileLockedAsync(profileId, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private async Task<ProfileRuntimeApplyResult> ApplyProfileLockedAsync(
+        Guid profileId,
+        CancellationToken cancellationToken)
+    {
+        ProfileDocument updated =
+            await _profiles.LoadAsync(profileId, cancellationToken).ConfigureAwait(false)
+            ?? throw new EngineStartException("profileNotFound", profileId.ToString("D"));
+        if (_engine is null ||
+            _engine.Status != EngineRuntimeStatus.Running ||
+            _activeProfile?.ProfileId != profileId ||
+            _activeBinding is null)
+        {
+            return ProfileRuntimeApplyResult.SavedOnly;
+        }
+
+        if (_engine is IHotConfigurableEngineRuntime hot &&
+            TryCreateHotBinding(updated, _activeBinding, out RuntimeProfileBinding? binding))
+        {
+            try
+            {
+                await hot.ApplyProfileAsync(binding!, cancellationToken)
+                    .ConfigureAwait(false);
+                _activeProfile = updated;
+                _activeBinding = binding;
+                _statusLog?.Record(new StatusEvent(
+                    DateTimeOffset.UtcNow,
+                    "runtime.configuration",
+                    "runtime.configuration.hotApplied",
+                    "status.runtime.configuration.hotApplied",
+                    StatusEventSeverity.Information,
+                    new Dictionary<string, object?>
+                    {
+                        ["profileId"] = profileId,
+                        ["profileRevision"] = binding!.ProfileRevision,
+                    }));
+                TargetsChanged?.Invoke(this, EventArgs.Empty);
+                return ProfileRuntimeApplyResult.HotApplied;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _statusLog?.Record(new StatusEvent(
+                    DateTimeOffset.UtcNow,
+                    "runtime.configuration",
+                    "runtime.configuration.hotApplyFailed",
+                    "status.runtime.configuration.restartFallback",
+                    StatusEventSeverity.Warning,
+                    new Dictionary<string, object?>
+                    {
+                        ["profileId"] = profileId,
+                        ["exceptionType"] = exception.GetType().Name,
+                    }));
+            }
+        }
+
+        await DisposeEngineAsync(preserveControlState: true).ConfigureAwait(false);
+        RuntimeProfileBinding restartedBinding =
+            await ResolveBindingAsync(updated, cancellationToken).ConfigureAwait(false);
+        ApplicationSettings applicationSettings =
+            await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        IRuntimeTranslationRecordSink? historySink =
+            CreateHistorySink(applicationSettings);
+        IEngineRuntime restarted = _engineFactory(
+            updated,
+            restartedBinding,
+            historySink,
+            applicationSettings);
+        Subscribe(restarted);
+        _engine = restarted;
+        _activeProfile = updated;
+        _activeBinding = restartedBinding;
+        try
+        {
+            await restarted.StartAsync(cancellationToken).ConfigureAwait(false);
+            await RestoreScopedControlStateAsync(
+                restarted,
+                restartedBinding,
+                cancellationToken).ConfigureAwait(false);
+            TargetsChanged?.Invoke(this, EventArgs.Empty);
+            return ProfileRuntimeApplyResult.Restarted;
+        }
+        catch
+        {
+            await DisposeEngineAsync().ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -505,7 +842,121 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
     private IEngineRuntime RequireEngine() =>
         _engine ?? throw new InvalidOperationException("engine.runtime.notRunning");
 
-    private async ValueTask DisposeEngineAsync()
+    private RuntimeProfileBinding RequireBinding() =>
+        _activeBinding ?? throw new InvalidOperationException("engine.runtime.notRunning");
+
+    private static ITargetScopedEngineRuntime RequireTargetScoped(IEngineRuntime engine) =>
+        engine as ITargetScopedEngineRuntime ??
+        throw new EngineRuntimeUnsupportedOperationException("targetScope");
+
+    private RuntimeTargetBinding[] ResolveSelection(
+        RuntimeTargetSelection selection,
+        RuntimeProfileBinding binding)
+    {
+        if (selection.Mode == RuntimeTargetSelectionMode.AllTargets)
+        {
+            return binding.Targets.ToArray();
+        }
+
+        HashSet<AppHotkeyTargetReference> requested = selection.Targets.ToHashSet();
+        return binding.Targets.Where(target => requested.Contains(
+            new AppHotkeyTargetReference(
+                binding.Profile.ProfileId,
+                target.ProfileTarget.TargetId))).ToArray();
+    }
+
+    private RuntimeScopedControlResult RecordNoMatchingTarget(
+        string operation,
+        RuntimeTargetSelection selection)
+    {
+        _statusLog?.Record(new StatusEvent(
+            DateTimeOffset.UtcNow,
+            "runtime.control",
+            "runtime.control.noMatchingTarget",
+            "status.runtime.control.noMatchingTarget",
+            StatusEventSeverity.Warning,
+            new Dictionary<string, object?>
+            {
+                ["operation"] = new StatusIdentifier(operation),
+                ["scope"] = selection.Mode.ToString(),
+                ["resolvedTargetCount"] = 0,
+            }));
+        return new RuntimeScopedControlResult(
+            false,
+            "runtime.control.noMatchingTarget",
+            0);
+    }
+
+    private void RecordScopedApplied(
+        string operation,
+        RuntimeTargetSelection selection,
+        int targetCount,
+        bool state) =>
+        _statusLog?.Record(new StatusEvent(
+            DateTimeOffset.UtcNow,
+            "runtime.control",
+            $"runtime.control.{operation}.scopedApplied",
+            "status.runtime.control.scopedApplied",
+            StatusEventSeverity.Information,
+            new Dictionary<string, object?>
+            {
+                ["operation"] = new StatusIdentifier(operation),
+                ["scope"] = selection.Mode.ToString(),
+                ["resolvedTargetCount"] = targetCount,
+                ["state"] = state,
+            }));
+
+    private void UpdateAggregateControlState(RuntimeProfileBinding binding)
+    {
+        Guid[] activeTargetIds = binding.Targets
+            .Select(target => target.ProfileTarget.TargetId)
+            .ToArray();
+        _pausedProfileTargets.IntersectWith(activeTargetIds);
+        _hiddenProfileTargets.IntersectWith(activeTargetIds);
+        _isPaused = activeTargetIds.Length > 0 &&
+            activeTargetIds.All(_pausedProfileTargets.Contains);
+        _isOverlayVisible = activeTargetIds.Length == 0 ||
+            activeTargetIds.All(targetId => !_hiddenProfileTargets.Contains(targetId));
+    }
+
+    private async ValueTask RestoreScopedControlStateAsync(
+        IEngineRuntime engine,
+        RuntimeProfileBinding binding,
+        CancellationToken cancellationToken)
+    {
+        UpdateAggregateControlState(binding);
+        RuntimeTargetBinding[] paused = binding.Targets.Where(target =>
+            _pausedProfileTargets.Contains(target.ProfileTarget.TargetId)).ToArray();
+        RuntimeTargetBinding[] hidden = binding.Targets.Where(target =>
+            _hiddenProfileTargets.Contains(target.ProfileTarget.TargetId)).ToArray();
+        if (paused.Length == binding.Targets.Count)
+        {
+            await engine.PauseAllAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else if (paused.Length > 0)
+        {
+            await RequireTargetScoped(engine).SetTargetsPausedAsync(
+                paused.Select(target => target.TargetInstanceId).ToArray(),
+                paused: true,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (hidden.Length == binding.Targets.Count)
+        {
+            await engine.SetOverlayVisibleAsync(false, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else if (hidden.Length > 0)
+        {
+            await RequireTargetScoped(engine).SetTargetsOverlayVisibleAsync(
+                hidden.Select(target => target.TargetInstanceId).ToArray(),
+                visible: false,
+                cancellationToken).ConfigureAwait(false);
+        }
+        UpdateAggregateControlState(binding);
+    }
+
+    private async ValueTask DisposeEngineAsync(bool preserveControlState = false)
     {
         IEngineRuntime? engine = _engine;
         _engine = null;
@@ -513,6 +964,11 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _activeBinding = null;
         _isPaused = false;
         _isOverlayVisible = true;
+        if (!preserveControlState)
+        {
+            _pausedProfileTargets.Clear();
+            _hiddenProfileTargets.Clear();
+        }
         if (engine is not null)
         {
             engine.StatusChanged -= OnEngineStatusChanged;

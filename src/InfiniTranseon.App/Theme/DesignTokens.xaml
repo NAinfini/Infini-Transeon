@@ -92,6 +92,15 @@
             <SolidColorBrush x:Key="OverlayPreviewGameBrush" Color="#DDDDE1" />
             <SolidColorBrush x:Key="OverlayPreviewPanelBrush" Color="#E6FFFFFF" />
             <SolidColorBrush x:Key="OverlayPreviewTextBrush" Color="#1A1A1A" />
+            <SolidColorBrush x:Key="OverlayPreviewHintBrush" Color="#5D5F66" />
+            <SolidColorBrush x:Key="RegionCanvasEnabledFillBrush" Color="#2460CDFF" />
+            <SolidColorBrush x:Key="RegionCanvasDisabledFillBrush" Color="#1C808080" />
+            <SolidColorBrush x:Key="RegionCanvasSelectedBorderBrush" Color="#FF005FB8" />
+            <SolidColorBrush x:Key="RegionCanvasEnabledBorderBrush" Color="#FF0067C0" />
+            <SolidColorBrush x:Key="RegionCanvasDisabledBorderBrush" Color="#FF5D5F66" />
+            <SolidColorBrush x:Key="RegionCanvasLabelForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="RegionCanvasLabelBackgroundBrush" Color="#E61A1A1A" />
+            <SolidColorBrush x:Key="RegionCanvasResizeFillBrush" Color="#FFFFFFFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="StatusSuccessBrush" Color="#6CCB5F" />
@@ -109,6 +118,15 @@
             <SolidColorBrush x:Key="OverlayPreviewGameBrush" Color="#23252E" />
             <SolidColorBrush x:Key="OverlayPreviewPanelBrush" Color="#E6101218" />
             <SolidColorBrush x:Key="OverlayPreviewTextBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="OverlayPreviewHintBrush" Color="#C5C8CE" />
+            <SolidColorBrush x:Key="RegionCanvasEnabledFillBrush" Color="#2460CDFF" />
+            <SolidColorBrush x:Key="RegionCanvasDisabledFillBrush" Color="#1C808080" />
+            <SolidColorBrush x:Key="RegionCanvasSelectedBorderBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="RegionCanvasEnabledBorderBrush" Color="#FF60CDFF" />
+            <SolidColorBrush x:Key="RegionCanvasDisabledBorderBrush" Color="#FFC5C8CE" />
+            <SolidColorBrush x:Key="RegionCanvasLabelForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="RegionCanvasLabelBackgroundBrush" Color="#E61A1A1A" />
+            <SolidColorBrush x:Key="RegionCanvasResizeFillBrush" Color="#FFFFFFFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="StatusSuccessBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -126,6 +144,15 @@
             <SolidColorBrush x:Key="OverlayPreviewGameBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="OverlayPreviewPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="OverlayPreviewTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OverlayPreviewHintBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="RegionCanvasEnabledFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="RegionCanvasDisabledFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="RegionCanvasSelectedBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="RegionCanvasEnabledBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="RegionCanvasDisabledBorderBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="RegionCanvasLabelForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="RegionCanvasLabelBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="RegionCanvasResizeFillBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

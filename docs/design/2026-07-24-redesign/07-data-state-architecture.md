@@ -61,9 +61,9 @@ IEngineRuntime 事件                     UI
 - **错误传播:** `RunGuardedAsync` 保留页级兜底,但命令改为返回 `Result`(成功/失败+原因),VM 可编程响应;修复 `DeleteAsync` 绕仓储直写 SQL(仓储补删除 API)。
 - **历史正确关联:** `RealHistoryService` 以运行中/指定档案 Id 查询,替换 `profiles.FirstOrDefault()`;"空"与"已禁用"返回可区分结果。
 
-## 7.5 多引擎与作用域(支撑 P0-2)
+## 7.5 运行目标作用域与未来多会话(支撑 P0-2)
 
-`IRuntimeControlService` 升级为多会话:`StartAsync(profileId)` 返回 `RuntimeSessionId`;`RunningTarget` 携带会话 Id;暂停/覆盖/手动 OCR 接受可选会话作用域(缺省=全部,对应热键作用域语义)。UI 侧 Home 运行面板按会话渲染多行。`RetranslateCurrent` 与 `ManualOcr` 分离为两个引擎命令(现映射同一实现,需引擎侧补齐;在此之前 UI 禁用并标注"即将推出"——显式可见,不假装成功)。
+首发仍为单运行会话,但该会话可同时包含多个目标。暂停、覆盖和手动 OCR 接受 `AllTargets` 或显式目标集合；热键的“前台匹配”在 `WM_HOTKEY` 到达时按根窗口/HMONITOR 精确解析,“指定组”持久化 `(ProfileId, ProfileTargetId)` 并在执行时映射为本次 `TargetInstanceId`。空匹配严格 no-op 并记录原因,不得回退为全部目标。未来多会话只需在选择器外层增加 `RuntimeSessionId`,不改变目标引用和 IPC 语义。`RetranslateCurrent` 与 `ManualOcr` 已在 UI 语义上分离；前者在独立引擎命令完成前保持禁用并标注“即将推出”,不映射为 OCR 或假装成功。
 
 ## 7.6 轮询与实时的边界
 

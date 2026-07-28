@@ -155,3 +155,24 @@ public interface IEngineRuntime : IAsyncDisposable
             new NotSupportedException("engine.runtime.unsupported.thumbnail"));
 
 }
+
+/// <summary>
+/// Optional target-scoped control surface for a single running engine session. Explicit target
+/// collections are always non-empty and never fall back to all targets.
+/// </summary>
+public interface ITargetScopedEngineRuntime
+{
+    ValueTask SetTargetsPausedAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool paused,
+        CancellationToken cancellationToken);
+
+    ValueTask SetTargetsOverlayVisibleAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool visible,
+        CancellationToken cancellationToken);
+
+    ValueTask RequestManualOcrAsync(
+        RuntimeManualOcrRequest request,
+        CancellationToken cancellationToken);
+}

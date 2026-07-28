@@ -15,9 +15,10 @@ public sealed class AppUpdateServiceTests
             "https://api.github.com/repos/NAinfini/Infini-Transeon/releases/latest",
             ReleaseUpdateComposition.LatestReleaseApi.AbsoluteUri);
         var trustRoot = ProductionReleaseTrustRoot.Create();
-        Assert.Equal("release-2026-a", trustRoot.Current.KeyId);
+        Assert.Equal("release-2026-b", trustRoot.Current.KeyId);
         Assert.Equal(32, trustRoot.Current.KeyBytes.Length);
         Assert.Contains(trustRoot.Current.KeyBytes.ToArray(), value => value != 0);
+        Assert.Equal(new Version(0, 1, 0), ReleaseUpdateComposition.CurrentApplicationVersion());
     }
 
     [Fact]
@@ -162,7 +163,7 @@ public sealed class AppUpdateServiceTests
                     new string('a', 64),
                     ArtifactCodeSigningPolicies.Unsigned,
                     null)],
-                "release-2026-a");
+                "release-2026-b");
             return ValueTask.FromResult<UpdateMetadata?>(metadata);
         }
 

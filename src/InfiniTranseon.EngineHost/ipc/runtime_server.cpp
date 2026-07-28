@@ -388,7 +388,7 @@ bool write_manual_ocr_response(
     write_u64(bytes, 48U, utc_ticks() + response_lifetime_ticks);
     write_u32(bytes, 56U, static_cast<std::uint32_t>(payload_bytes));
     constexpr std::size_t payload_offset = sizeof(std::uint32_t) + wire_header_bytes;
-    write_u32(bytes, payload_offset, 1U);
+    write_u32(bytes, payload_offset, 2U);
     response[payload_offset + 4U] = result.accepted ? std::byte{1} : std::byte{};
     response[payload_offset + 5U] = static_cast<std::byte>(result.status);
     write_u32(bytes, payload_offset + 8U, result.target_count);
@@ -1042,9 +1042,9 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
             payload_length == body_length - wire_header_bytes;
         const bool empty_control = (request_kind == control_request_kind ||
             request_kind == shutdown_request_kind) && payload_length == 0U;
-        const bool manual_ocr_request = request_kind == control_request_kind &&
-            valid_header &&
-            parse_manual_ocr_request(body_span.subspan(wire_header_bytes));
+        const auto manual_ocr_request = request_kind == control_request_kind && valid_header
+            ? parse_manual_ocr_request(body_span.subspan(wire_header_bytes))
+            : std::nullopt;
         const auto capture_command = request_kind == capture_target_command_kind &&
             valid_header
             ? parse_capture_target_command(body_span.subspan(wire_header_bytes))
@@ -1069,7 +1069,7 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
             std::ranges::equal(overlay_command->runtime_epoch, config.runtime_epoch);
         const bool ocr_epoch_valid = !ocr_result.has_value() ||
             std::ranges::equal(ocr_result->token.runtime_epoch, config.runtime_epoch);
-        const bool supported = empty_control || manual_ocr_request ||
+        const bool supported = empty_control || manual_ocr_request.has_value() ||
             capture_command.has_value() ||
             overlay_command.has_value() || policy_command.has_value() ||
             processing_command.has_value() || ocr_result.has_value() ||
@@ -1081,10 +1081,10 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
         }
 
         bool sent{};
-        if (manual_ocr_request)
+        if (manual_ocr_request.has_value())
         {
             const ManualOcrApplyResult result =
-                capture_controller.request_manual_ocr();
+                capture_controller.request_manual_ocr(*manual_ocr_request);
             sent = write_manual_ocr_response(
                 pipe, body_span, result, write_gate);
         }

@@ -13,11 +13,18 @@ public sealed class ProfileTests
     {
         const string json = """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "profileId": "11111111-1111-1111-1111-111111111111",
               "name": "Game",
               "sourceLanguage": "ja",
               "targetLanguage": "en",
+              "translationGroups": [
+                {
+                  "translationGroupId": "00000000-0000-0000-0000-000000000001",
+                  "name": "Default"
+                }
+              ],
+              "activeTranslationGroupId": "00000000-0000-0000-0000-000000000001",
               "targets": [],
               "hotkeys": [],
               "history": { "enabled": false, "maxAgeDays": 30, "maxBytes": 524288000 },
@@ -347,6 +354,9 @@ public sealed class ProfileTests
                 OutlineColor = "#FF112233",
                 OutlineWidth = 2,
                 PreferredFontSize = 30,
+                MaximumHeight = 180,
+                AutomaticShrink = false,
+                NoScrollOverflow = true,
                 MinimumDwell = TimeSpan.FromMilliseconds(650),
                 CrossfadeDuration = TimeSpan.FromMilliseconds(140),
                 OffsetDestination = new NormalizedRect(0.7, 0.1, 0.25, 0.3),
@@ -364,6 +374,9 @@ public sealed class ProfileTests
         Assert.Equal(2, style.OutlineWidth);
         Assert.Equal(30, style.PreferredFontSize);
         Assert.Equal(3, style.MaximumLines);
+        Assert.Equal(180, style.MaximumHeight);
+        Assert.False(style.AutomaticShrink);
+        Assert.True(style.NoScrollOverflow);
         Assert.Equal(650, style.MinimumDwellMilliseconds);
         Assert.Equal(140, style.CrossfadeMilliseconds);
 

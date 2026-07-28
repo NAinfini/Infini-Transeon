@@ -42,4 +42,29 @@ public sealed class HotkeyModelTests
         Assert.All(bindings, binding =>
             Assert.True(HotkeyGesture.TryParse(binding.Gesture, out _)));
     }
+
+    [Fact]
+    public void Specific_target_scope_requires_an_explicit_target_and_emergency_stop_is_global()
+    {
+        Assert.Throws<ArgumentException>(() => HotkeyBindingRules.Validate(
+            new AppHotkeyBinding(
+                AppHotkeyAction.ToggleOverlay,
+                "Ctrl + Alt + T",
+                Scope: AppHotkeyScope.SpecificTargetGroup)));
+
+        Assert.Throws<ArgumentException>(() => HotkeyBindingRules.Validate(
+            new AppHotkeyBinding(
+                AppHotkeyAction.EmergencyStop,
+                "Ctrl + Alt + Escape",
+                Scope: AppHotkeyScope.ForegroundMatchingTarget)));
+    }
+
+    [Fact]
+    public void Retranslate_current_is_disabled_until_the_runtime_supports_it()
+    {
+        AppHotkeyBinding binding = Assert.Single(HotkeyDefaults.Create(), hotkey =>
+            hotkey.Action == AppHotkeyAction.RetranslateCurrent);
+
+        Assert.False(binding.Enabled);
+    }
 }

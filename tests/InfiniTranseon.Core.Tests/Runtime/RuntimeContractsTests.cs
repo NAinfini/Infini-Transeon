@@ -100,8 +100,22 @@ public sealed class RuntimeContractsTests
     [Fact]
     public void ManualOcrPayloadRoundTripsAcceptedAndRejectedAcknowledgements()
     {
-        byte[] request = RuntimeManualOcrPayloadCodec.EncodeRequest();
-        RuntimeManualOcrPayloadCodec.ValidateRequest(request);
+        byte[] allTargetsRequest = RuntimeManualOcrPayloadCodec.EncodeRequest(
+            RuntimeManualOcrRequest.AllTargets);
+        Assert.Equal(RuntimeManualOcrScope.AllTargets,
+            RuntimeManualOcrPayloadCodec.DecodeRequest(allTargetsRequest).Scope);
+
+        TargetInstanceId firstTarget = new(Guid.NewGuid());
+        TargetInstanceId secondTarget = new(Guid.NewGuid());
+        RuntimeManualOcrRequest explicitTargets = RuntimeManualOcrRequest.Explicit(
+            [firstTarget, secondTarget]);
+        byte[] explicitRequest = RuntimeManualOcrPayloadCodec.EncodeRequest(explicitTargets);
+        RuntimeManualOcrRequest decodedExplicit =
+            RuntimeManualOcrPayloadCodec.DecodeRequest(explicitRequest);
+        Assert.Equal(RuntimeManualOcrScope.ExplicitTargets, decodedExplicit.Scope);
+        Assert.Equal(
+            explicitTargets.TargetInstanceIds.Select(value => value.Value),
+            decodedExplicit.TargetInstanceIds.Select(value => value.Value));
 
         var scheduled = new RuntimeManualOcrAcknowledgement(
             true,
@@ -140,10 +154,28 @@ public sealed class RuntimeContractsTests
     [Fact]
     public void ManualOcrPayloadRejectsMalformedOrInconsistentData()
     {
-        byte[] request = RuntimeManualOcrPayloadCodec.EncodeRequest();
-        request[7] = 1;
+        Assert.Throws<ArgumentException>(() => RuntimeManualOcrRequest.Explicit([]));
+        TargetInstanceId target = new(Guid.NewGuid());
+        Assert.Throws<ArgumentException>(() => RuntimeManualOcrRequest.Explicit([target, target]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RuntimeManualOcrRequest.Explicit(
+            Enumerable.Range(0, RuntimeManualOcrRequest.MaximumExplicitTargets + 1)
+                .Select(_ => new TargetInstanceId(Guid.NewGuid()))));
+
+        byte[] request = RuntimeManualOcrPayloadCodec.EncodeRequest(
+            RuntimeManualOcrRequest.Explicit([target]));
+        request[5] = 0;
         Assert.Throws<InvalidDataException>(
-            () => RuntimeManualOcrPayloadCodec.ValidateRequest(request));
+            () => RuntimeManualOcrPayloadCodec.DecodeRequest(request));
+
+        request = RuntimeManualOcrPayloadCodec.EncodeRequest(
+            RuntimeManualOcrRequest.Explicit([target]));
+        request.AsSpan(8, 16).Clear();
+        Assert.Throws<InvalidDataException>(
+            () => RuntimeManualOcrPayloadCodec.DecodeRequest(request));
+
+        Assert.Throws<InvalidDataException>(() =>
+            RuntimeManualOcrPayloadCodec.DecodeRequest(
+                new byte[RuntimeManualOcrPayloadCodec.MaximumRequestPayloadBytes + 1]));
         Assert.Throws<ArgumentException>(() => new RuntimeManualOcrAcknowledgement(
             true,
             RuntimeManualOcrStatus.Scheduled,

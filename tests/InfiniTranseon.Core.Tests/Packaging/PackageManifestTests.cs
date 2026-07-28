@@ -203,6 +203,18 @@ public sealed class PackageManifestTests
         Assert.Contains("THIRD-PARTY-NOTICES.json", required);
     }
 
+    [Fact]
+    public void PortableManifestNamesTheActualApplicationDataDirectory()
+    {
+        string root = FindRepositoryRoot();
+        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, "packaging", "portable-manifest.json")));
+
+        Assert.Equal(
+            @"%LOCALAPPDATA%\InfiniTranseon",
+            manifest.RootElement.GetProperty("userDataLocation").GetString());
+    }
+
     private static XDocument LoadManifest()
     {
         string root = FindRepositoryRoot();

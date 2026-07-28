@@ -67,7 +67,7 @@ jobs:
               throw "Release secret '$name' is required."
             }
           }
-          if ($env:RELEASE_ED25519_KEY_ID -ne 'release-2026-a') {
+          if ($env:RELEASE_ED25519_KEY_ID -ne 'release-2026-b') {
             throw 'RELEASE_ED25519_KEY_ID does not match the public key embedded in this build.'
           }
 
@@ -148,10 +148,9 @@ jobs:
 
       - name: Build installer and portable archives
         run: |
-          dotnet tool install --global wix --version 5.0.2
           $version = $env:RELEASE_TAG.TrimStart('v')
-          wix build packaging/installer.wxs -arch x64 -d Version=$version -d PublishDir=$((Resolve-Path artifacts/release/publish).Path) -o artifacts/release/Infini-Transeon.msi
-          wix msi validate artifacts/release/Infini-Transeon.msi
+          dotnet tool run wix build packaging/installer.wxs -arch x64 -d Version=$version -d PublishDir=$((Resolve-Path artifacts/release/publish).Path) -o artifacts/release/Infini-Transeon.msi
+          dotnet tool run wix msi validate artifacts/release/Infini-Transeon.msi
           ./scripts/verify-msi-layout.ps1 `
             -MsiPath artifacts/release/Infini-Transeon.msi
           Compress-Archive -Path artifacts/release/publish/* -DestinationPath artifacts/release/Infini-Transeon-portable.zip

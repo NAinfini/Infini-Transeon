@@ -21,6 +21,7 @@ public sealed class ProfileTranslationFactoryTests
                     DisplayLabel = "Second",
                     DisplayOrder = 2,
                     RetryCount = 0,
+                    AttemptTimeoutMilliseconds = 12_000,
                     IncludeGameContext = false,
                     PersistentCacheEnabled = true,
                 },
@@ -60,6 +61,7 @@ public sealed class ProfileTranslationFactoryTests
         Assert.Single(channels[0].FallbackProviderIds);
         Assert.Single(channels[0].RefinementSteps);
         Assert.Equal(0, channels[1].RetryCount);
+        Assert.Equal(TimeSpan.FromSeconds(12), channels[1].AttemptTimeout);
         Assert.False(channels[1].Context.IncludeGame);
         Assert.True(channels[1].Cache.PersistentEnabled);
     }

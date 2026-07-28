@@ -178,6 +178,10 @@ public sealed partial class OverlaySectionPage : Page
                 region.OverlayBackgroundMode,
                 "AutomaticContrastBlur",
                 StringComparison.Ordinal);
+            MaximumHeightBox.Value = region.OverlayMaximumHeight;
+            MaximumLinesBox.Value = region.MaximumLines;
+            AutomaticShrinkToggle.IsOn = region.OverlayAutomaticShrink;
+            NoScrollOverflowToggle.IsOn = region.OverlayNoScrollOverflow;
         }
         finally
         {
@@ -257,6 +261,25 @@ public sealed partial class OverlaySectionPage : Page
         region.PreferredFontSize = FontSizeSlider.Value;
     });
 
+    private void OnOverflowValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args) => CommitAndRender(() =>
+    {
+        if (ViewModel.SelectedRegion is not { } region)
+        {
+            return;
+        }
+        region.OverlayMaximumHeight = NumberBoxValue(MaximumHeightBox, region.OverlayMaximumHeight);
+        region.MaximumLines = NumberBoxValue(MaximumLinesBox, region.MaximumLines);
+    });
+
+    private void OnOverflowToggled(object sender, RoutedEventArgs e) => CommitAndRender(() =>
+    {
+        if (ViewModel.SelectedRegion is { } region)
+        {
+            region.OverlayAutomaticShrink = AutomaticShrinkToggle.IsOn;
+            region.OverlayNoScrollOverflow = true;
+        }
+    });
+
     private void CommitAndRender(Action mutate)
     {
         if (_updating || ViewModel.SelectedRegion is not { } region)
@@ -279,12 +302,17 @@ public sealed partial class OverlaySectionPage : Page
         }
         PreviewPanel.Visibility = Visibility.Visible;
 
-        PreviewPanel.Background = new SolidColorBrush(TryParseColor(region.BackgroundColor) ??
-            Windows.UI.Color.FromArgb(
-                (byte)Math.Round(region.OverlayOpacity * 255),
-                20, 20, 24));
-        PreviewText.Foreground = new SolidColorBrush(TryParseColor(region.TextColor) ?? Microsoft.UI.Colors.White);
+        PreviewPanel.Background = TryParseColor(region.BackgroundColor) is { } backgroundColor
+            ? new SolidColorBrush(backgroundColor)
+            : (Brush)Application.Current.Resources["OverlayPreviewPanelBrush"];
+        PreviewText.Foreground = TryParseColor(region.TextColor) is { } textColor
+            ? new SolidColorBrush(textColor)
+            : (Brush)Application.Current.Resources["OverlayPreviewTextBrush"];
         PreviewText.FontSize = region.PreferredFontSize;
+        PreviewText.MaxLines = region.MaximumLines;
+        PreviewPanel.MaxHeight = region.OverlayMaximumHeight > 0
+            ? region.OverlayMaximumHeight
+            : double.PositiveInfinity;
         PreviewPanel.CornerRadius = new CornerRadius(Math.Min(region.BlurRadius / 2, 16));
 
         PreviewText.Text = PreviewStateBox.SelectedItem is PreviewStateChoice selected
@@ -335,4 +363,7 @@ public sealed partial class OverlaySectionPage : Page
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static int NumberBoxValue(NumberBox box, int fallback) =>
+        double.IsFinite(box.Value) ? (int)Math.Round(box.Value) : fallback;
 }

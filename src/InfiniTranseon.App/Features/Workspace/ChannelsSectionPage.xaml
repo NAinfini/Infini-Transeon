@@ -46,6 +46,22 @@
             </Grid>
 
             <StackPanel x:Name="HeaderPanel" Spacing="{StaticResource SpaceM}">
+                <Grid ColumnSpacing="{StaticResource SpaceS}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="TranslationGroupSelector" x:Uid="ChannelsTranslationGroupSelector"
+                              SelectionChanged="OnTranslationGroupSelectionChanged" />
+                    <TextBox x:Name="TranslationGroupNameBox" x:Uid="ChannelsTranslationGroupNameBox"
+                             Grid.Column="1" />
+                    <Button x:Uid="ChannelsTranslationGroupAddButton" Grid.Column="2" Click="OnAddTranslationGroupClick" />
+                    <Button x:Uid="ChannelsTranslationGroupRenameButton" Grid.Column="3" Click="OnRenameTranslationGroupClick" />
+                    <Button x:Uid="ChannelsTranslationGroupDeleteButton" Grid.Column="4" Click="OnDeleteTranslationGroupClick" />
+                </Grid>
                 <ToggleSwitch
                     x:Name="TranslationEnabledToggle"
                     x:Uid="WorkbenchTranslationEnabledToggle"

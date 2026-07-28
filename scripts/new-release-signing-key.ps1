@@ -40,7 +40,9 @@ namespace InfiniTranseon
     {
         public uint Flags;
         public uint Type;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string TargetName;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string Comment;
         public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
         public uint CredentialBlobSize;
@@ -48,7 +50,9 @@ namespace InfiniTranseon
         public uint Persist;
         public uint AttributeCount;
         public IntPtr Attributes;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string TargetAlias;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string UserName;
     }
 

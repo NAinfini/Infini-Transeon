@@ -234,14 +234,25 @@
   <data name="ChannelsProviderUnavailableBadge" xml:space="preserve"><value>服务商不可用 — 请选择其他服务商以继续</value></data>
   <data name="ChannelsAdvancedHeader" xml:space="preserve"><value>高级</value></data>
   <data name="ChannelsDisplayLabelHeader" xml:space="preserve"><value>显示标签</value></data>
-  <data name="ChannelsAdvancedGapNote" xml:space="preserve"><value>超时、重试、回退、上下文权限与缓存策略目前尚不支持按通道单独配置。</value></data>
+  <data name="ChannelsAdvancedAppliedNote" xml:space="preserve"><value>更改会在保存此工作区时应用。</value></data>
+  <data name="ChannelsAttemptTimeoutHeader" xml:space="preserve"><value>单次尝试超时（秒）</value></data>
+  <data name="ChannelsRetryCountHeader" xml:space="preserve"><value>重试次数</value></data>
+  <data name="ChannelsFallbackProviderOneHeader" xml:space="preserve"><value>回退服务商 1</value></data>
+  <data name="ChannelsFallbackProviderTwoHeader" xml:space="preserve"><value>回退服务商 2</value></data>
+  <data name="ChannelsIncludeGameContextToggle" xml:space="preserve"><value>包含游戏上下文</value></data>
+  <data name="ChannelsIncludeRecentContextToggle" xml:space="preserve"><value>包含近期上下文</value></data>
+  <data name="ChannelsMemoryCacheToggle" xml:space="preserve"><value>使用内存缓存</value></data>
+  <data name="ChannelsPersistentCacheToggle" xml:space="preserve"><value>使用持久缓存</value></data>
   <data name="WorkbenchMoveChannelUpButtonName" xml:space="preserve"><value>上移翻译通道</value></data>
   <data name="WorkbenchMoveChannelDownButtonName" xml:space="preserve"><value>下移翻译通道</value></data>
   <data name="WorkbenchRemoveChannelButtonName" xml:space="preserve"><value>移除翻译通道</value></data>
 
   <data name="OverlayTextGroupHeader.Text" xml:space="preserve"><value>文字与对比度</value></data>
   <data name="OverlayOverflowGroupHeader.Text" xml:space="preserve"><value>溢出处理</value></data>
-  <data name="OverlayOverflowGapNote.Text" xml:space="preserve"><value>最大行数、自动缩小与禁止滚动等溢出策略尚未在区域上存储，此处暂不可配置。</value></data>
+  <data name="OverlayMaximumHeightBox.Header" xml:space="preserve"><value>最大高度（像素，0 使用区域高度）</value></data>
+  <data name="OverlayMaximumLinesBox.Header" xml:space="preserve"><value>最大显示行数</value></data>
+  <data name="OverlayAutomaticShrinkToggle.Header" xml:space="preserve"><value>自动缩小文字以适应区域</value></data>
+  <data name="OverlayNoScrollOverflowToggle.Header" xml:space="preserve"><value>用省略号裁剪溢出内容（不滚动）</value></data>
   <data name="OverlayPreviewStateSelector.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>预览结果状态</value></data>
   <data name="OverlayTracelessDisclosure.Title" xml:space="preserve"><value>动态背景无法保证无痕还原</value></data>
   <data name="OverlayTracelessDisclosure.Message" xml:space="preserve"><value>缓存背景与自动对比度背景只是对文字后方游戏画面的近似，覆盖层隐藏时无法保证像素级精确还原。</value></data>
@@ -284,6 +295,8 @@
   <data name="HotkeyAction_RetranslateCurrent" xml:space="preserve"><value>重新翻译当前文字</value></data>
   <data name="HotkeyAction_EmergencyStop" xml:space="preserve"><value>紧急停止运行时</value></data>
   <data name="HotkeyScope_AllRunningTargets" xml:space="preserve"><value>所有运行中的目标</value></data>
+  <data name="HotkeyScope_ForegroundMatchingTarget" xml:space="preserve"><value>前台匹配目标</value></data>
+  <data name="HotkeyScope_SpecificTargetGroup" xml:space="preserve"><value>指定目标组</value></data>
   <data name="HotkeyStatus_registered" xml:space="preserve"><value>已注册</value></data>
   <data name="HotkeyStatus_disabled" xml:space="preserve"><value>已禁用</value></data>
   <data name="HotkeyStatus_conflict" xml:space="preserve"><value>与其他应用冲突</value></data>
@@ -673,7 +686,19 @@
   <data name="HotkeyScopeAllTargets.Content" xml:space="preserve"><value>全部目标</value></data>
   <data name="HotkeyScopeForeground.Content" xml:space="preserve"><value>前台匹配目标</value></data>
   <data name="HotkeyScopeSpecificGroup.Content" xml:space="preserve"><value>指定目标组</value></data>
-  <data name="HotkeyScopeLimitationHint.Text" xml:space="preserve"><value>前台匹配目标与指定目标组作用范围需要多会话支持，目前尚未提供。当前每个快捷键均作用于全部正在运行的目标。</value></data>
+  <data name="HotkeySpecificTargetsButton.Content" xml:space="preserve"><value>选择目标</value></data>
+  <data name="HotkeySpecificTargetsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>选择指定档案目标</value></data>
+  <data name="HotkeySpecificTargetsDialogTitle" xml:space="preserve"><value>指定档案目标</value></data>
+  <data name="HotkeySpecificTargetsSave" xml:space="preserve"><value>保存目标</value></data>
+  <data name="HotkeyNoTargets" xml:space="preserve"><value>没有可用的档案目标。请先创建档案目标，再选择此作用范围。</value></data>
+  <data name="HotkeyTargetDirectoryUnavailable" xml:space="preserve"><value>无法加载档案目标。现有选择会保留并显示为缺失。</value></data>
+  <data name="HotkeyMissingTarget" xml:space="preserve"><value>缺失的目标（{0}，{1}）</value></data>
+  <data name="HotkeyMissingTargetAutomationName" xml:space="preserve"><value>缺失的已选档案目标</value></data>
+  <data name="HotkeyStatus_comingSoon" xml:space="preserve"><value>即将推出</value></data>
+  <data name="HotkeyStatus_selectionRequired" xml:space="preserve"><value>请至少选择一个目标</value></data>
+  <data name="HotkeyStatus_staleTargets" xml:space="preserve"><value>所选目标已缺失</value></data>
+  <data name="HotkeyStatus_targetDirectoryUnavailable" xml:space="preserve"><value>档案目标列表不可用</value></data>
+  <data name="HotkeyScopeLimitationHint.Text" xml:space="preserve"><value>目标作用域会应用于当前运行档案。前台匹配只认精确的游戏窗口或显示器；没有匹配目标时，热键不会执行任何操作。</value></data>
   <data name="SettingsSearchBox.PlaceholderText" xml:space="preserve"><value>搜索设置</value></data>
   <data name="SettingsAppearanceTab.Text" xml:space="preserve"><value>外观与语言</value></data>
   <data name="SettingsPrivacyTab.Text" xml:space="preserve"><value>隐私与数据</value></data>
@@ -709,4 +734,11 @@
   <data name="GameContextSavedMessage" xml:space="preserve"><value>运行中的档案会通过配置应用接收更新后的语境。</value></data>
   <data name="GameContextSaveFailedTitle" xml:space="preserve"><value>游戏语境未保存</value></data>
   <data name="EditTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>编辑术语</value></data>
+  <data name="ChannelsTranslationGroupSelector.Header" xml:space="preserve"><value>翻译器组</value></data>
+  <data name="ChannelsTranslationGroupNameBox.Header" xml:space="preserve"><value>组名称</value></data>
+  <data name="ChannelsTranslationGroupAddButton.Content" xml:space="preserve"><value>复制组</value></data>
+  <data name="ChannelsTranslationGroupRenameButton.Content" xml:space="preserve"><value>重命名</value></data>
+  <data name="ChannelsTranslationGroupDeleteButton.Content" xml:space="preserve"><value>删除</value></data>
+  <data name="TrayTranslationGroup" xml:space="preserve"><value>切换翻译器组</value></data>
+  <data name="TrayTranslationGroupUnavailable" xml:space="preserve"><value>没有可切换的组</value></data>
 </root>

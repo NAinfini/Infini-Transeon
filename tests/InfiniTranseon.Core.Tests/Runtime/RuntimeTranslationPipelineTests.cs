@@ -409,6 +409,44 @@ public sealed class RuntimeTranslationPipelineTests
         Assert.Equal([first.Profile.ProfileId], records.StoppedProfiles);
     }
 
+    [Fact]
+    public async Task Replay_reports_exact_visible_and_waiting_target_counts()
+    {
+        using var providers = new OnlineProviderService(
+            new ProviderRegistry([]), new ProviderServiceLimits());
+        await using var pipeline = new RuntimeTranslationPipeline(
+            new TranslationOrchestrator(new TranslationChannelRunner(providers)),
+            new RecordingOverlaySink(),
+            new OcrTextGenerationGate(new TextStabilizerOptions(
+                1, TimeSpan.Zero, TimeSpan.FromSeconds(1))),
+            (_, _) => ValueTask.CompletedTask);
+        RuntimeTranslationTarget original = Target("unused");
+        pipeline.Register(original);
+
+        RuntimeVisibleReplayResult waiting = await pipeline.ReplayVisibleAsync(
+            [original.TargetInstanceId], TestContext.Current.CancellationToken);
+        Assert.Equal(0, waiting.ReplayedTargetCount);
+        Assert.Equal(1, waiting.WaitingTargetCount);
+
+        await pipeline.EnqueueAsync(Result(original, "visible"), TestContext.Current.CancellationToken);
+        RuntimeTranslationTarget replacement = new(
+            original.RuntimeEpoch,
+            original.TargetInstanceId,
+            original.CaptureTargetId,
+            original.ProfileRevision + 1,
+            original.Profile,
+            original.ProfileTarget,
+            original.TargetPixelWidth,
+            original.TargetPixelHeight,
+            original.RunOptions);
+        await pipeline.ReplaceAsync(replacement, TestContext.Current.CancellationToken);
+
+        RuntimeVisibleReplayResult replayed = await pipeline.ReplayVisibleAsync(
+            [replacement.TargetInstanceId], TestContext.Current.CancellationToken);
+        Assert.Equal(1, replayed.ReplayedTargetCount);
+        Assert.Equal(0, replayed.WaitingTargetCount);
+    }
+
     private static RuntimeTranslationTarget Target(string providerId)
     {
         Guid epoch = Guid.NewGuid();

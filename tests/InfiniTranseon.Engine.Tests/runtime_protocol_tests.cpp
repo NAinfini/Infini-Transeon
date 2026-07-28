@@ -200,6 +200,9 @@ std::vector<std::byte> valid_overlay_command()
     write_u32(bytes, region + 120U, 650U);
     write_u32(bytes, region + 124U, 140U);
     bytes[region + 128U] = std::byte{1};
+    bytes[region + 129U] = std::byte{1};
+    bytes[region + 130U] = std::byte{1};
+    write_u32(bytes, region + 132U, 180U);
     constexpr std::size_t slot = region + 136U;
     bytes[slot] = std::byte{4};
     write_u32(bytes, slot + 20U, 2U);
@@ -418,11 +421,40 @@ int main()
     require(!infini::runtime::parse_capture_target_command(target_payload).has_value());
 
     std::array<std::byte, 8U> manual_ocr_payload{};
-    write_u32(manual_ocr_payload, 0U, 1U);
+    write_u32(manual_ocr_payload, 0U, 2U);
     manual_ocr_payload[4U] = std::byte{1};
-    require(infini::runtime::parse_manual_ocr_request(manual_ocr_payload));
-    manual_ocr_payload[7U] = std::byte{1};
-    require(!infini::runtime::parse_manual_ocr_request(manual_ocr_payload));
+    manual_ocr_payload[5U] = std::byte{1};
+    const auto all_targets_manual_ocr =
+        infini::runtime::parse_manual_ocr_request(manual_ocr_payload);
+    require(all_targets_manual_ocr.has_value());
+    require(all_targets_manual_ocr->scope ==
+        infini::runtime::ManualOcrScope::all_targets);
+    require(all_targets_manual_ocr->target_instance_ids.empty());
+
+    std::vector<std::byte> explicit_manual_ocr(40U);
+    write_u32(explicit_manual_ocr, 0U, 2U);
+    explicit_manual_ocr[4U] = std::byte{1};
+    explicit_manual_ocr[5U] = std::byte{2};
+    write_u16(explicit_manual_ocr, 6U, 2U);
+    explicit_manual_ocr[8U] = std::byte{1};
+    explicit_manual_ocr[24U] = std::byte{2};
+    const auto selected_targets_manual_ocr =
+        infini::runtime::parse_manual_ocr_request(explicit_manual_ocr);
+    require(selected_targets_manual_ocr.has_value());
+    require(selected_targets_manual_ocr->scope ==
+        infini::runtime::ManualOcrScope::explicit_targets);
+    require(selected_targets_manual_ocr->target_instance_ids.size() == 2U);
+    require(selected_targets_manual_ocr->target_instance_ids[0U][0U] == std::byte{1});
+    require(selected_targets_manual_ocr->target_instance_ids[1U][0U] == std::byte{2});
+
+    explicit_manual_ocr[24U] = std::byte{1};
+    require(!infini::runtime::parse_manual_ocr_request(explicit_manual_ocr).has_value());
+    explicit_manual_ocr[24U] = std::byte{2};
+    explicit_manual_ocr[8U] = std::byte{};
+    require(!infini::runtime::parse_manual_ocr_request(explicit_manual_ocr).has_value());
+    explicit_manual_ocr[8U] = std::byte{1};
+    explicit_manual_ocr.push_back(std::byte{});
+    require(!infini::runtime::parse_manual_ocr_request(explicit_manual_ocr).has_value());
 
     std::array<std::byte, 24U> thumbnail_payload{};
     write_u32(thumbnail_payload, 0U, 1U);
@@ -458,6 +490,9 @@ int main()
     require(overlay->regions.front().style.minimum_dwell_milliseconds == 650U);
     require(overlay->regions.front().style.crossfade_milliseconds == 140U);
     require(overlay->regions.front().style.reduced_motion);
+    require(overlay->regions.front().style.automatic_shrink);
+    require(overlay->regions.front().style.no_scroll_overflow);
+    require(overlay->regions.front().style.maximum_height == 180U);
     require(overlay->regions.front().ordered_slots.front().stage_index == 2U);
     require(overlay->regions.front().ordered_slots.front().text == u"translated");
     overlay_payload[82U] = std::byte{1};

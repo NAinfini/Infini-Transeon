@@ -210,6 +210,7 @@ public sealed class ViewModelBehaviorTests
         Assert.Equal(
             RuntimeCapabilities.VersionOne.MaxTranslationChannelsPerRegion,
             viewModel.MaxTranslationChannelsPerRegion);
+        Assert.Equal("0.1.0", viewModel.UpdateSnapshot.CurrentVersion);
     }
 
     [Fact]

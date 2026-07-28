@@ -441,6 +441,9 @@ public static class RuntimeOverlayDesiredStatePayloadCodec
             BinaryPrimitives.WriteInt32LittleEndian(
                 bytes[(offset + 124)..], region.Style.CrossfadeMilliseconds);
             bytes[offset + 128] = region.Style.ReducedMotion ? (byte)1 : (byte)0;
+            bytes[offset + 129] = region.Style.AutomaticShrink ? (byte)1 : (byte)0;
+            bytes[offset + 130] = region.Style.NoScrollOverflow ? (byte)1 : (byte)0;
+            BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 132)..], region.Style.MaximumHeight);
             offset += FixedRegionBytes;
             foreach (OverlaySlotSnapshot slot in region.OrderedSlots)
             {
@@ -516,11 +519,14 @@ public static class RuntimeOverlayDesiredStatePayloadCodec
                     MinimumDwellMilliseconds = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 120)..]),
                     CrossfadeMilliseconds = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 124)..]),
                     ReducedMotion = payload[offset + 128] == 1,
+                    AutomaticShrink = payload[offset + 129] == 1,
+                    NoScrollOverflow = payload[offset + 130] == 1,
+                    MaximumHeight = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 132)..]),
                 };
                 int slotCount = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 88)..]);
                 if (payload[offset + 34] != 0 || payload[offset + 35] != 0 ||
-                    payload[offset + 128] > 1 ||
-                    !payload.Slice(offset + 129, 7).SequenceEqual(new byte[7]) ||
+                    payload[offset + 128] > 1 || payload[offset + 129] > 1 ||
+                    payload[offset + 130] > 1 || payload[offset + 131] != 0 ||
                     slotCount is < 0 or > 4)
                     throw new InvalidDataException("Overlay region header is invalid.");
                 offset += FixedRegionBytes;

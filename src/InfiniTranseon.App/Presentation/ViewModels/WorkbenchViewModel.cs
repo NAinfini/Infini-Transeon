@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Profiles;
 
 namespace InfiniTranseon.App.Presentation.ViewModels;
 
@@ -25,12 +26,18 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
     }
 
     public ObservableCollection<WorkbenchTargetItem> Targets { get; } = [];
+    public ObservableCollection<WorkbenchTranslationGroupDraft> TranslationGroups { get; } = [];
 
     [ObservableProperty]
     public partial WorkbenchTargetItem? SelectedTarget { get; set; }
 
     [ObservableProperty]
     public partial WorkbenchRegionItem? SelectedRegion { get; set; }
+
+    [ObservableProperty]
+    public partial WorkbenchTranslationGroupDraft? SelectedTranslationGroup { get; set; }
+
+    public Guid ActiveTranslationGroupId => SelectedTranslationGroup?.TranslationGroupId ?? Guid.Empty;
 
     [ObservableProperty]
     public partial string ProfileName { get; set; } = string.Empty;
@@ -218,12 +225,17 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
     {
         ArgumentNullException.ThrowIfNull(region);
         ArgumentNullException.ThrowIfNull(channel);
-        if (region.Channels.Count >= MaxTranslationChannels)
+        if (region.Channels.Count(IsInActiveGroup) >= MaxTranslationChannels)
         {
             return false;
         }
         PushUndo();
-        region.Channels.Add(channel with { DisplayOrder = region.Channels.Count });
+        int order = region.Channels.Count(IsInActiveGroup);
+        region.Channels.Add(channel with
+        {
+            TranslationGroupId = ActiveTranslationGroupId,
+            DisplayOrder = order,
+        });
         MarkDirty();
         return true;
     }
@@ -242,7 +254,11 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
             return false;
         }
         PushUndo();
-        region.Channels[index] = updated with { DisplayOrder = index };
+        int order = region.Channels
+            .Where(item => item.TranslationGroupId == current.TranslationGroupId)
+            .TakeWhile(item => !ReferenceEquals(item, current))
+            .Count();
+        region.Channels[index] = updated with { DisplayOrder = order };
         MarkDirty();
         return true;
     }
@@ -286,6 +302,61 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         return true;
     }
 
+    public bool AddTranslationGroup(string name)
+    {
+        WorkbenchTranslationGroupDraft? source = SelectedTranslationGroup;
+        if (source is null || TranslationGroups.Count >= 16) return false;
+        PushUndo();
+        var group = new WorkbenchTranslationGroupDraft(Guid.NewGuid(), name.Trim());
+        foreach (WorkbenchRegionItem region in Targets.SelectMany(target => target.Regions))
+        {
+            foreach (WorkbenchChannelDraft channel in region.Channels
+                         .Where(channel => channel.TranslationGroupId == source.TranslationGroupId)
+                         .OrderBy(channel => channel.DisplayOrder).ToArray())
+            {
+                region.Channels.Add(channel with
+                {
+                    ChannelId = Guid.NewGuid(),
+                    TranslationGroupId = group.TranslationGroupId,
+                });
+            }
+        }
+        TranslationGroups.Add(group);
+        SelectedTranslationGroup = group;
+        MarkDirty();
+        OnPropertyChanged(nameof(ActiveTranslationGroupId));
+        return true;
+    }
+
+    public bool RenameSelectedTranslationGroup(string name)
+    {
+        if (SelectedTranslationGroup is not { } group || string.IsNullOrWhiteSpace(name)) return false;
+        PushUndo();
+        int index = TranslationGroups.IndexOf(group);
+        TranslationGroups[index] = group with { Name = name.Trim() };
+        SelectedTranslationGroup = TranslationGroups[index];
+        MarkDirty();
+        return true;
+    }
+
+    public bool DeleteSelectedTranslationGroup()
+    {
+        if (SelectedTranslationGroup is not { } group || TranslationGroups.Count <= 1) return false;
+        PushUndo();
+        foreach (WorkbenchRegionItem region in Targets.SelectMany(target => target.Regions))
+        {
+            foreach (WorkbenchChannelDraft channel in region.Channels
+                         .Where(channel => channel.TranslationGroupId == group.TranslationGroupId).ToArray())
+                region.Channels.Remove(channel);
+        }
+        int removed = TranslationGroups.IndexOf(group);
+        TranslationGroups.Remove(group);
+        SelectedTranslationGroup = TranslationGroups[Math.Clamp(removed, 0, TranslationGroups.Count - 1)];
+        MarkDirty();
+        OnPropertyChanged(nameof(ActiveTranslationGroupId));
+        return true;
+    }
+
     public void Undo()
     {
         if (!_undo.TryPop(out WorkbenchProfileDraft? previous)) return;
@@ -325,7 +396,9 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         GameName.Trim(),
         GameDescription.Trim(),
         RecentLineCount,
-        Targets.Select(target => target.ToDraft()).ToArray());
+        Targets.Select(target => target.ToDraft()).ToArray(),
+        TranslationGroups.ToArray(),
+        ActiveTranslationGroupId);
 
     private void Restore(WorkbenchProfileDraft draft)
     {
@@ -338,6 +411,12 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         GameName = draft.GameName;
         GameDescription = draft.GameDescription;
         RecentLineCount = draft.RecentLineCount;
+        TranslationGroups.Clear();
+        foreach (WorkbenchTranslationGroupDraft group in draft.EffectiveTranslationGroups)
+            TranslationGroups.Add(group);
+        SelectedTranslationGroup = TranslationGroups.FirstOrDefault(group =>
+            group.TranslationGroupId == draft.ActiveTranslationGroupId) ?? TranslationGroups.FirstOrDefault();
+        OnPropertyChanged(nameof(ActiveTranslationGroupId));
         Targets.Clear();
         foreach (WorkbenchTargetDraft target in draft.Targets)
             Targets.Add(new WorkbenchTargetItem(target));
@@ -375,11 +454,24 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
 
     private static void NormalizeChannelOrder(WorkbenchRegionItem region)
     {
-        for (int index = 0; index < region.Channels.Count; index++)
+        foreach (IGrouping<Guid, WorkbenchChannelDraft> group in region.Channels
+                     .GroupBy(channel => channel.TranslationGroupId == Guid.Empty
+                         ? ProfileDocument.DefaultTranslationGroupId
+                         : channel.TranslationGroupId))
         {
-            region.Channels[index] = region.Channels[index] with { DisplayOrder = index };
+            int order = 0;
+            foreach (WorkbenchChannelDraft channel in group.ToArray())
+            {
+                int index = region.Channels.IndexOf(channel);
+                region.Channels[index] = channel with { DisplayOrder = order++ };
+            }
         }
     }
+
+    public bool IsInActiveGroup(WorkbenchChannelDraft channel) =>
+        channel.TranslationGroupId == ActiveTranslationGroupId ||
+        (channel.TranslationGroupId == Guid.Empty &&
+            ActiveTranslationGroupId == ProfileDocument.DefaultTranslationGroupId);
 
     /// <summary>
     /// Builds the deduplicated refiner provider id list for a channel's pipeline card: empty
@@ -483,6 +575,9 @@ public sealed partial class WorkbenchRegionItem : ObservableObject
         PreferredFontSize = draft.PreferredFontSize;
         OutlineColor = draft.OutlineColor;
         OutlineWidth = draft.OutlineWidth;
+        OverlayMaximumHeight = draft.OverlayMaximumHeight;
+        OverlayAutomaticShrink = draft.OverlayAutomaticShrink;
+        OverlayNoScrollOverflow = draft.OverlayNoScrollOverflow;
         LockDegradation = draft.LockDegradation;
     }
 
@@ -518,6 +613,9 @@ public sealed partial class WorkbenchRegionItem : ObservableObject
     [ObservableProperty] public partial double PreferredFontSize { get; set; }
     [ObservableProperty] public partial string? OutlineColor { get; set; }
     [ObservableProperty] public partial double OutlineWidth { get; set; }
+    [ObservableProperty] public partial int OverlayMaximumHeight { get; set; }
+    [ObservableProperty] public partial bool OverlayAutomaticShrink { get; set; }
+    [ObservableProperty] public partial bool OverlayNoScrollOverflow { get; set; }
     [ObservableProperty] public partial bool LockDegradation { get; set; }
 
     public WorkbenchRegionDraft ToDraft() => new(
@@ -552,7 +650,10 @@ public sealed partial class WorkbenchRegionItem : ObservableObject
         LockDegradation,
         PreferredFontSize,
         OutlineColor,
-        OutlineWidth);
+        OutlineWidth,
+        OverlayMaximumHeight,
+        OverlayAutomaticShrink,
+        OverlayNoScrollOverflow);
 
     public WorkbenchRegionItem Duplicate() => new(ToDraft() with
     {

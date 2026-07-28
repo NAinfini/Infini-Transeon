@@ -163,16 +163,26 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                                     Content="{x:Bind Gesture, Mode=OneWay}"
                                                     Tag="{x:Bind}"
                                                     FontFamily="{StaticResource FontMono}"
+                                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                                     Click="OnEditHotkeyClick" />
-                                                <ComboBox
-                                                    x:Uid="HotkeyScopeSelector"
-                                                    Grid.Column="2"
-                                                    MinWidth="150"
-                                                    SelectedIndex="0">
-                                                    <ComboBoxItem x:Uid="HotkeyScopeAllTargets" />
-                                                    <ComboBoxItem x:Uid="HotkeyScopeForeground" IsEnabled="False" />
-                                                    <ComboBoxItem x:Uid="HotkeyScopeSpecificGroup" IsEnabled="False" />
-                                                </ComboBox>
+                                                <StackPanel Grid.Column="2" Spacing="{StaticResource SpaceXS}">
+                                                    <ComboBox
+                                                        x:Uid="HotkeyScopeSelector"
+                                                        Tag="{x:Bind}"
+                                                        MinWidth="150"
+                                                        IsEnabled="{x:Bind CanChangeScope, Mode=OneWay}"
+                                                        Loaded="OnHotkeyScopeLoaded"
+                                                        SelectionChanged="OnHotkeyScopeChanged">
+                                                        <ComboBoxItem x:Uid="HotkeyScopeAllTargets" Tag="AllRunningTargets" />
+                                                        <ComboBoxItem x:Uid="HotkeyScopeForeground" Tag="ForegroundMatchingTarget" />
+                                                        <ComboBoxItem x:Uid="HotkeyScopeSpecificGroup" Tag="SpecificTargetGroup" />
+                                                    </ComboBox>
+                                                    <Button
+                                                        x:Uid="HotkeySpecificTargetsButton"
+                                                        Tag="{x:Bind}"
+                                                        IsEnabled="{x:Bind CanChooseSpecificTargets, Mode=OneWay}"
+                                                        Click="OnSelectSpecificTargetsClick" />
+                                                </StackPanel>
                                                 <TextBlock
                                                     Grid.Column="3"
                                                     Text="{x:Bind StatusText, Mode=OneWay}"
@@ -184,6 +194,7 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                                     Grid.Column="4"
                                                     IsOn="{x:Bind Enabled, Mode=OneWay}"
                                                     Tag="{x:Bind}"
+                                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                                     MinWidth="0"
                                                     AutomationProperties.Name="{x:Bind ActionText, Mode=OneWay}"
                                                     Toggled="OnHotkeyEnabledToggled" />

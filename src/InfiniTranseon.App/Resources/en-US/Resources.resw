@@ -223,14 +223,25 @@
   <data name="ChannelsProviderUnavailableBadge" xml:space="preserve"><value>Provider unavailable — choose another to continue</value></data>
   <data name="ChannelsAdvancedHeader" xml:space="preserve"><value>Advanced</value></data>
   <data name="ChannelsDisplayLabelHeader" xml:space="preserve"><value>Display label</value></data>
-  <data name="ChannelsAdvancedGapNote" xml:space="preserve"><value>Timeout, retry, fallback, context permission, and cache policy are not yet configurable per channel.</value></data>
+  <data name="ChannelsAdvancedAppliedNote" xml:space="preserve"><value>Changes apply when this workspace is saved.</value></data>
+  <data name="ChannelsAttemptTimeoutHeader" xml:space="preserve"><value>Attempt timeout (seconds)</value></data>
+  <data name="ChannelsRetryCountHeader" xml:space="preserve"><value>Retries</value></data>
+  <data name="ChannelsFallbackProviderOneHeader" xml:space="preserve"><value>Fallback provider 1</value></data>
+  <data name="ChannelsFallbackProviderTwoHeader" xml:space="preserve"><value>Fallback provider 2</value></data>
+  <data name="ChannelsIncludeGameContextToggle" xml:space="preserve"><value>Include game context</value></data>
+  <data name="ChannelsIncludeRecentContextToggle" xml:space="preserve"><value>Include recent context</value></data>
+  <data name="ChannelsMemoryCacheToggle" xml:space="preserve"><value>Use memory cache</value></data>
+  <data name="ChannelsPersistentCacheToggle" xml:space="preserve"><value>Use persistent cache</value></data>
   <data name="WorkbenchMoveChannelUpButtonName" xml:space="preserve"><value>Move translation channel up</value></data>
   <data name="WorkbenchMoveChannelDownButtonName" xml:space="preserve"><value>Move translation channel down</value></data>
   <data name="WorkbenchRemoveChannelButtonName" xml:space="preserve"><value>Remove translation channel</value></data>
 
   <data name="OverlayTextGroupHeader.Text" xml:space="preserve"><value>Text &amp; contrast</value></data>
   <data name="OverlayOverflowGroupHeader.Text" xml:space="preserve"><value>Overflow handling</value></data>
-  <data name="OverlayOverflowGapNote.Text" xml:space="preserve"><value>Maximum lines, automatic shrink, and no-scroll overflow policies are not yet stored on a region — they cannot be configured here.</value></data>
+  <data name="OverlayMaximumHeightBox.Header" xml:space="preserve"><value>Maximum height (px, 0 uses region height)</value></data>
+  <data name="OverlayMaximumLinesBox.Header" xml:space="preserve"><value>Maximum display lines</value></data>
+  <data name="OverlayAutomaticShrinkToggle.Header" xml:space="preserve"><value>Automatically shrink text to fit</value></data>
+  <data name="OverlayNoScrollOverflowToggle.Header" xml:space="preserve"><value>Clip overflow with an ellipsis (no scrolling)</value></data>
   <data name="OverlayPreviewStateSelector.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Preview result state</value></data>
   <data name="OverlayTracelessDisclosure.Title" xml:space="preserve"><value>Dynamic backgrounds cannot guarantee traceless restore</value></data>
   <data name="OverlayTracelessDisclosure.Message" xml:space="preserve"><value>Cached and automatic-contrast backgrounds approximate the game behind the text; they cannot promise pixel-perfect restoration when the overlay hides.</value></data>
@@ -273,6 +284,8 @@
   <data name="HotkeyAction_RetranslateCurrent" xml:space="preserve"><value>Retranslate current text</value></data>
   <data name="HotkeyAction_EmergencyStop" xml:space="preserve"><value>Emergency stop runtime</value></data>
   <data name="HotkeyScope_AllRunningTargets" xml:space="preserve"><value>All running targets</value></data>
+  <data name="HotkeyScope_ForegroundMatchingTarget" xml:space="preserve"><value>Foreground matching target</value></data>
+  <data name="HotkeyScope_SpecificTargetGroup" xml:space="preserve"><value>Specific target group</value></data>
   <data name="HotkeyStatus_registered" xml:space="preserve"><value>Registered</value></data>
   <data name="HotkeyStatus_disabled" xml:space="preserve"><value>Disabled</value></data>
   <data name="HotkeyStatus_conflict" xml:space="preserve"><value>Conflict with another application</value></data>
@@ -684,7 +697,19 @@
   <data name="HotkeyScopeAllTargets.Content" xml:space="preserve"><value>All targets</value></data>
   <data name="HotkeyScopeForeground.Content" xml:space="preserve"><value>Foreground matching target</value></data>
   <data name="HotkeyScopeSpecificGroup.Content" xml:space="preserve"><value>Specific target group</value></data>
-  <data name="HotkeyScopeLimitationHint.Text" xml:space="preserve"><value>Foreground-matching and specific-target-group scopes require multi-session support, which is not available yet. Every hotkey currently applies to all running targets.</value></data>
+  <data name="HotkeySpecificTargetsButton.Content" xml:space="preserve"><value>Select targets</value></data>
+  <data name="HotkeySpecificTargetsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Select specific profile targets</value></data>
+  <data name="HotkeySpecificTargetsDialogTitle" xml:space="preserve"><value>Specific profile targets</value></data>
+  <data name="HotkeySpecificTargetsSave" xml:space="preserve"><value>Save targets</value></data>
+  <data name="HotkeyNoTargets" xml:space="preserve"><value>No profile targets are available. Create a profile target before selecting this scope.</value></data>
+  <data name="HotkeyTargetDirectoryUnavailable" xml:space="preserve"><value>Profile targets could not be loaded. Existing selections are kept and shown as missing.</value></data>
+  <data name="HotkeyMissingTarget" xml:space="preserve"><value>Missing target ({0}, {1})</value></data>
+  <data name="HotkeyMissingTargetAutomationName" xml:space="preserve"><value>Missing selected profile target</value></data>
+  <data name="HotkeyStatus_comingSoon" xml:space="preserve"><value>Coming soon</value></data>
+  <data name="HotkeyStatus_selectionRequired" xml:space="preserve"><value>Select at least one target</value></data>
+  <data name="HotkeyStatus_staleTargets" xml:space="preserve"><value>Selected target is missing</value></data>
+  <data name="HotkeyStatus_targetDirectoryUnavailable" xml:space="preserve"><value>Profile target list unavailable</value></data>
+  <data name="HotkeyScopeLimitationHint.Text" xml:space="preserve"><value>Target scope applies within the current running profile. Foreground matching uses the exact game window or monitor; when nothing matches, the hotkey does nothing.</value></data>
   <data name="HistoryCorrectButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Correct this translation</value></data>
   <data name="HistoryCorrectionHeader.Text" xml:space="preserve"><value>Save a correction</value></data>
   <data name="HistoryCorrectionTextBox.Header" xml:space="preserve"><value>Corrected translation</value></data>
@@ -709,4 +734,11 @@
   <data name="GameContextSavedMessage" xml:space="preserve"><value>The running profile receives the updated context through profile apply.</value></data>
   <data name="GameContextSaveFailedTitle" xml:space="preserve"><value>Game context was not saved</value></data>
   <data name="EditTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Edit glossary term</value></data>
+  <data name="ChannelsTranslationGroupSelector.Header" xml:space="preserve"><value>Translator group</value></data>
+  <data name="ChannelsTranslationGroupNameBox.Header" xml:space="preserve"><value>Group name</value></data>
+  <data name="ChannelsTranslationGroupAddButton.Content" xml:space="preserve"><value>Copy group</value></data>
+  <data name="ChannelsTranslationGroupRenameButton.Content" xml:space="preserve"><value>Rename</value></data>
+  <data name="ChannelsTranslationGroupDeleteButton.Content" xml:space="preserve"><value>Delete</value></data>
+  <data name="TrayTranslationGroup" xml:space="preserve"><value>Switch translator group</value></data>
+  <data name="TrayTranslationGroupUnavailable" xml:space="preserve"><value>No alternate group</value></data>
 </root>

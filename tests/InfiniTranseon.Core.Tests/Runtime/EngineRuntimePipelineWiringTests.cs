@@ -25,7 +25,7 @@ public sealed class EngineRuntimePipelineWiringTests
         var inner = new RecordingPipeline();
         var publisher = new RecordingPublisher();
         var pipeline = new PausableRuntimeTranslationPipeline(inner, publisher);
-        pipeline.Pause();
+        await pipeline.PauseAllAsync(TestContext.Current.CancellationToken);
 
         await pipeline.EnqueueAsync(OcrResult(), TestContext.Current.CancellationToken);
 
@@ -33,9 +33,37 @@ public sealed class EngineRuntimePipelineWiringTests
         Assert.Single(publisher.OcrResults);
         Assert.Empty(inner.Enqueued);
 
-        pipeline.Resume();
+        await pipeline.ResumeAllAsync(TestContext.Current.CancellationToken);
         await pipeline.EnqueueAsync(OcrResult(), TestContext.Current.CancellationToken);
         Assert.Single(inner.Enqueued);
+    }
+
+    [Fact]
+    public async Task PausablePipelineSuppressesAndCancelsOnlySelectedTargets()
+    {
+        TargetInstanceId first = new(Guid.NewGuid());
+        TargetInstanceId second = new(Guid.NewGuid());
+        var inner = new RecordingPipeline();
+        var publisher = new RecordingPublisher();
+        var pipeline = new PausableRuntimeTranslationPipeline(inner, publisher);
+
+        await pipeline.SetTargetsPausedAsync(
+            [first],
+            paused: true,
+            TestContext.Current.CancellationToken);
+        await pipeline.EnqueueAsync(OcrResult(first), TestContext.Current.CancellationToken);
+        await pipeline.EnqueueAsync(OcrResult(second), TestContext.Current.CancellationToken);
+
+        Assert.Equal([first], inner.PausedTargets);
+        Assert.Equal(2, publisher.OcrResults.Count);
+        Assert.Equal(second, Assert.Single(inner.Enqueued).ExecutionToken.Source.TargetInstanceId);
+
+        await pipeline.SetTargetsPausedAsync(
+            [first],
+            paused: false,
+            TestContext.Current.CancellationToken);
+        await pipeline.EnqueueAsync(OcrResult(first), TestContext.Current.CancellationToken);
+        Assert.Equal(first, inner.Enqueued[^1].ExecutionToken.Source.TargetInstanceId);
     }
 
     [Fact]
@@ -48,11 +76,43 @@ public sealed class EngineRuntimePipelineWiringTests
         await sink.ApplyAsync(visible, TestContext.Current.CancellationToken);
         Assert.Single(inner.Applied[^1].Regions);
 
-        sink.SetVisible(false);
-        await sink.ApplyAsync(Overlay(withRegion: true), TestContext.Current.CancellationToken);
+        await sink.SetAllVisibleAsync(false, TestContext.Current.CancellationToken);
 
         Assert.False(sink.IsVisible);
         Assert.Empty(inner.Applied[^1].Regions);
+
+        await sink.SetAllVisibleAsync(true, TestContext.Current.CancellationToken);
+        Assert.Single(inner.Applied[^1].Regions);
+        Assert.True(inner.Applied[^1].OverlayRevision > visible.OverlayRevision);
+    }
+
+    [Fact]
+    public async Task VisibilityGatingOverlaySinkChangesOnlySelectedTargetImmediately()
+    {
+        var inner = new RecordingOverlaySink();
+        var sink = new VisibilityGatingOverlaySink(inner);
+        OverlayDesiredState first = Overlay(new TargetInstanceId(Guid.NewGuid()), withRegion: true);
+        OverlayDesiredState second = Overlay(new TargetInstanceId(Guid.NewGuid()), withRegion: true);
+        await sink.ApplyAsync(first, TestContext.Current.CancellationToken);
+        await sink.ApplyAsync(second, TestContext.Current.CancellationToken);
+
+        await sink.SetTargetsVisibleAsync(
+            [first.TargetInstanceId],
+            visible: false,
+            TestContext.Current.CancellationToken);
+
+        OverlayDesiredState cleared = inner.Applied[^1];
+        Assert.Equal(first.TargetInstanceId, cleared.TargetInstanceId);
+        Assert.Empty(cleared.Regions);
+        Assert.True(sink.IsTargetVisible(second.TargetInstanceId));
+
+        await sink.SetTargetsVisibleAsync(
+            [first.TargetInstanceId],
+            visible: true,
+            TestContext.Current.CancellationToken);
+        OverlayDesiredState restored = inner.Applied[^1];
+        Assert.Equal(first.TargetInstanceId, restored.TargetInstanceId);
+        Assert.Single(restored.Regions);
     }
 
     [Fact]
@@ -120,10 +180,13 @@ public sealed class EngineRuntimePipelineWiringTests
         Assert.Equal("ocr.manual.busy", exception.ErrorCode);
     }
 
-    private static OcrResultSnapshot OcrResult()
+    private static OcrResultSnapshot OcrResult() =>
+        OcrResult(new TargetInstanceId(Guid.NewGuid()));
+
+    private static OcrResultSnapshot OcrResult(TargetInstanceId target)
     {
         var source = new SourceGenerationToken(
-            Guid.NewGuid(), new TargetInstanceId(Guid.NewGuid()),
+            Guid.NewGuid(), target,
             CaptureAreaKey.FullTarget, new TextTrackId(Guid.NewGuid()), 1, 1);
         return new OcrResultSnapshot(
             new OcrExecutionToken(source, Guid.NewGuid(), 1, 1),
@@ -131,9 +194,13 @@ public sealed class EngineRuntimePipelineWiringTests
             "model", "1", true, null);
     }
 
-    private static OverlayDesiredState Overlay(bool withRegion)
+    private static OverlayDesiredState Overlay(bool withRegion) =>
+        Overlay(new TargetInstanceId(Guid.NewGuid()), withRegion);
+
+    private static OverlayDesiredState Overlay(
+        TargetInstanceId target,
+        bool withRegion)
     {
-        var target = new TargetInstanceId(Guid.NewGuid());
         IEnumerable<OverlayRegionSnapshot> regions = withRegion
             ? [new OverlayRegionSnapshot(
                 Guid.NewGuid(),
@@ -179,15 +246,37 @@ public sealed class EngineRuntimePipelineWiringTests
             null, null, false, true, null, null, null);
     }
 
-    private sealed class RecordingPipeline : IRuntimeTranslationPipeline
+    private sealed class RecordingPipeline :
+        IRuntimeTranslationPipeline,
+        ITargetScopedRuntimeTranslationPipeline
     {
         public List<OcrResultSnapshot> Enqueued { get; } = [];
+        public List<TargetInstanceId> PausedTargets { get; } = [];
 
         public void Register(RuntimeTranslationTarget target) { }
         public void Unregister(TargetInstanceId targetInstanceId) { }
         public ValueTask EnqueueAsync(OcrResultSnapshot result, CancellationToken cancellationToken)
         {
             Enqueued.Add(result);
+            return ValueTask.CompletedTask;
+        }
+        public ValueTask SetTargetsPausedAsync(
+            IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+            bool paused,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (TargetInstanceId target in targetInstanceIds)
+            {
+                if (paused)
+                {
+                    if (!PausedTargets.Contains(target)) PausedTargets.Add(target);
+                }
+                else
+                {
+                    PausedTargets.Remove(target);
+                }
+            }
             return ValueTask.CompletedTask;
         }
         public Task DrainAsync(CancellationToken cancellationToken) => Task.CompletedTask;

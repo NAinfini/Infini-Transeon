@@ -345,17 +345,51 @@ std::optional<CaptureTargetCommand> parse_capture_target_command(
         : std::nullopt;
 }
 
-bool parse_manual_ocr_request(const std::span<const std::byte> bytes) noexcept
+std::optional<ManualOcrRequest> parse_manual_ocr_request(
+    const std::span<const std::byte> bytes) noexcept
 {
-    constexpr std::size_t payload_bytes = 8U;
-    constexpr std::uint32_t schema_version = 1U;
+    constexpr std::size_t header_bytes = 8U;
+    constexpr std::size_t target_instance_id_bytes = 16U;
+    constexpr std::size_t maximum_explicit_targets = 8U;
+    constexpr std::size_t maximum_payload_bytes =
+        header_bytes + maximum_explicit_targets * target_instance_id_bytes;
+    constexpr std::uint32_t schema_version = 2U;
     constexpr std::byte manual_ocr_operation{1U};
-    return bytes.size() == payload_bytes &&
-        read_u32(bytes, 0U) == schema_version &&
-        bytes[4U] == manual_ocr_operation &&
-        bytes[5U] == std::byte{} &&
-        bytes[6U] == std::byte{} &&
-        bytes[7U] == std::byte{};
+    if (bytes.size() < header_bytes || bytes.size() > maximum_payload_bytes ||
+        read_u32(bytes, 0U) != schema_version || bytes[4U] != manual_ocr_operation)
+        return std::nullopt;
+
+    const ManualOcrScope scope = static_cast<ManualOcrScope>(
+        std::to_integer<std::uint8_t>(bytes[5U]));
+    const std::size_t target_count = read_u16(bytes, 6U);
+    if (bytes.size() != header_bytes + target_count * target_instance_id_bytes ||
+        (scope == ManualOcrScope::all_targets && target_count != 0U) ||
+        (scope == ManualOcrScope::explicit_targets &&
+            (target_count == 0U || target_count > maximum_explicit_targets)) ||
+        (scope != ManualOcrScope::all_targets &&
+            scope != ManualOcrScope::explicit_targets))
+        return std::nullopt;
+
+    try
+    {
+        ManualOcrRequest result{};
+        result.scope = scope;
+        result.target_instance_ids.reserve(target_count);
+        for (std::size_t index{}; index < target_count; ++index)
+        {
+            std::array<std::byte, target_instance_id_bytes> identity{};
+            std::ranges::copy(bytes.subspan(
+                header_bytes + index * target_instance_id_bytes,
+                target_instance_id_bytes), identity.begin());
+            if (!unique_identity(result.target_instance_ids, identity))
+                return std::nullopt;
+        }
+        return result;
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
 }
 
 std::optional<overlay::desired_state> parse_overlay_desired_state(
@@ -414,6 +448,9 @@ std::optional<overlay::desired_state> parse_overlay_desired_state(
         const double outline_width = read_f64(bytes, offset + 112U);
         const std::uint32_t minimum_dwell = read_u32(bytes, offset + 120U);
         const std::uint32_t crossfade = read_u32(bytes, offset + 124U);
+        const bool automatic_shrink = bytes[offset + 129U] == std::byte{1};
+        const bool no_scroll_overflow = bytes[offset + 130U] == std::byte{1};
+        const std::uint32_t maximum_height = read_u32(bytes, offset + 132U);
         const bool destination_required = background ==
                 static_cast<std::uint8_t>(overlay::background_mode::offset) ||
             background == static_cast<std::uint8_t>(overlay::background_mode::floating_panel);
@@ -433,8 +470,9 @@ std::optional<overlay::desired_state> parse_overlay_desired_state(
             width <= 0 || height <= 0 || width > 16'384 || height > 16'384 ||
             slot_count > maximum_slots ||
             minimum_dwell > 3'000U || crossfade > 500U ||
-            bytes[offset + 128U] > std::byte{1} ||
-            !reserved_zero(bytes.subspan(offset + 129U, 7U)) ||
+            bytes[offset + 128U] > std::byte{1} || bytes[offset + 129U] > std::byte{1} ||
+            bytes[offset + 130U] != std::byte{1} || bytes[offset + 131U] != std::byte{0} ||
+            maximum_height > 16'384U ||
             (destination_required ? !destination_valid : !destination_empty))
             return std::nullopt;
         region.style.background = static_cast<overlay::background_mode>(background);
@@ -449,6 +487,9 @@ std::optional<overlay::desired_state> parse_overlay_desired_state(
         region.style.blur_radius = static_cast<float>(blur);
         region.style.outline_width = static_cast<float>(outline_width);
         region.style.maximum_lines = maximum_lines;
+        region.style.maximum_height = maximum_height;
+        region.style.automatic_shrink = automatic_shrink;
+        region.style.no_scroll_overflow = no_scroll_overflow;
         region.style.minimum_dwell_milliseconds = minimum_dwell;
         region.style.crossfade_milliseconds = crossfade;
         region.style.reduced_motion = bytes[offset + 128U] == std::byte{1};

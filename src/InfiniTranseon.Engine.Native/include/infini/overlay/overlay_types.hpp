@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -85,6 +86,9 @@ struct region_style final {
     float blur_radius{12.0F};
     float outline_width{1.0F};
     std::uint32_t maximum_lines{4};
+    std::uint32_t maximum_height{};
+    bool automatic_shrink{true};
+    bool no_scroll_overflow{true};
     std::uint32_t minimum_dwell_milliseconds{500U};
     std::uint32_t crossfade_milliseconds{120U};
     bool reduced_motion{};
@@ -101,7 +105,10 @@ struct region final {
 
 [[nodiscard]] inline rect_f display_bounds(const region& value) noexcept
 {
-    return value.destination_bounds.value_or(value.bounds);
+    rect_f result = value.destination_bounds.value_or(value.bounds);
+    if (value.style.maximum_height != 0U)
+        result.height = (std::min)(result.height, static_cast<float>(value.style.maximum_height));
+    return result;
 }
 
 struct desired_state final {

@@ -97,7 +97,7 @@ public sealed record RuntimeProfileBinding
     public IReadOnlyList<RuntimeTargetBinding> Targets { get; }
 }
 
-public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
+public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITranslationGroupReplayResultSource
 {
     private sealed record BoundTarget(
         ProfileDocument Profile,
@@ -121,6 +121,7 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
     private int _started;
     private int _disposed;
     private RuntimeBudgetSnapshot? _latestBudgetSnapshot;
+    private RuntimeVisibleReplayResult? _lastTranslationGroupReplay;
 
     public RuntimeBackendCoordinator(
         IRuntimeEngineHostSession session,
@@ -201,6 +202,11 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
     public RuntimeBudgetSnapshot? LatestBudgetSnapshot
     {
         get { lock (_budgetGate) return _latestBudgetSnapshot; }
+    }
+
+    public RuntimeVisibleReplayResult? LastTranslationGroupReplay
+    {
+        get { lock (_budgetGate) return _lastTranslationGroupReplay; }
     }
 
     public Task Completion => Task.WhenAll(
@@ -388,6 +394,19 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend
             _active.RemoveAll(item =>
                 item.Profile.ProfileId == profile.Profile.ProfileId);
             _active.AddRange(replacements);
+            if (_pipeline is IReplayableRuntimeTranslationPipeline replayable)
+            {
+                RuntimeVisibleReplayResult replay = await replayable.ReplayVisibleAsync(
+                    profile.Targets.Select(target => target.TargetInstanceId).ToArray(),
+                    cancellationToken).ConfigureAwait(false);
+                lock (_budgetGate) _lastTranslationGroupReplay = replay;
+            }
+            else
+            {
+                lock (_budgetGate) _lastTranslationGroupReplay = new RuntimeVisibleReplayResult(
+                    ReplayedTargetCount: 0,
+                    WaitingTargetCount: profile.Targets.Count);
+            }
         }
         finally
         {

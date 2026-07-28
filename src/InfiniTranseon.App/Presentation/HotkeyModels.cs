@@ -7,6 +7,7 @@ public enum AppHotkeyAction
     ToggleOverlay,
     PauseAll,
     ManualOcr,
+    CycleTranslationGroup,
     RetranslateCurrent,
     EmergencyStop,
 }
@@ -14,13 +15,70 @@ public enum AppHotkeyAction
 public enum AppHotkeyScope
 {
     AllRunningTargets,
+    ForegroundMatchingTarget,
+    SpecificTargetGroup,
 }
+
+public sealed record AppHotkeyTargetReference(Guid ProfileId, Guid ProfileTargetId);
 
 public sealed record AppHotkeyBinding(
     AppHotkeyAction Action,
     string Gesture,
     bool Enabled = true,
-    AppHotkeyScope Scope = AppHotkeyScope.AllRunningTargets);
+    AppHotkeyScope Scope = AppHotkeyScope.AllRunningTargets,
+    IReadOnlyList<AppHotkeyTargetReference>? SpecificTargets = null)
+{
+    public IReadOnlyList<AppHotkeyTargetReference> EffectiveSpecificTargets =>
+        SpecificTargets ?? [];
+}
+
+public static class HotkeyBindingRules
+{
+    public static AppHotkeyBinding Normalize(AppHotkeyBinding binding) => binding.Action switch
+    {
+        AppHotkeyAction.EmergencyStop => binding with
+        {
+            Scope = AppHotkeyScope.AllRunningTargets,
+            SpecificTargets = [],
+        },
+        AppHotkeyAction.CycleTranslationGroup => binding with
+        {
+            Scope = AppHotkeyScope.AllRunningTargets,
+            SpecificTargets = [],
+        },
+        AppHotkeyAction.RetranslateCurrent => binding with { Enabled = false },
+        _ => binding,
+    };
+
+    public static void Validate(AppHotkeyBinding binding)
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+        if (!Enum.IsDefined(binding.Action) || !Enum.IsDefined(binding.Scope))
+            throw new ArgumentException("The hotkey action or scope is invalid.", nameof(binding));
+        if (binding.Action == AppHotkeyAction.EmergencyStop &&
+            binding.Scope != AppHotkeyScope.AllRunningTargets)
+        {
+            throw new ArgumentException("Emergency stop must apply to all running targets.", nameof(binding));
+        }
+        if (binding.Action == AppHotkeyAction.CycleTranslationGroup &&
+            binding.Scope != AppHotkeyScope.AllRunningTargets)
+        {
+            throw new ArgumentException("Translation-group cycling applies to all running targets.", nameof(binding));
+        }
+
+        IReadOnlyList<AppHotkeyTargetReference> targets = binding.EffectiveSpecificTargets;
+        if (targets.Count > 128 || targets.Any(target =>
+                target.ProfileId == Guid.Empty || target.ProfileTargetId == Guid.Empty) ||
+            targets.Distinct().Count() != targets.Count)
+        {
+            throw new ArgumentException("Specific hotkey targets are invalid.", nameof(binding));
+        }
+        if (binding.Scope == AppHotkeyScope.SpecificTargetGroup && targets.Count == 0)
+        {
+            throw new ArgumentException("A specific-target hotkey requires at least one target.", nameof(binding));
+        }
+    }
+}
 
 [Flags]
 public enum AppHotkeyModifiers : uint
@@ -47,7 +105,8 @@ public static class HotkeyDefaults
         new(AppHotkeyAction.ToggleOverlay, "Ctrl + Alt + T"),
         new(AppHotkeyAction.PauseAll, "Ctrl + Alt + P"),
         new(AppHotkeyAction.ManualOcr, "Ctrl + Alt + O"),
-        new(AppHotkeyAction.RetranslateCurrent, "Ctrl + Alt + R"),
+        new(AppHotkeyAction.CycleTranslationGroup, "Ctrl + Alt + G"),
+        new(AppHotkeyAction.RetranslateCurrent, "Ctrl + Alt + R", Enabled: false),
         new(AppHotkeyAction.EmergencyStop, "Ctrl + Alt + Escape"),
     ];
 }

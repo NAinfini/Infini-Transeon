@@ -31,6 +31,8 @@ public sealed class TrayHost : IDisposable
     private const uint NotifyIconVersion4 = 4;
     private const uint MfString = 0x00000000;
     private const uint MfGrayed = 0x00000001;
+    private const uint MfChecked = 0x00000008;
+    private const uint MfPopup = 0x00000010;
     private const uint MfSeparator = 0x00000800;
     private const uint TpmRightButton = 0x0002;
     private const uint TpmReturnCommand = 0x0100;
@@ -41,6 +43,7 @@ public sealed class TrayHost : IDisposable
     private const uint CommandPause = 1;
     private const uint CommandOverlay = 2;
     private const uint CommandManualOcr = 3;
+    private const uint CommandTranslationGroupFirst = 100;
     private const uint CommandOpen = 10;
     private const uint CommandExit = 11;
 
@@ -57,6 +60,7 @@ public sealed class TrayHost : IDisposable
     private nint _windowHandle;
     private bool _iconAdded;
     private bool _disposed;
+    private readonly Dictionary<uint, Guid> _translationGroupCommands = [];
 
     public TrayHost(
         IRuntimeControlService runtime,
@@ -231,6 +235,7 @@ public sealed class TrayHost : IDisposable
             AppendMenu(menu, runtimeItemFlags, CommandOverlay, Strings.GetString(
                 _runtime.IsOverlayVisible ? "TrayHideOverlay" : "TrayShowOverlay"));
             AppendMenu(menu, runtimeItemFlags, CommandManualOcr, Strings.GetString("TrayManualOcr"));
+            AppendTranslationGroupMenu(menu, runtimeItemFlags);
             AppendMenu(menu, MfSeparator, 0, null);
             AppendMenu(menu, MfString, CommandOpen, Strings.GetString("TrayOpen"));
             AppendMenu(menu, MfString, CommandExit, Strings.GetString("TrayExit"));
@@ -261,8 +266,43 @@ public sealed class TrayHost : IDisposable
         }
     }
 
+    private void AppendTranslationGroupMenu(nint menu, uint runtimeItemFlags)
+    {
+        _translationGroupCommands.Clear();
+        IReadOnlyList<TranslationGroupOption> groups = _runtime
+            .GetActiveTranslationGroupsAsync()
+            .ConfigureAwait(true)
+            .GetAwaiter()
+            .GetResult();
+        nint submenu = CreatePopupMenu();
+        if (submenu == nint.Zero)
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "tray.menu.translationGroupsFailed");
+        uint flags = runtimeItemFlags;
+        if (groups.Count < 2) flags |= MfGrayed;
+        for (int index = 0; index < groups.Count; index++)
+        {
+            TranslationGroupOption group = groups[index];
+            uint command = CommandTranslationGroupFirst + (uint)index;
+            _translationGroupCommands[command] = group.TranslationGroupId;
+            uint itemFlags = flags | (index == 0 ? MfChecked : 0);
+            AppendMenu(submenu, itemFlags, command, group.Name);
+        }
+        if (groups.Count == 0)
+            AppendMenu(submenu, MfString | MfGrayed, 0, Strings.GetString("TrayTranslationGroupUnavailable"));
+        AppendMenu(menu, MfString | MfPopup, unchecked((uint)submenu.ToInt64()),
+            Strings.GetString("TrayTranslationGroup"));
+    }
+
     private void ExecuteCommand(uint command)
     {
+        if (_translationGroupCommands.TryGetValue(command, out Guid groupId))
+        {
+            _ = ExecuteRuntimeActionAsync(
+                async () => await _runtime.SwitchTranslationGroupAsync(groupId)
+                    .ConfigureAwait(true),
+                "tray.translationGroup");
+            return;
+        }
         switch (command)
         {
             case CommandPause:

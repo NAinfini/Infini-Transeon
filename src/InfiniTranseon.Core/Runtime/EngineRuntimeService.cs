@@ -40,6 +40,23 @@ public interface IEngineRuntimeControl
             new EngineRuntimeUnsupportedOperationException("applyProfile"));
 }
 
+public interface ITargetScopedEngineRuntimeControl
+{
+    ValueTask SetTargetsPausedAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool paused,
+        CancellationToken cancellationToken);
+
+    ValueTask SetTargetsOverlayVisibleAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool visible,
+        CancellationToken cancellationToken);
+
+    ValueTask RequestManualOcrAsync(
+        RuntimeManualOcrRequest request,
+        CancellationToken cancellationToken);
+}
+
 public interface IHotConfigurableEngineRuntime
 {
     ValueTask ApplyProfileAsync(
@@ -105,8 +122,10 @@ public sealed class EngineRuntimeCommandRejectedException : Exception
 /// </summary>
 public sealed class EngineRuntimeService :
     IEngineRuntime,
+    ITargetScopedEngineRuntime,
     IEngineRuntimeEventPublisher,
-    IHotConfigurableEngineRuntime
+    IHotConfigurableEngineRuntime,
+    ITranslationGroupReplayResultSource
 {
     private readonly EngineHostLocateResult _locateResult;
     private readonly EngineRuntimeSessionFactory _sessionFactory;
@@ -279,6 +298,63 @@ public sealed class EngineRuntimeService :
     public ValueTask RequestManualOcrAsync(CancellationToken cancellationToken) =>
         WithControlAsync(control => control.RequestManualOcrAsync(cancellationToken));
 
+    public ValueTask SetTargetsPausedAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool paused,
+        CancellationToken cancellationToken)
+    {
+        ValidateTargetSelection(targetInstanceIds);
+        return WithControlAsync(control =>
+            control is ITargetScopedEngineRuntimeControl targetScoped
+                ? targetScoped.SetTargetsPausedAsync(
+                    targetInstanceIds,
+                    paused,
+                    cancellationToken)
+                : ValueTask.FromException(
+                    new EngineRuntimeUnsupportedOperationException("targetScopedPause")));
+    }
+
+    public RuntimeVisibleReplayResult? LastTranslationGroupReplay
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return (_current?.Backend as ITranslationGroupReplayResultSource)
+                    ?.LastTranslationGroupReplay;
+            }
+        }
+    }
+
+    public ValueTask SetTargetsOverlayVisibleAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool visible,
+        CancellationToken cancellationToken)
+    {
+        ValidateTargetSelection(targetInstanceIds);
+        return WithControlAsync(control =>
+            control is ITargetScopedEngineRuntimeControl targetScoped
+                ? targetScoped.SetTargetsOverlayVisibleAsync(
+                    targetInstanceIds,
+                    visible,
+                    cancellationToken)
+                : ValueTask.FromException(
+                    new EngineRuntimeUnsupportedOperationException("targetScopedOverlay")));
+    }
+
+    public ValueTask RequestManualOcrAsync(
+        RuntimeManualOcrRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return WithControlAsync(control =>
+            control is ITargetScopedEngineRuntimeControl targetScoped
+                ? targetScoped.RequestManualOcrAsync(request, cancellationToken)
+                : ValueTask.FromException(
+                    new EngineRuntimeUnsupportedOperationException(
+                        "targetScopedManualOcr")));
+    }
+
     public ValueTask<RuntimeThumbnail> RequestThumbnailAsync(
         TargetInstanceId targetInstanceId,
         int maximumLongEdge,
@@ -318,6 +394,22 @@ public sealed class EngineRuntimeService :
         _lifetimeResource?.Dispose();
         _lifecycleGate.Dispose();
         _stop.Dispose();
+    }
+
+    private static void ValidateTargetSelection(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds)
+    {
+        ArgumentNullException.ThrowIfNull(targetInstanceIds);
+        TargetInstanceId[] targets = targetInstanceIds.ToArray();
+        if (targets.Length < 1 ||
+            targets.Length > RuntimeCapabilities.VersionOne.MaxTargets ||
+            targets.Any(target => target is null || target.Value == Guid.Empty) ||
+            targets.Distinct().Count() != targets.Length)
+        {
+            throw new ArgumentException(
+                "Target-scoped control requires unique active target identities.",
+                nameof(targetInstanceIds));
+        }
     }
 
     void IEngineRuntimeEventPublisher.PublishOcrResult(OcrResultSnapshot result)

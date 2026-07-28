@@ -130,6 +130,9 @@ public sealed record ProfileOverlaySettings
     public double BlurRadius { get; init; } = 12;
     public double OutlineWidth { get; init; } = 1;
     public double PreferredFontSize { get; init; } = 24;
+    public int MaximumHeight { get; init; }
+    public bool AutomaticShrink { get; init; } = true;
+    public bool NoScrollOverflow { get; init; } = true;
     public TimeSpan MinimumDwell { get; init; } = TimeSpan.FromMilliseconds(500);
     public TimeSpan CrossfadeDuration { get; init; } = TimeSpan.FromMilliseconds(120);
     public NormalizedRect? OffsetDestination { get; init; }
@@ -160,12 +163,15 @@ public sealed record ProfileRefinementStep
 public sealed record ProfileTranslationChannel
 {
     public Guid ChannelId { get; init; } = Guid.NewGuid();
+    /// <summary>The profile-wide translator group that owns this channel.</summary>
+    public Guid TranslationGroupId { get; init; } = ProfileDocument.DefaultTranslationGroupId;
     public bool Enabled { get; set; } = true;
     public string? DisabledReasonCode { get; set; }
     public string InitialProviderId { get; init; } = string.Empty;
     public ProviderNetworkPolicy NetworkPolicy { get; init; } = ProviderNetworkPolicy.Either;
     public List<string> FallbackProviderIds { get; init; } = [];
     public List<ProfileRefinementStep> RefinementSteps { get; init; } = [];
+    public int AttemptTimeoutMilliseconds { get; init; } = 30_000;
     public int RetryCount { get; init; }
     public int DisplayOrder { get; init; }
     public string DisplayLabel { get; init; } = string.Empty;
@@ -180,6 +186,16 @@ public sealed record ProfileTranslationChannel
         InitialProviderId = providerId,
         DisplayLabel = providerId,
     };
+}
+
+/// <summary>
+/// A named, profile-local set of translation channels.  Regions keep their own channel entries,
+/// but every enabled translated region must contribute one to four channels to each group.
+/// </summary>
+public sealed record ProfileTranslationGroup
+{
+    public Guid TranslationGroupId { get; init; } = Guid.NewGuid();
+    public string Name { get; init; } = string.Empty;
 }
 
 public sealed record ProfileRegion
@@ -235,7 +251,9 @@ public sealed record ProfileTarget
 
 public sealed record ProfileDocument
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
+    public static readonly Guid DefaultTranslationGroupId =
+        Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     public int SchemaVersion { get; init; } = CurrentVersion;
     public Guid ProfileId { get; init; } = Guid.NewGuid();
@@ -245,6 +263,9 @@ public sealed record ProfileDocument
     public bool StrictOffline { get; init; }
     public ProfileContextSettings Context { get; init; } = new();
     public ProfileStylePromptSettings StylePrompt { get; init; } = new();
+    public List<ProfileTranslationGroup> TranslationGroups { get; init; } =
+        [new() { TranslationGroupId = DefaultTranslationGroupId, Name = "Default" }];
+    public Guid ActiveTranslationGroupId { get; init; } = DefaultTranslationGroupId;
     public List<ProfileTarget> Targets { get; init; } = [];
     public List<ProfileHotkey> Hotkeys { get; init; } = [];
     public ProfileHistorySettings History { get; init; } = new();
@@ -257,6 +278,9 @@ public sealed record ProfileDocument
         Name = name,
         SourceLanguage = sourceLanguage,
         TargetLanguage = targetLanguage,
+        TranslationGroups =
+        [new ProfileTranslationGroup { TranslationGroupId = DefaultTranslationGroupId, Name = "Default" }],
+        ActiveTranslationGroupId = DefaultTranslationGroupId,
     };
 }
 

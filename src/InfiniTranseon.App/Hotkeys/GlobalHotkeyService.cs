@@ -14,12 +14,14 @@ namespace InfiniTranseon.App.Hotkeys;
 public sealed class GlobalHotkeyService : IDisposable
 {
     private const uint WmHotkey = 0x0312;
+    private const uint GaRoot = 2;
+    private const uint MonitorDefaultToNull = 0;
     private static readonly nint MessageOnlyWindow = new(-3);
 
-    private readonly IRuntimeControlService _runtime;
+    private readonly HotkeyCommandRouter _router;
     private readonly AppStatusLog _statusLog;
     private readonly WindowProcedure _windowProcedure;
-    private readonly Dictionary<int, AppHotkeyAction> _actions = [];
+    private readonly Dictionary<int, AppHotkeyBinding> _bindings = [];
     private readonly Dictionary<AppHotkeyAction, string> _statusCodes = [];
     private DispatcherQueue? _dispatcher;
     private string? _className;
@@ -34,7 +36,7 @@ public sealed class GlobalHotkeyService : IDisposable
     {
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(statusLog);
-        _runtime = runtime;
+        _router = new HotkeyCommandRouter(runtime);
         _statusLog = statusLog;
         _windowProcedure = WindowProc;
     }
@@ -107,11 +109,29 @@ public sealed class GlobalHotkeyService : IDisposable
         UnregisterAll();
         _statusCodes.Clear();
         int id = 1;
-        foreach (AppHotkeyBinding binding in bindings)
+        foreach (AppHotkeyBinding configuredBinding in bindings)
         {
+            AppHotkeyBinding binding = HotkeyBindingRules.Normalize(configuredBinding);
+            if (binding.Action == AppHotkeyAction.RetranslateCurrent)
+            {
+                _statusCodes[binding.Action] = "comingSoon";
+                continue;
+            }
             if (!binding.Enabled)
             {
                 _statusCodes[binding.Action] = "disabled";
+                continue;
+            }
+            try
+            {
+                HotkeyBindingRules.Validate(binding);
+            }
+            catch (ArgumentException)
+            {
+                _statusCodes[binding.Action] =
+                    binding.Scope == AppHotkeyScope.SpecificTargetGroup
+                        ? "selectionRequired"
+                        : "invalid";
                 continue;
             }
             if (!HotkeyGesture.TryParse(binding.Gesture, out ParsedHotkeyGesture gesture))
@@ -131,7 +151,7 @@ public sealed class GlobalHotkeyService : IDisposable
                 continue;
             }
 
-            _actions[id] = binding.Action;
+            _bindings[id] = binding;
             _statusCodes[binding.Action] = "registered";
             id++;
         }
@@ -161,71 +181,87 @@ public sealed class GlobalHotkeyService : IDisposable
     private nint WindowProc(nint window, uint message, nint wParam, nint lParam)
     {
         if (message == WmHotkey &&
-            _actions.TryGetValue(wParam.ToInt32(), out AppHotkeyAction action))
+            _bindings.TryGetValue(wParam.ToInt32(), out AppHotkeyBinding? binding))
         {
-            _dispatcher?.TryEnqueue(() => _ = ExecuteAsync(action));
+            ForegroundTargetSnapshot foreground = CaptureForegroundTarget();
+            _dispatcher?.TryEnqueue(() => _ = ExecuteAsync(binding, foreground));
             return 0;
         }
         return DefWindowProc(window, message, wParam, lParam);
     }
 
-    private async Task ExecuteAsync(AppHotkeyAction action)
+    private async Task ExecuteAsync(
+        AppHotkeyBinding binding,
+        ForegroundTargetSnapshot foreground)
     {
         try
         {
-            switch (action)
-            {
-                case AppHotkeyAction.ToggleOverlay:
-                    await _runtime.SetOverlayVisibleAsync(!_runtime.IsOverlayVisible);
-                    break;
-                case AppHotkeyAction.PauseAll:
-                    await _runtime.SetPausedAsync(!_runtime.IsPaused);
-                    break;
-                case AppHotkeyAction.ManualOcr:
-                case AppHotkeyAction.RetranslateCurrent:
-                    await _runtime.RequestManualOcrAsync();
-                    break;
-                case AppHotkeyAction.EmergencyStop:
-                    await _runtime.StopAsync();
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(action), action, null);
-            }
+            RuntimeScopedControlResult result =
+                await _router.ExecuteAsync(binding, foreground).ConfigureAwait(true);
 
             _statusLog.Record(new StatusEvent(
                 DateTimeOffset.UtcNow,
                 "hotkey",
-                $"hotkey.{action}.executed",
-                "status.hotkey.executed",
-                StatusEventSeverity.Information,
-                new Dictionary<string, object?> { ["action"] = action.ToString() }));
+                result.ReasonCode,
+                result.Applied
+                    ? "status.hotkey.executed"
+                    : "status.hotkey.noMatchingTarget",
+                result.Applied
+                    ? StatusEventSeverity.Information
+                    : StatusEventSeverity.Warning,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = binding.Action.ToString(),
+                    ["scope"] = binding.Scope.ToString(),
+                    ["resolvedTargetCount"] = result.ResolvedTargetCount,
+                    ["applied"] = result.Applied,
+                }));
         }
         catch (Exception exception)
         {
             _statusLog.Record(new StatusEvent(
                 DateTimeOffset.UtcNow,
                 "hotkey",
-                $"hotkey.{action}.failed",
+                $"hotkey.{binding.Action}.failed",
                 "status.hotkey.failed",
                 StatusEventSeverity.Error,
                 new Dictionary<string, object?>
                 {
-                    ["action"] = action.ToString(),
+                    ["action"] = binding.Action.ToString(),
+                    ["scope"] = binding.Scope.ToString(),
                     ["error"] = exception.Message,
                 }));
         }
+    }
+
+    private static ForegroundTargetSnapshot CaptureForegroundTarget()
+    {
+        nint foreground = GetForegroundWindow();
+        if (foreground == 0)
+        {
+            return ForegroundTargetSnapshot.Empty;
+        }
+        nint root = GetAncestor(foreground, GaRoot);
+        if (root == 0)
+        {
+            root = foreground;
+        }
+        nint monitor = MonitorFromWindow(root, MonitorDefaultToNull);
+        return new ForegroundTargetSnapshot(
+            unchecked((ulong)(nuint)root),
+            unchecked((ulong)(nuint)monitor));
     }
 
     private void UnregisterAll()
     {
         if (_window != 0)
         {
-            foreach (int id in _actions.Keys)
+            foreach (int id in _bindings.Keys)
             {
                 UnregisterHotKey(_window, id);
             }
         }
-        _actions.Clear();
+        _bindings.Clear();
     }
 
     private delegate nint WindowProcedure(nint window, uint message, nint wParam, nint lParam);
@@ -279,6 +315,15 @@ public sealed class GlobalHotkeyService : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool UnregisterHotKey(nint window, int id);
+
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern nint GetAncestor(nint window, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint window, uint flags);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern nint GetModuleHandle(string? moduleName);

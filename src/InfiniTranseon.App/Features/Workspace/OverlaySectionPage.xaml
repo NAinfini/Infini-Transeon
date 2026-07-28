@@ -135,12 +135,33 @@
                     </Border>
 
                     <Border Style="{StaticResource CardBorderStyle}" Padding="{StaticResource CardPadding}">
-                        <StackPanel Spacing="{StaticResource SpaceS}">
+                        <StackPanel Spacing="{StaticResource SpaceM}">
                             <TextBlock x:Uid="OverlayOverflowGroupHeader" FontWeight="SemiBold" />
-                            <TextBlock
-                                x:Uid="OverlayOverflowGapNote"
-                                Style="{StaticResource CaptionTextStyle}"
-                                TextWrapping="Wrap" />
+                            <NumberBox
+                                x:Name="MaximumHeightBox"
+                                x:Uid="OverlayMaximumHeightBox"
+                                Minimum="0"
+                                Maximum="16384"
+                                SmallChange="16"
+                                SpinButtonPlacementMode="Compact"
+                                ValueChanged="OnOverflowValueChanged" />
+                            <NumberBox
+                                x:Name="MaximumLinesBox"
+                                x:Uid="OverlayMaximumLinesBox"
+                                Minimum="1"
+                                Maximum="64"
+                                SmallChange="1"
+                                SpinButtonPlacementMode="Compact"
+                                ValueChanged="OnOverflowValueChanged" />
+                            <ToggleSwitch
+                                x:Name="AutomaticShrinkToggle"
+                                x:Uid="OverlayAutomaticShrinkToggle"
+                                Toggled="OnOverflowToggled" />
+                            <ToggleSwitch
+                                x:Name="NoScrollOverflowToggle"
+                                x:Uid="OverlayNoScrollOverflowToggle"
+                                IsOn="True"
+                                IsEnabled="False" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -172,7 +193,7 @@
                         <TextBlock
                             x:Uid="OverlayPreviewHint"
                             Style="{StaticResource CaptionTextStyle}"
-                            Foreground="#80FFFFFF"
+                            Foreground="{ThemeResource OverlayPreviewHintBrush}"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center" />
                         <Border

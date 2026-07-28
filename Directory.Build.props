@@ -7,7 +7,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <VersionPrefix>0.9.0</VersionPrefix>
+    <VersionPrefix>0.1.0</VersionPrefix>
     <VersionSuffix>dev</VersionSuffix>
     <RestoreConfigFile>$(MSBuildThisFileDirectory)NuGet.Config</RestoreConfigFile>
   </PropertyGroup>

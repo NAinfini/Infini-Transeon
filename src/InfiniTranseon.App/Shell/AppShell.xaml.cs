@@ -336,7 +336,7 @@ public sealed partial class AppShell : Window
             EngineRuntimeStatus.Locating or EngineRuntimeStatus.Starting or
                 EngineRuntimeStatus.Restarting or EngineRuntimeStatus.Stopping => "",
             EngineRuntimeStatus.Faulted or EngineRuntimeStatus.ExecutableNotFound => "",
-            _ => "",
+            _ => "",
         };
     }
 

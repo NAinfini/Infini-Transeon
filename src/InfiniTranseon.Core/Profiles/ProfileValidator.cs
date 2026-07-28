@@ -52,6 +52,16 @@ public sealed class ProfileValidator
         {
             Error("profile.schema.unsupported", "$.schemaVersion");
         }
+        if (document.TranslationGroups.Count is < 1 or > 16 ||
+            document.TranslationGroups.Select(group => group.TranslationGroupId).Distinct().Count() !=
+                document.TranslationGroups.Count ||
+            document.TranslationGroups.Any(group => group.TranslationGroupId == Guid.Empty ||
+                string.IsNullOrWhiteSpace(group.Name) || group.Name.Length > 64) ||
+            !document.TranslationGroups.Any(group =>
+                group.TranslationGroupId == document.ActiveTranslationGroupId))
+        {
+            Error("profile.translationGroup.invalid", "$.translationGroups");
+        }
         if (document.StylePrompt.Versions.Count > 32)
         {
             Error("profile.stylePrompt.tooManyVersions", "$.stylePrompt.versions");
@@ -197,6 +207,8 @@ public sealed class ProfileValidator
                     region.Overlay.OutlineWidth is < 0 or > 8 ||
                     !double.IsFinite(region.Overlay.PreferredFontSize) ||
                     region.Overlay.PreferredFontSize is < 12 or > 36 ||
+                    region.Overlay.MaximumHeight is < 0 or > 16_384 ||
+                    !region.Overlay.NoScrollOverflow ||
                     region.Overlay.MinimumDwell < TimeSpan.Zero ||
                     region.Overlay.MinimumDwell > TimeSpan.FromSeconds(3) ||
                     region.Overlay.CrossfadeDuration < TimeSpan.Zero ||
@@ -218,12 +230,21 @@ public sealed class ProfileValidator
                     Error("profile.lineBreak.maximumLinesInvalid", regionPath + ".maximumLines");
                 }
 
+                var channelIndexesByGroup = new Dictionary<Guid, int>();
                 for (int channelIndex = 0; channelIndex < region.TranslationChannels.Count; channelIndex++)
                 {
                     ProfileTranslationChannel channel = region.TranslationChannels[channelIndex];
                     string channelPath = $"{regionPath}.translationChannels[{channelIndex}]";
                     ValidateIdentity(channel.ChannelId, channelPath + ".channelId");
-                    if (channelIndex >= capabilities.MaxTranslationChannelsPerRegion)
+                    if (!document.TranslationGroups.Any(group =>
+                            group.TranslationGroupId == channel.TranslationGroupId))
+                    {
+                        Error("profile.translationGroup.channelUnknown", channelPath + ".translationGroupId");
+                    }
+                    int groupChannelIndex =
+                        channelIndexesByGroup.GetValueOrDefault(channel.TranslationGroupId);
+                    channelIndexesByGroup[channel.TranslationGroupId] = groupChannelIndex + 1;
+                    if (groupChannelIndex >= capabilities.MaxTranslationChannelsPerRegion)
                     {
                         DisableChannel(channel, "profile.limit.translationChannels", channelPath);
                     }
@@ -257,6 +278,12 @@ public sealed class ProfileValidator
                     {
                         Error("profile.limit.retry", channelPath + ".retryCount");
                     }
+                    if (channel.AttemptTimeoutMilliseconds is < 100 or > 300_000)
+                    {
+                        Error(
+                            "profile.provider.timeoutInvalid",
+                            channelPath + ".attemptTimeoutMilliseconds");
+                    }
                     if (channel.MaxEstimatedCostPerRequest < 0)
                     {
                         Error("profile.provider.budgetInvalid", channelPath + ".maxEstimatedCostPerRequest");
@@ -279,6 +306,17 @@ public sealed class ProfileValidator
                     !region.TranslationChannels.Any(channel => channel.Enabled))
                 {
                     Error("profile.translation.enabledWithoutChannel", regionPath + ".translationChannels");
+                }
+                foreach (ProfileTranslationGroup group in document.TranslationGroups)
+                {
+                    int channelCount = region.TranslationChannels.Count(channel =>
+                        channel.Enabled && channel.TranslationGroupId == group.TranslationGroupId);
+                    if (region.TranslationEnabled && channelCount is < 1 or > 4)
+                    {
+                        Error(
+                            "profile.translation.groupChannelCount",
+                            regionPath + ".translationChannels");
+                    }
                 }
             }
 

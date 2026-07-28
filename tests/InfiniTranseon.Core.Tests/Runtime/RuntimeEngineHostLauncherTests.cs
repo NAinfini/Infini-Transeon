@@ -113,6 +113,28 @@ public sealed class RuntimeEngineHostLauncherTests
     }
 
     [Fact]
+    public async Task ManualOcrWithAnExplicitUnknownTargetReceivesNoMatch()
+    {
+        await using RuntimeEngineHostSession session =
+            await RuntimeEngineHostLauncher.LaunchAsync(
+                FindEngineHostExecutable(),
+                TimeSpan.FromSeconds(10),
+                TestContext.Current.CancellationToken);
+
+        RuntimeManualOcrAcknowledgement acknowledgement =
+            await session.RequestManualOcrAsync(
+                RuntimeManualOcrRequest.Explicit([new TargetInstanceId(Guid.NewGuid())]),
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken);
+
+        Assert.False(acknowledgement.Accepted);
+        Assert.Equal(RuntimeManualOcrStatus.TargetUnavailable, acknowledgement.Status);
+        Assert.Equal("ocr.manual.noMatch", acknowledgement.ErrorCode);
+        Assert.Equal(0, acknowledgement.TargetCount);
+        Assert.Equal(0, acknowledgement.RegionCount);
+    }
+
+    [Fact]
     public async Task CorrelatesConcurrentRequestsThroughOneReceiveLoop()
     {
         await using RuntimeEngineHostSession session =

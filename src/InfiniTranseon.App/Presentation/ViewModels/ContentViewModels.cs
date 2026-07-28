@@ -780,6 +780,7 @@ public sealed partial class SettingsViewModel : PageViewModelBase
         ArgumentNullException.ThrowIfNull(updateService);
         _settingsService = settingsService;
         _updateService = updateService;
+        UpdateSnapshot = updateService.Snapshot;
         RuntimeCapabilities capabilities = capabilitiesService.Capabilities;
         MaxTargets = capabilities.MaxTargets;
         MaxRegionsPerTarget = capabilities.MaxRegionsPerTarget;
@@ -913,7 +914,12 @@ public sealed partial class SettingsViewModel : PageViewModelBase
             {
                 throw new ArgumentException("Hotkey actions must be unique.", nameof(hotkeys));
             }
-            AppHotkeyBinding[] enabled = hotkeys.Where(binding => binding.Enabled).ToArray();
+            AppHotkeyBinding[] normalized = hotkeys.Select(HotkeyBindingRules.Normalize).ToArray();
+            foreach (AppHotkeyBinding binding in normalized)
+            {
+                HotkeyBindingRules.Validate(binding);
+            }
+            AppHotkeyBinding[] enabled = normalized.Where(binding => binding.Enabled).ToArray();
             if (enabled.Any(binding => !HotkeyGesture.TryParse(binding.Gesture, out _)) ||
                 enabled.GroupBy(
                         binding => binding.Gesture.Replace(" ", string.Empty),
@@ -924,7 +930,7 @@ public sealed partial class SettingsViewModel : PageViewModelBase
                     "Enabled hotkeys must be valid and unique.",
                     nameof(hotkeys));
             }
-            ApplicationSettings updated = Settings with { Hotkeys = hotkeys.ToArray() };
+            ApplicationSettings updated = Settings with { Hotkeys = normalized };
             await _settingsService.UpdateAsync(updated, cancellationToken).ConfigureAwait(true);
             Settings = updated;
         });

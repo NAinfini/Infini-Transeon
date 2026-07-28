@@ -5,6 +5,7 @@ using InfiniTranseon.App.Theme;
 using InfiniTranseon.App.Hotkeys;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
@@ -20,6 +21,9 @@ public sealed partial class SettingsPage : Page
         ResourceLoader.GetDefaultResourceFilePath(),
         "Resources");
     private bool _loading;
+    private bool _updatingHotkeyScope;
+    private IReadOnlyList<ProfileTargetDirectoryEntry> _targetDirectory = [];
+    private bool _targetDirectoryAvailable;
     private string? _pendingSection;
 
     public SettingsPage()
@@ -77,6 +81,7 @@ public sealed partial class SettingsPage : Page
                 AppOcrBackend.Local => 2,
                 _ => 0,
             };
+            await LoadTargetDirectoryAsync();
             RefreshUpdateUi();
             RefreshHotkeyRows();
 
@@ -310,6 +315,101 @@ public sealed partial class SettingsPage : Page
         bool previous = row.Enabled;
         row.Enabled = toggle.IsOn;
         await SaveHotkeysAsync(row, () => row.Enabled = previous);
+    }
+
+    private void OnHotkeyScopeLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ComboBox { Tag: HotkeyEditorRow row } selector)
+        {
+            return;
+        }
+        _updatingHotkeyScope = true;
+        selector.SelectedItem = selector.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
+            string.Equals(item.Tag?.ToString(), row.Scope.ToString(), StringComparison.Ordinal));
+        _updatingHotkeyScope = false;
+    }
+
+    private async void OnHotkeyScopeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || _updatingHotkeyScope ||
+            sender is not ComboBox { Tag: HotkeyEditorRow row, SelectedItem: ComboBoxItem item } ||
+            !Enum.TryParse(item.Tag?.ToString(), out AppHotkeyScope scope) ||
+            row.IsScopeFixed || row.Scope == scope)
+        {
+            return;
+        }
+        AppHotkeyScope previous = row.Scope;
+        row.Scope = scope;
+        await SaveHotkeysAsync(row, () => row.Scope = previous);
+    }
+
+    private async void OnSelectSpecificTargetsClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: HotkeyEditorRow row } ||
+            !row.CanChooseSpecificTargets)
+        {
+            return;
+        }
+
+        var selected = row.SpecificTargets.ToHashSet();
+        var boxes = new List<(CheckBox Box, AppHotkeyTargetReference Target)>();
+        var content = new StackPanel { Spacing = 8 };
+        foreach (IGrouping<(Guid ProfileId, string ProfileName), ProfileTargetDirectoryEntry> profile in
+            _targetDirectory.GroupBy(target => (target.ProfileId, target.ProfileName)))
+        {
+            content.Children.Add(new TextBlock { Text = profile.Key.ProfileName, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } });
+            foreach (ProfileTargetDirectoryEntry target in profile)
+            {
+                var reference = new AppHotkeyTargetReference(target.ProfileId, target.ProfileTargetId);
+                var box = new CheckBox { Content = target.TargetName, IsChecked = selected.Contains(reference) };
+                AutomationProperties.SetName(box, $"{target.ProfileName}: {target.TargetName}");
+                boxes.Add((box, reference));
+                content.Children.Add(box);
+            }
+        }
+
+        HashSet<AppHotkeyTargetReference> current = _targetDirectory
+            .Select(target => new AppHotkeyTargetReference(target.ProfileId, target.ProfileTargetId))
+            .ToHashSet();
+        foreach (AppHotkeyTargetReference missing in selected.Where(target => !current.Contains(target)))
+        {
+            var box = new CheckBox
+            {
+                Content = string.Format(Strings.GetString("HotkeyMissingTarget"), missing.ProfileId, missing.ProfileTargetId),
+                IsChecked = true,
+            };
+            AutomationProperties.SetName(box, Strings.GetString("HotkeyMissingTargetAutomationName"));
+            boxes.Add((box, missing));
+            content.Children.Add(box);
+        }
+
+        if (boxes.Count == 0)
+        {
+            content.Children.Add(new TextBlock
+            {
+                Text = Strings.GetString(_targetDirectoryAvailable
+                    ? "HotkeyNoTargets"
+                    : "HotkeyTargetDirectoryUnavailable"),
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.GetString("HotkeySpecificTargetsDialogTitle"),
+            Content = new ScrollViewer { Content = content, MaxHeight = 420 },
+            PrimaryButtonText = Strings.GetString("HotkeySpecificTargetsSave"),
+            CloseButtonText = Strings.GetString("HotkeyCaptureCancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        IReadOnlyList<AppHotkeyTargetReference> previous = row.SpecificTargets;
+        row.SpecificTargets = boxes.Where(item => item.Box.IsChecked == true)
+            .Select(item => item.Target).ToArray();
+        await SaveHotkeysAsync(row, () => row.SpecificTargets = previous);
     }
 
     private async void OnEditHotkeyClick(object sender, RoutedEventArgs e)
@@ -582,12 +682,23 @@ public sealed partial class SettingsPage : Page
         bool hasProblem = App.GlobalHotkeys is null;
         foreach (HotkeyEditorRow row in ViewModel.Hotkeys)
         {
+            int staleTargets = row.SpecificTargets.Count(target => !_targetDirectory.Any(entry =>
+                entry.ProfileId == target.ProfileId && entry.ProfileTargetId == target.ProfileTargetId));
             string code = statuses is not null &&
                 statuses.TryGetValue(row.Action, out string? current)
                     ? current
                     : row.Enabled ? "unavailable" : "disabled";
+            if (row.IsComingSoon)
+                code = "comingSoon";
+            else if (row.Scope == AppHotkeyScope.SpecificTargetGroup && row.SpecificTargets.Count == 0)
+                code = "selectionRequired";
+            else if (row.Scope == AppHotkeyScope.SpecificTargetGroup && staleTargets > 0)
+                code = "staleTargets";
+            else if (row.Scope == AppHotkeyScope.SpecificTargetGroup && !_targetDirectoryAvailable)
+                code = "targetDirectoryUnavailable";
             row.StatusText = Strings.GetString($"HotkeyStatus_{code}");
-            hasProblem |= code is "conflict" or "invalid" or "unavailable";
+            hasProblem |= code is "conflict" or "invalid" or "unavailable" or "comingSoon" or
+                "selectionRequired" or "staleTargets" or "targetDirectoryUnavailable";
         }
 
         HotkeyStatusBar.IsOpen = hasProblem;
@@ -609,6 +720,23 @@ public sealed partial class SettingsPage : Page
         {
             row.ActionText = Strings.GetString($"HotkeyAction_{row.Action}");
             row.ScopeText = Strings.GetString($"HotkeyScope_{row.Scope}");
+        }
+    }
+
+    private async Task LoadTargetDirectoryAsync()
+    {
+        _targetDirectory = [];
+        _targetDirectoryAvailable = false;
+        if (App.GetService<IProfileService>() is not IProfileTargetDirectory directory)
+            return;
+        try
+        {
+            _targetDirectory = await directory.GetTargetsAsync();
+            _targetDirectoryAvailable = true;
+        }
+        catch (Exception)
+        {
+            // The UI presents the unavailable-directory state rather than fabricating target choices.
         }
     }
 

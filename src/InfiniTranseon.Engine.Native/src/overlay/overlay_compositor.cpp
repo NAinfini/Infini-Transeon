@@ -254,7 +254,7 @@ compositor_error overlay_compositor::render(
                 static_cast<void>(format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER));
                 static_cast<void>(format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP));
                 com_ptr<IDWriteInlineObject> trimming_sign;
-                if (layout.overflow) {
+                if (layout.overflow && region.style.no_scroll_overflow) {
                     const DWRITE_TRIMMING trimming{
                         DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0U, 0U};
                     if (SUCCEEDED(impl_->write_factory->CreateEllipsisTrimmingSign(

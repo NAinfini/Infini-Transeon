@@ -5,11 +5,11 @@ namespace InfiniTranseon.App.Presentation.Services;
 
 internal static class ProductionReleaseTrustRoot
 {
-    internal const string CurrentKeyId = "release-2026-a";
+    internal const string CurrentKeyId = "release-2026-b";
 
     internal static Ed25519TrustRootSet Create() => new(
         new Ed25519PublicKey(CurrentKeyId, Convert.FromHexString(
-            "db371e9781ff844e42efcce8c7f7e161bfbf352adbbb32670abfd68a9e4502e7")),
+            "aa2905d589c750d78e49d8cb71b11f4d0e2a4478543c2ab5452cffe310241d88")),
         next: null,
         revokedKeyIds: []);
 }

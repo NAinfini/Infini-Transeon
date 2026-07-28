@@ -128,7 +128,8 @@ public:
         const PolicyRevisionCommand& command) noexcept;
     [[nodiscard]] OcrResultApplyResult apply_ocr_result(
         const OcrResultCommand& command) noexcept;
-    [[nodiscard]] ManualOcrApplyResult request_manual_ocr() noexcept;
+    [[nodiscard]] ManualOcrApplyResult request_manual_ocr(
+        const ManualOcrRequest& request) noexcept;
     [[nodiscard]] ThumbnailApplyResult request_thumbnail(
         const ThumbnailRequest& request) noexcept;
     [[nodiscard]] std::size_t target_count() const noexcept;

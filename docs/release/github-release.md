@@ -2,9 +2,10 @@
 
 Infini-Transeon publishes only stable `vMAJOR.MINOR.PATCH` releases from the
 `build-release` GitHub Actions workflow. The workflow builds and tests the
-managed and native code, creates an unsigned external-location identity package,
-generates an SBOM, signs the canonical release manifest with Ed25519, uploads a
-draft GitHub Release, and publishes it only after every prior step succeeds.
+managed and native code, creates an unsigned MSI and portable archive without
+package identity, generates an SBOM, signs the canonical release manifest with
+Ed25519, uploads a draft GitHub Release, and publishes it only after every prior
+step succeeds.
 
 The current Windows binaries and MSI intentionally have no Authenticode
 signature. Windows therefore displays **Unknown publisher**, and SmartScreen
@@ -35,19 +36,25 @@ offline mode blocks update checks before any network request.
 2. The first release key is generated once with:
 
    ```powershell
-   ./scripts/new-release-signing-key.ps1 -KeyId release-2026-a
+   ./scripts/new-release-signing-key.ps1 -KeyId release-2026-b
    ```
 
    The script stores the private key in Windows Credential Manager under
    `InfiniTranseon/ReleaseSigning/Ed25519` and writes only the public key to
    `ProductionReleaseTrustRoot.cs`. The current repository has already
-   initialized `release-2026-a`; do not run this command again.
+   initialized `release-2026-b`; do not run this command again. The earlier
+   `release-2026-a` public key never shipped in a production-approved release,
+   and its missing private key was replaced before `v0.1.0`.
 
 3. Upload the release-manifest key to the protected `release` GitHub
    environment:
 
    ```powershell
-   ./scripts/configure-github-release.ps1
+   # Local verification only; this does not contact GitHub or export the key.
+   ./scripts/configure-github-release.ps1 -ValidateOnly
+
+   # Explicit maintainer action: uploads an encrypted GitHub Actions secret.
+   ./scripts/configure-github-release.ps1 -UploadSecrets
    ```
 
    This configures `RELEASE_ED25519_PRIVATE_KEY` and

@@ -39,7 +39,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <FontIcon
                         x:Name="RuntimeStatusGlyph"
-                        Glyph="&#xE71A;"
+                        Glyph="&#xE8BB;"
                         FontSize="{StaticResource TypeCaption}"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                     <TextBlock

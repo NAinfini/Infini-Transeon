@@ -2,6 +2,7 @@ using CoreSettings = InfiniTranseon.Core.Settings.ApplicationSettings;
 using CoreSettingsRepository = InfiniTranseon.Core.Settings.ApplicationSettingsRepository;
 using CoreHistoryRetention = InfiniTranseon.Core.Settings.HistoryRetentionPolicy;
 using CoreHotkeySetting = InfiniTranseon.Core.Settings.HotkeySetting;
+using CoreHotkeyTargetReference = InfiniTranseon.Core.Settings.HotkeyTargetReference;
 using CoreOcrBackend = InfiniTranseon.Core.Settings.OcrBackendPreference;
 using CorePerformancePreset = InfiniTranseon.Core.Scheduling.PerformancePreset;
 using CoreThemePreference = InfiniTranseon.Core.Settings.ThemePreference;
@@ -426,11 +427,16 @@ public sealed class RealSettingsService : ISettingsService
     };
 
     private static CoreHotkeySetting ToCoreHotkey(AppHotkeyBinding hotkey) =>
-        new(
-            hotkey.Action.ToString(),
-            hotkey.Gesture,
-            hotkey.Enabled,
-            hotkey.Scope.ToString());
+        ToCoreHotkeyNormalized(HotkeyBindingRules.Normalize(hotkey));
+
+    private static CoreHotkeySetting ToCoreHotkeyNormalized(AppHotkeyBinding hotkey) => new(
+        hotkey.Action.ToString(),
+        hotkey.Gesture,
+        hotkey.Enabled,
+        hotkey.Scope.ToString(),
+        hotkey.EffectiveSpecificTargets
+            .Select(target => new CoreHotkeyTargetReference(target.ProfileId, target.ProfileTargetId))
+            .ToArray());
 
     private static AppHotkeyBinding FromCoreHotkey(CoreHotkeySetting hotkey)
     {
@@ -441,6 +447,13 @@ public sealed class RealSettingsService : ISettingsService
         {
             throw new InvalidDataException("A persisted global hotkey uses an unsupported action or scope.");
         }
-        return new AppHotkeyBinding(action, hotkey.Gesture, hotkey.Enabled, scope);
+        return HotkeyBindingRules.Normalize(new AppHotkeyBinding(
+            action,
+            hotkey.Gesture,
+            hotkey.Enabled,
+            scope,
+            (hotkey.SpecificTargets ?? [])
+                .Select(target => new AppHotkeyTargetReference(target.ProfileId, target.ProfileTargetId))
+                .ToArray()));
     }
 }

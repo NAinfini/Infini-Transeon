@@ -228,8 +228,29 @@ public sealed class EngineRuntimeServiceTests
         await service.PauseAllAsync(TestContext.Current.CancellationToken);
         await service.ResumeAllAsync(TestContext.Current.CancellationToken);
         await service.SetOverlayVisibleAsync(false, TestContext.Current.CancellationToken);
+        var target = new TargetInstanceId(Guid.NewGuid());
+        await service.SetTargetsPausedAsync(
+            [target],
+            true,
+            TestContext.Current.CancellationToken);
+        await service.SetTargetsOverlayVisibleAsync(
+            [target],
+            false,
+            TestContext.Current.CancellationToken);
+        await service.RequestManualOcrAsync(
+            RuntimeManualOcrRequest.Explicit([target]),
+            TestContext.Current.CancellationToken);
 
-        Assert.Equal(["pause", "resume", "overlay:false"], control.Calls);
+        Assert.Equal(
+            [
+                "pause",
+                "resume",
+                "overlay:false",
+                $"targets.pause:true:{target.Value:D}",
+                $"targets.overlay:false:{target.Value:D}",
+                $"targets.ocr:{target.Value:D}",
+            ],
+            control.Calls);
     }
 
     private static TargetLifecycleEvent Lifecycle(
@@ -309,7 +330,9 @@ public sealed class EngineRuntimeServiceTests
         }
     }
 
-    private sealed class FakeControl : IEngineRuntimeControl
+    private sealed class FakeControl :
+        IEngineRuntimeControl,
+        ITargetScopedEngineRuntimeControl
     {
         public List<string> Calls { get; } = [];
 
@@ -334,6 +357,47 @@ public sealed class EngineRuntimeServiceTests
         public ValueTask RequestManualOcrAsync(CancellationToken cancellationToken)
         {
             lock (Calls) Calls.Add("manual");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SetTargetsPausedAsync(
+            IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+            bool paused,
+            CancellationToken cancellationToken)
+        {
+            lock (Calls)
+            {
+                Calls.Add(
+                    $"targets.pause:{paused.ToString().ToLowerInvariant()}:" +
+                    string.Join(",", targetInstanceIds.Select(target => target.Value.ToString("D"))));
+            }
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SetTargetsOverlayVisibleAsync(
+            IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+            bool visible,
+            CancellationToken cancellationToken)
+        {
+            lock (Calls)
+            {
+                Calls.Add(
+                    $"targets.overlay:{visible.ToString().ToLowerInvariant()}:" +
+                    string.Join(",", targetInstanceIds.Select(target => target.Value.ToString("D"))));
+            }
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask RequestManualOcrAsync(
+            RuntimeManualOcrRequest request,
+            CancellationToken cancellationToken)
+        {
+            lock (Calls)
+            {
+                Calls.Add("targets.ocr:" + string.Join(
+                    ",",
+                    request.TargetInstanceIds.Select(target => target.Value.ToString("D"))));
+            }
             return ValueTask.CompletedTask;
         }
     }

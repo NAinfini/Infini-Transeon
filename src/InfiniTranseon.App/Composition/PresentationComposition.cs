@@ -141,22 +141,9 @@ public static class PresentationComposition
             options,
             ReleaseUpdateComposition.CurrentApplicationVersion(),
             provider.GetRequiredService<AppStatusLog>()));
-        // Saving a profile is the moment the app learns which language it must be able to read, so
-        // it is also the moment the models for it are fetched. Nothing is shown and nothing waits:
-        // the save returns immediately and the download finishes, or does not, in the background.
         services.AddSingleton<IProfileService>(provider => new RealProfileService(
             provider.GetRequiredService<ProfileRepository>(),
-            options.DatabasePath,
-            async sourceLanguage =>
-            {
-                Presentation.ApplicationSettings current = await provider
-                    .GetRequiredService<ISettingsService>()
-                    .GetSettingsAsync()
-                    .ConfigureAwait(false);
-                await provider.GetRequiredService<OcrModelProvisioningService>()
-                    .EnsureAsync([sourceLanguage], current.StrictOffline, CancellationToken.None)
-                    .ConfigureAwait(false);
-            }));
+            options.DatabasePath));
         services.AddSingleton<IWorkbenchService>(provider => new RealWorkbenchService(
             provider.GetRequiredService<ProfileRepository>(),
             provider.GetRequiredService<IRuntimeControlService>(),
@@ -192,10 +179,6 @@ public static class PresentationComposition
             return new WindowsOcrLanguageAvailability(
                 installedModelLanguages: () => catalog.InstalledLanguageTags);
         });
-        services.AddSingleton<OcrModelProvisioningService>(provider =>
-            new OcrModelProvisioningService(
-                provider.GetRequiredService<LocalModelManagementService>(),
-                provider.GetRequiredService<AppStatusLog>()));
         services.AddSingleton<IOcrProbe>(provider =>
         {
             OcrBackendPreferenceSource preference =

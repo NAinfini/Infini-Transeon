@@ -80,6 +80,18 @@ struct CaptureTargetCommand final
     std::int32_t region_height{};
 };
 
+enum class ManualOcrScope : std::uint8_t
+{
+    all_targets = 1U,
+    explicit_targets = 2U,
+};
+
+struct ManualOcrRequest final
+{
+    ManualOcrScope scope{};
+    std::vector<std::array<std::byte, 16U>> target_instance_ids;
+};
+
 struct PolicyRegionState final
 {
     std::array<std::byte, 16U> region_id{};
@@ -204,7 +216,7 @@ private:
 [[nodiscard]] std::optional<CaptureTargetCommand> parse_capture_target_command(
     std::span<const std::byte> bytes) noexcept;
 
-[[nodiscard]] bool parse_manual_ocr_request(
+[[nodiscard]] std::optional<ManualOcrRequest> parse_manual_ocr_request(
     std::span<const std::byte> bytes) noexcept;
 
 [[nodiscard]] std::optional<overlay::desired_state> parse_overlay_desired_state(

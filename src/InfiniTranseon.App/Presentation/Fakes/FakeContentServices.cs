@@ -471,7 +471,7 @@ public sealed class FakeSettingsService : ISettingsService
 public sealed class FakeAppUpdateService : IAppUpdateService
 {
     public AppUpdateSnapshot Snapshot { get; private set; } =
-        new(AppUpdateStatus.Idle, "0.9.0");
+        new(AppUpdateStatus.Idle, "0.1.0");
 
     public event EventHandler? Changed;
 

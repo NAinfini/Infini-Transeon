@@ -42,7 +42,12 @@ if ([string]::IsNullOrWhiteSpace($openSsl)) {
     throw 'OpenSSL from Git for Windows was not found.'
 }
 
-$temporaryRoot = Join-Path $env:RUNNER_TEMP (
+$temporaryBase = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+    [IO.Path]::GetTempPath()
+} else {
+    $env:RUNNER_TEMP
+}
+$temporaryRoot = Join-Path $temporaryBase (
     'infini-release-verification-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 $privateKeyPath = Join-Path $temporaryRoot 'release-ed25519.pem'

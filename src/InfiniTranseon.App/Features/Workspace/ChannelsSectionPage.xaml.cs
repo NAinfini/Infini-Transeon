@@ -88,6 +88,9 @@ public sealed partial class ChannelsSectionPage : Page
 
         TargetSelector.ItemsSource = ViewModel.Targets;
         TargetSelector.SelectedItem = ViewModel.SelectedTarget;
+        TranslationGroupSelector.ItemsSource = ViewModel.TranslationGroups;
+        TranslationGroupSelector.SelectedItem = ViewModel.SelectedTranslationGroup;
+        TranslationGroupNameBox.Text = ViewModel.SelectedTranslationGroup?.Name ?? string.Empty;
         RefreshRegionSelector();
     }
 
@@ -118,6 +121,48 @@ public sealed partial class ChannelsSectionPage : Page
         RefreshPage();
     }
 
+    private void OnTranslationGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TranslationGroupSelector.SelectedItem is WorkbenchTranslationGroupDraft group)
+        {
+            ViewModel.SelectedTranslationGroup = group;
+            TranslationGroupNameBox.Text = group.Name;
+        }
+        RefreshPage();
+    }
+
+    private void OnAddTranslationGroupClick(object sender, RoutedEventArgs e)
+    {
+        string name = string.IsNullOrWhiteSpace(TranslationGroupNameBox.Text)
+            ? $"Group {ViewModel.TranslationGroups.Count + 1}"
+            : TranslationGroupNameBox.Text;
+        if (ViewModel.AddTranslationGroup(name))
+        {
+            TranslationGroupSelector.SelectedItem = ViewModel.SelectedTranslationGroup;
+            TranslationGroupNameBox.Text = ViewModel.SelectedTranslationGroup?.Name ?? string.Empty;
+            RefreshPage();
+        }
+    }
+
+    private void OnRenameTranslationGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.RenameSelectedTranslationGroup(TranslationGroupNameBox.Text))
+        {
+            TranslationGroupSelector.SelectedItem = ViewModel.SelectedTranslationGroup;
+            RefreshPage();
+        }
+    }
+
+    private void OnDeleteTranslationGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.DeleteSelectedTranslationGroup())
+        {
+            TranslationGroupSelector.SelectedItem = ViewModel.SelectedTranslationGroup;
+            TranslationGroupNameBox.Text = ViewModel.SelectedTranslationGroup?.Name ?? string.Empty;
+            RefreshPage();
+        }
+    }
+
     private void OnTranslationEnabledToggled(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SelectedRegion is not { } region)
@@ -138,7 +183,8 @@ public sealed partial class ChannelsSectionPage : Page
         TranslationEnabledToggle.IsOn = region?.TranslationEnabled ?? false;
         _rendering = false;
 
-        bool showCards = hasRegion && region!.TranslationEnabled && region.Channels.Count > 0;
+        IReadOnlyList<WorkbenchChannelDraft> channels = SelectedChannels(region);
+        bool showCards = hasRegion && region!.TranslationEnabled && channels.Count > 0;
         CardsHost.Visibility = showCards ? Visibility.Visible : Visibility.Collapsed;
         EmptyStateHost.Visibility = showCards ? Visibility.Collapsed : Visibility.Visible;
         HeaderPanel.Visibility = hasRegion ? Visibility.Visible : Visibility.Collapsed;
@@ -157,7 +203,7 @@ public sealed partial class ChannelsSectionPage : Page
             EmptyStateHost.Body = Strings.GetString("ChannelsEmptyDisabledBody");
             EmptyStateHost.ActionContent = null;
         }
-        else if (region.Channels.Count == 0)
+        else if (channels.Count == 0)
         {
             EmptyStateHost.Title = Strings.GetString("ChannelsEmptyNoChannelsTitle");
             EmptyStateHost.Body = Strings.GetString("ChannelsEmptyNoChannelsBody");
@@ -168,17 +214,18 @@ public sealed partial class ChannelsSectionPage : Page
             EmptyStateHost.ActionContent = addButton;
         }
 
-        RefreshQuota(region);
+        RefreshQuota(region, channels);
         RenderChannelCards(region);
     }
 
-    private void RefreshQuota(WorkbenchRegionItem region)
+    private void RefreshQuota(WorkbenchRegionItem region, IReadOnlyList<WorkbenchChannelDraft>? selected = null)
     {
+        selected ??= SelectedChannels(region);
         QuotaText.Text = string.Format(
             Strings.GetString("ChannelsQuotaLabel"),
-            region.Channels.Count,
+            selected.Count,
             ViewModel.MaxTranslationChannels);
-        bool atCap = region.Channels.Count >= ViewModel.MaxTranslationChannels;
+        bool atCap = selected.Count >= ViewModel.MaxTranslationChannels;
         bool hasProviders = _providerCatalog.Length > 0;
         AddChannelButton.IsEnabled = region.TranslationEnabled && !atCap && hasProviders;
         QuotaLimitText.Visibility = atCap ? Visibility.Visible : Visibility.Collapsed;
@@ -191,26 +238,29 @@ public sealed partial class ChannelsSectionPage : Page
                 Strings.GetString("WorkbenchNoProvidersMessage"));
         }
 
-        BudgetPreview.UsedChannels = region.Channels.Count;
+        BudgetPreview.UsedChannels = selected.Count;
         BudgetPreview.MaximumChannels = ViewModel.MaxTranslationChannels;
-        BudgetPreview.WorstCaseRequests = region.Channels.Sum(
+        BudgetPreview.WorstCaseRequests = selected.Sum(
             channel => 1 + channel.EffectiveRefinementProviderIds.Count);
     }
 
     private void RenderChannelCards(WorkbenchRegionItem region)
     {
         CardsHost.Children.Clear();
-        List<WorkbenchChannelDraft> channels = [.. region.Channels.OrderBy(channel => channel.DisplayOrder)];
+        List<WorkbenchChannelDraft> channels = [.. SelectedChannels(region).OrderBy(channel => channel.DisplayOrder)];
         for (int index = 0; index < channels.Count; index++)
         {
             CardsHost.Children.Add(BuildChannelCard(region, channels[index], index, channels.Count));
         }
     }
 
+    private IReadOnlyList<WorkbenchChannelDraft> SelectedChannels(WorkbenchRegionItem? region) =>
+        region?.Channels.Where(ViewModel.IsInActiveGroup).ToArray() ?? [];
+
     private ProviderChoice[] CatalogWithSaved(WorkbenchChannelDraft channel)
     {
         List<ProviderChoice> choices = [.. _providerCatalog];
-        IEnumerable<string> saved = [channel.ProviderId, .. channel.EffectiveRefinementProviderIds];
+        IEnumerable<string> saved = [channel.ProviderId, .. channel.EffectiveRefinementProviderIds, .. channel.EffectiveFallbackProviderIds];
         foreach (string id in saved.Where(id => id.Length > 0))
         {
             if (choices.Any(choice => string.Equals(choice.Id, id, StringComparison.Ordinal)))
@@ -324,20 +374,111 @@ public sealed partial class ChannelsSectionPage : Page
             Header = Strings.GetString("ChannelsDisplayLabelHeader"),
             Text = channel.Label,
         };
-        labelBox.LostFocus += (_, _) =>
+        advancedPanel.Children.Add(labelBox);
+
+        var retryBox = new NumberBox
+        {
+            Header = Strings.GetString("ChannelsRetryCountHeader"),
+            Minimum = 0,
+            Maximum = 1,
+            SmallChange = 1,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Value = channel.RetryCount,
+        };
+        AutomationProperties.SetName(retryBox, Strings.GetString("ChannelsRetryCountHeader"));
+        advancedPanel.Children.Add(retryBox);
+
+        var timeoutBox = new NumberBox
+        {
+            Header = Strings.GetString("ChannelsAttemptTimeoutHeader"),
+            Minimum = 0.1,
+            Maximum = 300,
+            SmallChange = 1,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Value = channel.AttemptTimeoutMilliseconds / 1000d,
+        };
+        AutomationProperties.SetName(
+            timeoutBox,
+            Strings.GetString("ChannelsAttemptTimeoutHeader"));
+        advancedPanel.Children.Add(timeoutBox);
+
+        var firstFallbackBox = new ComboBox
+        {
+            Header = Strings.GetString("ChannelsFallbackProviderOneHeader"),
+            ItemsSource = refinerChoices,
+            SelectedItem = refinerChoices.FirstOrDefault(choice =>
+                string.Equals(choice.Id, channel.EffectiveFallbackProviderIds.ElementAtOrDefault(0), StringComparison.Ordinal)) ?? none,
+        };
+        AutomationProperties.SetName(firstFallbackBox, Strings.GetString("ChannelsFallbackProviderOneHeader"));
+        advancedPanel.Children.Add(firstFallbackBox);
+        var secondFallbackBox = new ComboBox
+        {
+            Header = Strings.GetString("ChannelsFallbackProviderTwoHeader"),
+            ItemsSource = refinerChoices,
+            SelectedItem = refinerChoices.FirstOrDefault(choice =>
+                string.Equals(choice.Id, channel.EffectiveFallbackProviderIds.ElementAtOrDefault(1), StringComparison.Ordinal)) ?? none,
+        };
+        AutomationProperties.SetName(secondFallbackBox, Strings.GetString("ChannelsFallbackProviderTwoHeader"));
+        advancedPanel.Children.Add(secondFallbackBox);
+
+        ToggleSwitch ContextToggle(string resourceKey, bool value)
+        {
+            var toggle = new ToggleSwitch { Header = Strings.GetString(resourceKey), IsOn = value };
+            AutomationProperties.SetName(toggle, Strings.GetString(resourceKey));
+            advancedPanel.Children.Add(toggle);
+            return toggle;
+        }
+        ToggleSwitch gameContextToggle = ContextToggle("ChannelsIncludeGameContextToggle", channel.IncludeGameContext);
+        ToggleSwitch recentContextToggle = ContextToggle("ChannelsIncludeRecentContextToggle", channel.IncludeRecentContext);
+        ToggleSwitch memoryCacheToggle = ContextToggle("ChannelsMemoryCacheToggle", channel.MemoryCacheEnabled);
+        ToggleSwitch persistentCacheToggle = ContextToggle("ChannelsPersistentCacheToggle", channel.PersistentCacheEnabled);
+
+        void CommitAdvanced()
         {
             if (_rendering)
             {
                 return;
             }
             string label = string.IsNullOrWhiteSpace(labelBox.Text) ? channel.Label : labelBox.Text.Trim();
-            ViewModel.TryUpdateChannel(region, channel, channel with { Label = label });
+            string[] fallbackIds = [
+                .. new[] { firstFallbackBox.SelectedItem as ProviderChoice, secondFallbackBox.SelectedItem as ProviderChoice }
+                    .Where(choice => choice is not null && choice != none && !string.IsNullOrWhiteSpace(choice.Id))
+                    .Select(choice => choice!.Id)
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(2),
+            ];
+            int retryCount = double.IsFinite(retryBox.Value)
+                ? Math.Clamp((int)Math.Round(retryBox.Value), 0, 1)
+                : channel.RetryCount;
+            int timeoutMilliseconds = double.IsFinite(timeoutBox.Value)
+                ? Math.Clamp((int)Math.Round(timeoutBox.Value * 1000), 100, 300_000)
+                : channel.AttemptTimeoutMilliseconds;
+            ViewModel.TryUpdateChannel(region, channel, channel with
+            {
+                Label = label,
+                AttemptTimeoutMilliseconds = timeoutMilliseconds,
+                RetryCount = retryCount,
+                FallbackProviderIds = fallbackIds,
+                IncludeGameContext = gameContextToggle.IsOn,
+                IncludeRecentContext = recentContextToggle.IsOn,
+                MemoryCacheEnabled = memoryCacheToggle.IsOn,
+                PersistentCacheEnabled = persistentCacheToggle.IsOn,
+            });
             RenderChannelCards(region);
-        };
-        advancedPanel.Children.Add(labelBox);
+        }
+        labelBox.LostFocus += (_, _) => CommitAdvanced();
+        timeoutBox.ValueChanged += (_, _) => CommitAdvanced();
+        retryBox.ValueChanged += (_, _) => CommitAdvanced();
+        firstFallbackBox.SelectionChanged += (_, _) => CommitAdvanced();
+        secondFallbackBox.SelectionChanged += (_, _) => CommitAdvanced();
+        gameContextToggle.Toggled += (_, _) => CommitAdvanced();
+        recentContextToggle.Toggled += (_, _) => CommitAdvanced();
+        memoryCacheToggle.Toggled += (_, _) => CommitAdvanced();
+        persistentCacheToggle.Toggled += (_, _) => CommitAdvanced();
+
         advancedPanel.Children.Add(new TextBlock
         {
-            Text = Strings.GetString("ChannelsAdvancedGapNote"),
+            Text = Strings.GetString("ChannelsAdvancedAppliedNote"),
             Style = (Style)Application.Current.Resources["CaptionTextStyle"],
             TextWrapping = TextWrapping.Wrap,
         });

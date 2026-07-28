@@ -5,6 +5,7 @@ using InfiniTranseon.App.State;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Privacy;
+using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Runtime;
 using InfiniTranseon.Core.Storage;
 
@@ -65,7 +66,8 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         CancellationToken ct,
         string targetKind = "Window",
         OverlayPixelRect? desktopRegion = null,
-        bool failStart = false)
+        bool failStart = false,
+        IReadOnlyList<ProfileCaptureTargetDraft>? captureTargets = null)
     {
         var options = new AppDataOptions(_root);
         options.EnsureRootExists();
@@ -76,7 +78,8 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
                 Guid.Empty, "Visual novel", "ja", "zh-Hans", Guid.NewGuid(), "Notepad", targetKind,
                 "1920x1080", "translation.deepl",
                 [new ProfileRegionDraft("Dialogue", RegionPriorityLevel.P0)],
-                desktopRegion),
+                desktopRegion,
+                captureTargets),
             ct);
 
         var engine = new ScriptedEngine { FailStart = failStart };
@@ -97,6 +100,178 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
                 return engine;
             });
         return (service, profileId, engine, runtimeState, eventHub);
+    }
+
+    private async Task<Guid> AddAlternateTranslationGroupAsync(
+        Guid profileId,
+        CancellationToken cancellationToken)
+    {
+        var repository = new ProfileRepository(new AppDataOptions(_root).DatabasePath);
+        ProfileDocument profile = await repository.LoadAsync(profileId, cancellationToken)
+            ?? throw new InvalidOperationException("Test profile was not persisted.");
+        Guid alternateGroupId = Guid.NewGuid();
+        ProfileTarget target = profile.Targets[0];
+        ProfileRegion region = target.Regions[0];
+        ProfileTranslationChannel alternateChannel =
+            ProfileTranslationChannel.Create("translation.google") with
+            {
+                TranslationGroupId = alternateGroupId,
+            };
+        ProfileDocument updated = profile with
+        {
+            TranslationGroups =
+            [
+                .. profile.TranslationGroups,
+                new ProfileTranslationGroup
+                {
+                    TranslationGroupId = alternateGroupId,
+                    Name = "Alternate",
+                },
+            ],
+            Targets =
+            [
+                target with
+                {
+                    Regions =
+                    [
+                        region with
+                        {
+                            TranslationChannels =
+                            [
+                                .. region.TranslationChannels,
+                                alternateChannel,
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        await repository.SaveAsync(updated, cancellationToken);
+        return alternateGroupId;
+    }
+
+    [Fact]
+    public async Task Translation_group_switch_persists_and_reports_exact_replay_counts()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        (RealRuntimeControlService service, Guid profileId, ScriptedEngine engine) =
+            await BuildAsync([Window("Notepad")], ct);
+        Guid alternateGroupId = await AddAlternateTranslationGroupAsync(profileId, ct);
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            engine.LastTranslationGroupReplay = new RuntimeVisibleReplayResult(1, 0);
+
+            TranslationGroupSwitchResult result =
+                await service.SwitchTranslationGroupAsync(alternateGroupId, ct);
+
+            Assert.True(result.Applied);
+            Assert.Equal("translationGroup.appliedAndRetranslated", result.StatusCode);
+            Assert.Equal(1, result.ReplayedTargetCount);
+            Assert.Equal(0, result.WaitingTargetCount);
+            ProfileDocument stored = await new ProfileRepository(
+                    new AppDataOptions(_root).DatabasePath)
+                .LoadAsync(profileId, ct) ??
+                throw new InvalidOperationException("Test profile disappeared.");
+            Assert.Equal(alternateGroupId, stored.ActiveTranslationGroupId);
+            Assert.Equal(alternateGroupId, engine.Binding!.Profile.ActiveTranslationGroupId);
+        }
+    }
+
+    [Fact]
+    public async Task Failed_translation_group_switch_restores_the_persisted_group()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        (RealRuntimeControlService service, Guid profileId, ScriptedEngine engine) =
+            await BuildAsync([Window("Notepad")], ct);
+        Guid alternateGroupId = await AddAlternateTranslationGroupAsync(profileId, ct);
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            engine.FailHotApply = true;
+            engine.FailStart = true;
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => service.SwitchTranslationGroupAsync(alternateGroupId, ct));
+
+            ProfileDocument stored = await new ProfileRepository(
+                    new AppDataOptions(_root).DatabasePath)
+                .LoadAsync(profileId, ct) ??
+                throw new InvalidOperationException("Test profile disappeared.");
+            Assert.Equal(ProfileDocument.DefaultTranslationGroupId, stored.ActiveTranslationGroupId);
+        }
+    }
+
+    [Fact]
+    public async Task Scoped_controls_affect_only_the_explicit_runtime_target()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        Guid firstProfileTarget = Guid.NewGuid();
+        Guid secondProfileTarget = Guid.NewGuid();
+        (RealRuntimeControlService service, Guid profileId, ScriptedEngine engine, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad"), Window("Calculator", handle: 0xCA1C)],
+                ct,
+                captureTargets:
+                [
+                    new ProfileCaptureTargetDraft(
+                        firstProfileTarget,
+                        "Notepad",
+                        "Window",
+                        "1920x1080"),
+                    new ProfileCaptureTargetDraft(
+                        secondProfileTarget,
+                        "Calculator",
+                        "Window",
+                        "1920x1080"),
+                ]);
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            RuntimeTargetDescriptor[] descriptors =
+                service.GetRuntimeTargetDescriptors().ToArray();
+            Assert.Equal(2, descriptors.Length);
+            RuntimeTargetDescriptor first = Assert.Single(
+                descriptors,
+                target => target.Reference.ProfileTargetId == firstProfileTarget);
+            RuntimeTargetDescriptor second = Assert.Single(
+                descriptors,
+                target => target.Reference.ProfileTargetId == secondProfileTarget);
+
+            RuntimeScopedControlResult paused = await service.TogglePausedAsync(
+                RuntimeTargetSelection.Explicit([second.Reference]),
+                ct);
+            Assert.True(paused.Applied);
+            Assert.Equal(1, paused.ResolvedTargetCount);
+            Assert.Equal([second.TargetInstanceId], engine.PausedTargets);
+            Assert.False(service.IsPaused);
+
+            await service.ToggleOverlayAsync(
+                RuntimeTargetSelection.Explicit([first.Reference]),
+                ct);
+            Assert.Equal([first.TargetInstanceId], engine.HiddenTargets);
+            Assert.False(service.IsOverlayVisible);
+
+            await service.RequestManualOcrAsync(
+                RuntimeTargetSelection.Explicit([second.Reference]),
+                ct);
+            RuntimeManualOcrRequest request = Assert.Single(engine.ScopedManualOcrRequests);
+            Assert.Equal(RuntimeManualOcrScope.ExplicitTargets, request.Scope);
+            Assert.Equal([second.TargetInstanceId], request.TargetInstanceIds);
+
+            RuntimeScopedControlResult noMatch = await service.TogglePausedAsync(
+                RuntimeTargetSelection.Explicit(
+                    [new AppHotkeyTargetReference(profileId, Guid.NewGuid())]),
+                ct);
+            Assert.False(noMatch.Applied);
+            Assert.Equal("runtime.control.noMatchingTarget", noMatch.ReasonCode);
+            Assert.Equal([second.TargetInstanceId], engine.PausedTargets);
+
+            await service.TogglePausedAsync(
+                RuntimeTargetSelection.Explicit([second.Reference]),
+                ct);
+            Assert.Empty(engine.PausedTargets);
+        }
     }
 
     [Fact]
@@ -422,16 +597,25 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
     }
 
     /// <summary>Deterministic engine double that mirrors the real facade's event ordering.</summary>
-    private sealed class ScriptedEngine : IEngineRuntime
+    private sealed class ScriptedEngine :
+        IEngineRuntime,
+        ITargetScopedEngineRuntime,
+        IHotConfigurableEngineRuntime,
+        ITranslationGroupReplayResultSource
     {
         private readonly List<TargetSnapshot> _snapshots = [];
 
         public RuntimeProfileBinding? Binding { get; set; }
 
         public bool FailStart { get; set; }
+        public bool FailHotApply { get; set; }
+        public RuntimeVisibleReplayResult? LastTranslationGroupReplay { get; set; }
 
         public bool Paused { get; private set; }
         public int ManualOcrRequests { get; private set; }
+        public List<TargetInstanceId> PausedTargets { get; } = [];
+        public List<TargetInstanceId> HiddenTargets { get; } = [];
+        public List<RuntimeManualOcrRequest> ScopedManualOcrRequests { get; } = [];
 
         public bool Disposed { get; private set; }
 
@@ -490,22 +674,98 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         public ValueTask PauseAllAsync(CancellationToken cancellationToken)
         {
             Paused = true;
+            PausedTargets.Clear();
+            PausedTargets.AddRange(
+                Binding?.Targets.Select(target => target.TargetInstanceId) ?? []);
             return ValueTask.CompletedTask;
         }
 
         public ValueTask ResumeAllAsync(CancellationToken cancellationToken)
         {
             Paused = false;
+            PausedTargets.Clear();
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask SetOverlayVisibleAsync(bool visible, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
+        public ValueTask SetOverlayVisibleAsync(bool visible, CancellationToken cancellationToken)
+        {
+            HiddenTargets.Clear();
+            if (!visible)
+            {
+                HiddenTargets.AddRange(
+                    Binding?.Targets.Select(target => target.TargetInstanceId) ?? []);
+            }
+            return ValueTask.CompletedTask;
+        }
 
         public ValueTask RequestManualOcrAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ManualOcrRequests++;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SetTargetsPausedAsync(
+            IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+            bool paused,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (TargetInstanceId target in targetInstanceIds)
+            {
+                if (paused)
+                {
+                    if (!PausedTargets.Contains(target)) PausedTargets.Add(target);
+                }
+                else
+                {
+                    PausedTargets.Remove(target);
+                }
+            }
+            Paused = Binding is { } binding &&
+                binding.Targets.All(target => PausedTargets.Contains(target.TargetInstanceId));
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SetTargetsOverlayVisibleAsync(
+            IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+            bool visible,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (TargetInstanceId target in targetInstanceIds)
+            {
+                if (visible)
+                {
+                    HiddenTargets.Remove(target);
+                }
+                else if (!HiddenTargets.Contains(target))
+                {
+                    HiddenTargets.Add(target);
+                }
+            }
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask RequestManualOcrAsync(
+            RuntimeManualOcrRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ScopedManualOcrRequests.Add(request);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask ApplyProfileAsync(
+            RuntimeProfileBinding binding,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (FailHotApply)
+            {
+                throw new InvalidOperationException("scripted.hotApplyFailed");
+            }
+            Binding = binding;
             return ValueTask.CompletedTask;
         }
 

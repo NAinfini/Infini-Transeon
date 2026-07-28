@@ -349,6 +349,10 @@ public sealed record OverlayRegionStyleSnapshot(
     public int MinimumDwellMilliseconds { get; init; } = 500;
     public int CrossfadeMilliseconds { get; init; } = 120;
     public bool ReducedMotion { get; init; }
+    /// <summary>Zero preserves the capture-region height; a positive value caps the rendered panel.</summary>
+    public int MaximumHeight { get; init; }
+    public bool AutomaticShrink { get; init; } = true;
+    public bool NoScrollOverflow { get; init; } = true;
 }
 
 public sealed record OverlayRegionSnapshot
@@ -373,7 +377,9 @@ public sealed record OverlayRegionSnapshot
             style.Opacity is < 0 or > 1 ||
             style.BlurRadius is < 0 or > 64 || style.Padding < 0 || style.PreferredFontSize <= 0 ||
             style.MinimumFontSize <= 0 || style.PreferredFontSize < style.MinimumFontSize ||
-            style.MaximumLines < 1 || !double.IsFinite(style.OutlineWidth) ||
+            style.MaximumLines < 1 || style.MaximumHeight is < 0 or > 16_384 ||
+            !style.NoScrollOverflow ||
+            !double.IsFinite(style.OutlineWidth) ||
             style.OutlineWidth is < 0 or > 8 || !Enum.IsDefined(style.Background) ||
             style.MinimumDwellMilliseconds is < 0 or > 3_000 ||
             style.CrossfadeMilliseconds is < 0 or > 500 ||

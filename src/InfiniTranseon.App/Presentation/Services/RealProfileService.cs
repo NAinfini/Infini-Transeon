@@ -12,34 +12,38 @@ namespace InfiniTranseon.App.Presentation.Services;
 /// <see cref="ProfileDocument"/> so no view model ever depends on Core types. Editing loads the
 /// existing document first so the glossary and other data survive a save.
 /// </summary>
-public sealed class RealProfileService : IProfileService
+public sealed class RealProfileService : IProfileService, IProfileTargetDirectory
 {
     private readonly ProfileRepository _repository;
     private readonly string _databasePath;
-    private readonly Func<string, Task>? _onSourceLanguageSaved;
 
-    /// <param name="onSourceLanguageSaved">
-    /// Invoked, without being awaited, after a profile is written with a non-empty source language.
-    /// The composition root uses it to fetch the OCR models that language needs. It must not throw
-    /// for an expected condition — nothing observes the returned task — and it must never be made
-    /// blocking: a save has to complete at UI speed even when a download is starting behind it.
-    /// </param>
     public RealProfileService(
         ProfileRepository repository,
-        string databasePath,
-        Func<string, Task>? onSourceLanguageSaved = null)
+        string databasePath)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         _repository = repository;
         _databasePath = Path.GetFullPath(databasePath);
-        _onSourceLanguageSaved = onSourceLanguageSaved;
     }
 
     public async Task<IReadOnlyList<ProfileCard>> GetProfilesAsync(CancellationToken cancellationToken = default)
     {
         IReadOnlyList<ProfileDocument> documents = await _repository.ListAsync(cancellationToken).ConfigureAwait(false);
         return documents.Select(ToCard).ToArray();
+    }
+
+    public async Task<IReadOnlyList<ProfileTargetDirectoryEntry>> GetTargetsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<ProfileDocument> documents =
+            await _repository.ListAsync(cancellationToken).ConfigureAwait(false);
+        return documents.SelectMany(document => document.Targets.Select(target =>
+            new ProfileTargetDirectoryEntry(
+                document.ProfileId,
+                target.TargetId,
+                document.Name,
+                target.Name))).ToArray();
     }
 
     public async Task<ProfileEditModel?> LoadForEditAsync(
@@ -96,11 +100,6 @@ public sealed class RealProfileService : IProfileService
 
         ProfileDocument document = Apply(existing, profile);
         await _repository.SaveAsync(document, cancellationToken).ConfigureAwait(false);
-        if (_onSourceLanguageSaved is not null &&
-            !string.IsNullOrWhiteSpace(document.SourceLanguage))
-        {
-            _ = _onSourceLanguageSaved(document.SourceLanguage);
-        }
 
         return document.ProfileId;
     }

@@ -7,11 +7,14 @@ namespace InfiniTranseon.Core.Profiles;
 public static class ProfileTranslationFactory
 {
     public static IReadOnlyList<TranslationChannelDefinition> CreateChannels(
+        ProfileDocument profile,
         ProfileRegion region)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(region);
         ProfileTranslationChannel[] enabled = region.TranslationChannels
-            .Where(channel => channel.Enabled)
+            .Where(channel => channel.Enabled &&
+                channel.TranslationGroupId == profile.ActiveTranslationGroupId)
             .OrderBy(channel => channel.DisplayOrder)
             .ToArray();
         if (enabled.Length is < 1 or > 4)
@@ -45,7 +48,23 @@ public static class ProfileTranslationFactory
                     channel.DisplayLabel))
             {
                 RetryCount = channel.RetryCount,
+                AttemptTimeout = TimeSpan.FromMilliseconds(channel.AttemptTimeoutMilliseconds),
             }).ToArray());
+    }
+
+    // Compatibility seam for callers that have not yet adopted grouped profiles. It is deliberately
+    // limited to a synthetic single group and should not be used by the runtime.
+    public static IReadOnlyList<TranslationChannelDefinition> CreateChannels(ProfileRegion region)
+    {
+        ArgumentNullException.ThrowIfNull(region);
+        Guid groupId = region.TranslationChannels
+            .Select(channel => channel.TranslationGroupId)
+            .FirstOrDefault(id => id != Guid.Empty);
+        return CreateChannels(new ProfileDocument
+        {
+            TranslationGroups = [new ProfileTranslationGroup { TranslationGroupId = groupId }],
+            ActiveTranslationGroupId = groupId,
+        }, region);
     }
 
     public static TranslationRunOptions CreateRunOptions(

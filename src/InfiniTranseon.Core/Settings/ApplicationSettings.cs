@@ -44,7 +44,10 @@ public sealed record HotkeySetting(
     string Action,
     string Gesture,
     bool Enabled,
-    string Scope);
+    string Scope,
+    IReadOnlyList<HotkeyTargetReference>? SpecificTargets = null);
+
+public sealed record HotkeyTargetReference(Guid ProfileId, Guid ProfileTargetId);
 
 public sealed record PerformanceRuntimeSettings
 {
@@ -128,6 +131,25 @@ public sealed record ApplicationSettings
                 string.IsNullOrWhiteSpace(hotkey.Scope) || hotkey.Scope.Length > 64)
             {
                 throw new InvalidDataException("A global hotkey setting is invalid.");
+            }
+            IReadOnlyList<HotkeyTargetReference>? targets = hotkey.SpecificTargets;
+            if (targets is { Count: > 128 } || targets?.Any(target =>
+                    target.ProfileId == Guid.Empty || target.ProfileTargetId == Guid.Empty) == true ||
+                targets?.Distinct().Count() != targets?.Count)
+            {
+                throw new InvalidDataException("Specific global-hotkey targets are invalid.");
+            }
+            if (string.Equals(hotkey.Scope, "SpecificTargetGroup", StringComparison.OrdinalIgnoreCase) &&
+                targets is { Count: 0 })
+            {
+                // A missing collection is a legacy document and remains visible for repair; all new
+                // writes carry an explicit collection and must not save an empty specific scope.
+                throw new InvalidDataException("A specific global hotkey requires at least one target.");
+            }
+            if (string.Equals(hotkey.Action, "EmergencyStop", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(hotkey.Scope, "AllRunningTargets", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("Emergency stop must apply to all running targets.");
             }
         }
         ArgumentNullException.ThrowIfNull(ProviderEndpoints);

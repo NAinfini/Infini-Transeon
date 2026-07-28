@@ -42,6 +42,35 @@ public interface IRuntimeTranslationPipeline : IAsyncDisposable
     Task DrainAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Optional target-scoped control implemented by pipelines that can stop accepting work for a
+/// bounded set of active targets and cancel the translations already in flight for those targets.
+/// An empty selection is invalid; callers must preserve the distinction between "all" and
+/// "explicitly no targets".
+/// </summary>
+public interface ITargetScopedRuntimeTranslationPipeline
+{
+    ValueTask SetTargetsPausedAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool paused,
+        CancellationToken cancellationToken);
+}
+
+public interface IReplayableRuntimeTranslationPipeline
+{
+    ValueTask<RuntimeVisibleReplayResult> ReplayVisibleAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        CancellationToken cancellationToken);
+}
+
+public sealed record RuntimeVisibleReplayResult(int ReplayedTargetCount, int WaitingTargetCount);
+
+/// <summary>Exposes the exact outcome of the most recent hot profile replay.</summary>
+public interface ITranslationGroupReplayResultSource
+{
+    RuntimeVisibleReplayResult? LastTranslationGroupReplay { get; }
+}
+
 public sealed class RuntimeEngineHostOverlaySink : IRuntimeOverlaySink
 {
     private readonly IRuntimeEngineHostSession _session;
@@ -126,7 +155,10 @@ public sealed record RuntimePipelineFailure(
     TextTrackId? TextTrackId,
     Exception Exception);
 
-public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
+public sealed class RuntimeTranslationPipeline :
+    IRuntimeTranslationPipeline,
+    ITargetScopedRuntimeTranslationPipeline,
+    IReplayableRuntimeTranslationPipeline
 {
     private readonly record struct ExecutionKey(Guid TargetInstanceId, Guid RegionId);
 
@@ -148,6 +180,8 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
     private readonly Dictionary<Guid, RuntimeTranslationTarget> _targets = [];
     private readonly Dictionary<Guid, OverlayStateCoordinator> _overlays = [];
     private readonly Dictionary<ExecutionKey, ActiveExecution> _executions = [];
+    private readonly Dictionary<ExecutionKey, OcrResultSnapshot> _visibleOcr = [];
+    private readonly HashSet<Guid> _pausedTargets = [];
     private readonly ConcurrentQueue<Exception> _observerFailures = new();
     private readonly RuntimeTranslationContextLedger _contextLedger = new();
     private int _disposed;
@@ -257,6 +291,10 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
         {
             if (!_targets.Remove(targetInstanceId.Value, out RuntimeTranslationTarget? removed)) return;
             _overlays.Remove(targetInstanceId.Value);
+            _pausedTargets.Remove(targetInstanceId.Value);
+            foreach (ExecutionKey key in _visibleOcr.Keys
+                         .Where(key => key.TargetInstanceId == targetInstanceId.Value).ToArray())
+                _visibleOcr.Remove(key);
             ExecutionKey[] keys = _executions.Keys
                 .Where(key => key.TargetInstanceId == targetInstanceId.Value)
                 .ToArray();
@@ -272,6 +310,104 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
             session.ProfileStopped(profileId);
         if (stoppedProfile is Guid clearedProfileId)
             _contextLedger.Clear(clearedProfileId);
+    }
+
+    public async ValueTask<RuntimeVisibleReplayResult> ReplayVisibleAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(targetInstanceIds);
+        TargetInstanceId[] targets = targetInstanceIds.ToArray();
+        if (targets.Length == 0)
+            throw new ArgumentException("At least one target is required.", nameof(targetInstanceIds));
+        OcrResultSnapshot[] snapshots;
+        int waiting = 0;
+        lock (_gate)
+        {
+            var replay = new List<OcrResultSnapshot>();
+            foreach (TargetInstanceId targetId in targets)
+            {
+                if (!_targets.TryGetValue(targetId.Value, out RuntimeTranslationTarget? target))
+                {
+                    waiting++;
+                    continue;
+                }
+                OcrResultSnapshot[] targetSnapshots = _visibleOcr
+                    .Where(item => item.Key.TargetInstanceId == targetId.Value)
+                    .Select(item => RebindProfileRevision(item.Value, target.ProfileRevision))
+                    .ToArray();
+                if (targetSnapshots.Length == 0) waiting++;
+                replay.AddRange(targetSnapshots);
+            }
+            snapshots = replay.ToArray();
+        }
+        foreach (OcrResultSnapshot snapshot in snapshots)
+            await EnqueueCoreAsync(snapshot, cancellationToken, reconcileRemainingArea: false)
+                .ConfigureAwait(false);
+        return new RuntimeVisibleReplayResult(targets.Length - waiting, waiting);
+    }
+
+    public async ValueTask SetTargetsPausedAsync(
+        IReadOnlyCollection<TargetInstanceId> targetInstanceIds,
+        bool paused,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(targetInstanceIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        TargetInstanceId[] targets = targetInstanceIds.ToArray();
+        if (targets.Length is < 1 or > 128 ||
+            targets.Any(target => target is null || target.Value == Guid.Empty) ||
+            targets.Distinct().Count() != targets.Length)
+        {
+            throw new ArgumentException(
+                "Target-scoped pause requires unique, non-empty target identities.",
+                nameof(targetInstanceIds));
+        }
+
+        ActiveExecution[] cancelled = [];
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            HashSet<Guid> targetIds = targets.Select(target => target.Value).ToHashSet();
+            if (paused)
+            {
+                _pausedTargets.UnionWith(targetIds);
+                ExecutionKey[] keys = _executions.Keys
+                    .Where(key => targetIds.Contains(key.TargetInstanceId))
+                    .ToArray();
+                var active = new List<ActiveExecution>(keys.Length);
+                foreach (ExecutionKey key in keys)
+                {
+                    if (_executions.Remove(key, out ActiveExecution? execution))
+                    {
+                        execution.Cancellation.Cancel();
+                        active.Add(execution);
+                    }
+                }
+                cancelled = active.ToArray();
+            }
+            else
+            {
+                _pausedTargets.ExceptWith(targetIds);
+            }
+        }
+
+        if (cancelled.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.WhenAll(cancelled.Select(execution => execution.Task))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            cancelled.All(execution => execution.Cancellation.IsCancellationRequested) &&
+            !cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     public ValueTask EnqueueAsync(
@@ -290,11 +426,14 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
         SourceGenerationToken source = result.ExecutionToken.Source;
         RuntimeTranslationTarget? target;
         OverlayStateCoordinator? coordinator;
+        bool paused;
         lock (_gate)
         {
             _targets.TryGetValue(source.TargetInstanceId.Value, out target);
             _overlays.TryGetValue(source.TargetInstanceId.Value, out coordinator);
+            paused = _pausedTargets.Contains(source.TargetInstanceId.Value);
         }
+        if (paused) return;
         if (target is null || coordinator is null)
         {
             await ReportAsync(
@@ -426,7 +565,7 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
         if (!region.TranslationEnabled) return;
 
         IReadOnlyList<TranslationChannelDefinition> channels;
-        try { channels = ProfileTranslationFactory.CreateChannels(region); }
+        try { channels = ProfileTranslationFactory.CreateChannels(target.Profile, region); }
         catch (Exception exception)
         {
             await ReportAsync("pipeline.channelsInvalid", source, exception, cancellationToken)
@@ -454,6 +593,7 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
             execution.Task = RunDeferredAsync(
                 key, execution, target, region, coordinator, generation, channels);
             _executions.Add(key, execution);
+            _visibleOcr[key] = result;
         }
         _ = ObserveCompletionAsync(key, execution);
     }
@@ -605,6 +745,7 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
                 : generation.SourceToken.TextTrackId.Value;
             OverlayDesiredState initial = coordinator.BeginRegion(
                 displayRegionId, generation.SourceToken, bounds, style, channels);
+            if (!IsCurrentExecution(key, execution, target.ProfileRevision)) return;
             await _overlay.ApplyAsync(initial, cancellationToken).ConfigureAwait(false);
             var outputs = new List<TranslationOutput>();
             TranslationRunOptions runOptions = _contextLedger.Apply(
@@ -625,7 +766,10 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
                         .ConfigureAwait(false);
                 }
                 if (coordinator.TryApply(output, out OverlayDesiredState? state))
+                {
+                    if (!IsCurrentExecution(key, execution, target.ProfileRevision)) return;
                     await _overlay.ApplyAsync(state!, cancellationToken).ConfigureAwait(false);
+                }
             }
             if (_records is not null)
                 await _records.SaveAsync(
@@ -672,6 +816,41 @@ public sealed class RuntimeTranslationPipeline : IRuntimeTranslationPipeline
         await RunAsync(
             key, execution, target, region, coordinator, generation, channels)
             .ConfigureAwait(false);
+    }
+
+    private bool IsCurrentExecution(
+        ExecutionKey key,
+        ActiveExecution execution,
+        long profileRevision)
+    {
+        lock (_gate)
+        {
+            return _executions.TryGetValue(key, out ActiveExecution? current) &&
+                ReferenceEquals(current, execution) &&
+                _targets.TryGetValue(key.TargetInstanceId, out RuntimeTranslationTarget? target) &&
+                target.ProfileRevision == profileRevision;
+        }
+    }
+
+    private static OcrResultSnapshot RebindProfileRevision(
+        OcrResultSnapshot snapshot,
+        long profileRevision)
+    {
+        SourceGenerationToken source = snapshot.ExecutionToken.Source;
+        var reboundSource = new SourceGenerationToken(
+            source.RuntimeEpoch,
+            source.TargetInstanceId,
+            source.Area,
+            source.TextTrackId,
+            source.SourceGeneration,
+            profileRevision);
+        var reboundExecution = new OcrExecutionToken(
+            reboundSource,
+            snapshot.ExecutionToken.OcrRunId,
+            snapshot.ExecutionToken.Attempt,
+            snapshot.ExecutionToken.ResultSequence,
+            snapshot.ExecutionToken.IsManual);
+        return snapshot with { ExecutionToken = reboundExecution };
     }
 
     private async Task ObserveCompletionAsync(ExecutionKey key, ActiveExecution execution)

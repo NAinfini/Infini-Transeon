@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $MsiPath,
-    [string] $WixPath = 'wix'
+    [string] $WixPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,7 +14,12 @@ $decompiledPath = Join-Path $temporaryRoot 'installer.wxs'
 
 try {
     New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
-    & $WixPath msi decompile $msiFullPath -o $decompiledPath
+    if ([string]::IsNullOrWhiteSpace($WixPath)) {
+        & dotnet tool run wix msi decompile $msiFullPath -o $decompiledPath
+    }
+    else {
+        & $WixPath msi decompile $msiFullPath -o $decompiledPath
+    }
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not decompile the MSI for layout verification.'
     }

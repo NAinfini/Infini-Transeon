@@ -65,6 +65,9 @@ public static class ProfileOverlaySnapshotFactory
                 ? 0
                 : checked((int)region.Overlay.CrossfadeDuration.TotalMilliseconds),
             ReducedMotion = reducedMotion,
+            MaximumHeight = region.Overlay.MaximumHeight,
+            AutomaticShrink = region.Overlay.AutomaticShrink,
+            NoScrollOverflow = region.Overlay.NoScrollOverflow,
         };
         OverlayPixelRect bounds = Map(
             detectedBounds ?? region.Bounds, targetPixelWidth, targetPixelHeight);

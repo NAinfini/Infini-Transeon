@@ -34,6 +34,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -409,6 +410,8 @@ struct RuntimeCaptureController::Implementation final
         bool processing_supported{};
         std::optional<capture::pixel_rect> target_crop;
         std::shared_ptr<capture::captured_frame> latest_frame;
+        std::shared_ptr<capture::captured_frame> reserved_manual_frame;
+        bool manual_reserved{};
         bool manual_requested{};
         overlay::background_frame_cache background_cache{background_cache_bytes};
         overlay::background_blur_cache background_blurs;
@@ -443,7 +446,9 @@ struct RuntimeCaptureController::Implementation final
             configuration = std::move(next);
             next_due.clear();
             ocr_regions.clear();
+            manual_reserved = false;
             manual_requested = false;
+            reserved_manual_frame.reset();
             background_cache.clear();
             background_blurs.clear();
             non_user_background_key.reset();
@@ -508,7 +513,7 @@ struct RuntimeCaptureController::Implementation final
         {
             const auto now = std::chrono::steady_clock::now();
             std::scoped_lock lock(gate);
-            return manual_requested ||
+            return manual_reserved || manual_requested ||
                 std::ranges::any_of(
                     ocr_regions,
                     [now](const auto& entry)
@@ -517,39 +522,60 @@ struct RuntimeCaptureController::Implementation final
                     });
         }
 
-        [[nodiscard]] bool queue_manual() noexcept
+        [[nodiscard]] bool reserve_manual() noexcept
+        {
+            const auto now = std::chrono::steady_clock::now();
+            std::scoped_lock lock(gate);
+            if (manual_reserved || manual_requested || !latest_frame || !configuration ||
+                !processing_supported ||
+                std::ranges::any_of(
+                    ocr_regions,
+                    [now](const auto& entry)
+                    {
+                        return entry.second.outstanding_until > now;
+                    }) ||
+                std::ranges::none_of(
+                    configuration->regions,
+                    [scan_remaining = configuration->scan_remaining_area](
+                        const ProcessingRegion& region)
+                    {
+                        return region.area_mode != 2U || scan_remaining;
+                    }))
+                return false;
+            manual_reserved = true;
+            reserved_manual_frame = latest_frame;
+            return true;
+        }
+
+        void cancel_manual_reservation() noexcept
+        {
+            std::scoped_lock lock(gate);
+            manual_reserved = false;
+            reserved_manual_frame.reset();
+        }
+
+        void dispatch_reserved_manual() noexcept
         {
             std::shared_ptr<capture::captured_frame> frame;
             {
-                const auto now = std::chrono::steady_clock::now();
                 std::scoped_lock lock(gate);
-                if (manual_requested || !latest_frame || !configuration ||
-                    !processing_supported ||
-                    std::ranges::any_of(
-                        ocr_regions,
-                        [now](const auto& entry)
-                        {
-                            return entry.second.outstanding_until > now;
-                        }) ||
-                    std::ranges::none_of(
-                        configuration->regions,
-                        [scan_remaining = configuration->scan_remaining_area](
-                            const ProcessingRegion& region)
-                        {
-                            return region.area_mode != 2U || scan_remaining;
-                        }))
-                    return false;
+                if (!manual_reserved || !reserved_manual_frame) return;
+                manual_reserved = false;
                 manual_requested = true;
-                frame = latest_frame;
+                frame = std::move(reserved_manual_frame);
             }
+
+            // ProcessingState owns the worker and is itself owned by the target entry. The
+            // controller cannot destroy either while this command is being applied, so a stopped
+            // worker is only possible during process teardown. Keep the failure explicit without
+            // turning a successfully reserved multi-target batch into a partial rejection.
             if (worker.submit(std::move(frame)) ==
                 scheduling::latest_worker_submit_status::stopped)
             {
                 std::scoped_lock lock(gate);
                 manual_requested = false;
-                return false;
+                ++processing_failures;
             }
-            return true;
         }
 
         [[nodiscard]] ThumbnailApplyResult make_thumbnail(
@@ -1692,7 +1718,8 @@ struct RuntimeCaptureController::Implementation final
         return targets.contains(target_instance_id);
     }
 
-    [[nodiscard]] ManualOcrApplyResult request_manual_ocr()
+    [[nodiscard]] ManualOcrApplyResult request_manual_ocr(
+        const ManualOcrRequest& request)
     {
         constexpr std::uint8_t scheduled = 1U;
         constexpr std::uint8_t no_targets = 2U;
@@ -1700,27 +1727,54 @@ struct RuntimeCaptureController::Implementation final
         constexpr std::uint8_t busy = 4U;
         constexpr std::uint8_t runtime_failure = 5U;
         constexpr std::uint8_t target_unavailable = 6U;
-        if (targets.empty())
+        const bool explicit_targets = request.scope == ManualOcrScope::explicit_targets;
+        if ((request.scope != ManualOcrScope::all_targets && !explicit_targets) ||
+            (request.scope == ManualOcrScope::all_targets &&
+                !request.target_instance_ids.empty()) ||
+            (explicit_targets && request.target_instance_ids.empty()))
+            return {false, runtime_failure, 0U, 0U, "ocr.manual.invalidScope"};
+        if (targets.empty() && !explicit_targets)
             return {false, no_targets, 0U, 0U, "ocr.manual.noTargets"};
 
-        std::vector<ProcessingState*> eligible;
-        std::size_t region_count{};
+        std::vector<Target*> requested;
+        if (explicit_targets)
+        {
+            requested.reserve(request.target_instance_ids.size());
+            for (const target_key& target_instance_id : request.target_instance_ids)
+            {
+                const auto target = targets.find(target_instance_id);
+                if (target == targets.end())
+                    return {false, target_unavailable, 0U, 0U, "ocr.manual.noMatch"};
+                requested.push_back(&target->second);
+            }
+        }
+        else
+        {
+            requested.reserve(targets.size());
+            for (auto& [_, target] : targets)
+                requested.push_back(&target);
+        }
+
+        std::vector<std::pair<ProcessingState*, std::size_t>> eligible;
         bool found_regions{};
-        eligible.reserve(targets.size());
-        for (auto& [_, target] : targets)
+        eligible.reserve(requested.size());
+        for (Target* target : requested)
         {
             const std::size_t target_regions =
-                target.processing_state->manual_region_count();
+                target->processing_state->manual_region_count();
+            const bool available = manual_ocr_target_available(
+                target->status->state.load(),
+                target->processing_state->manual_frame_available());
+            if (explicit_targets && !available)
+                return {false, target_unavailable, 0U, 0U,
+                    "ocr.manual.targetUnavailable"};
             if (target_regions == 0U) continue;
             found_regions = true;
-            if (!manual_ocr_target_available(
-                    target.status->state.load(),
-                    target.processing_state->manual_frame_available()))
+            if (!available)
                 continue;
-            if (target.processing_state->manual_request_busy())
+            if (target->processing_state->manual_request_busy())
                 return {false, busy, 0U, 0U, "ocr.manual.busy"};
-            eligible.push_back(target.processing_state.get());
-            region_count += target_regions;
+            eligible.emplace_back(target->processing_state.get(), target_regions);
         }
         if (eligible.empty())
         {
@@ -1730,17 +1784,40 @@ struct RuntimeCaptureController::Implementation final
                 "ocr.manual.targetUnavailable"};
         }
 
-        for (ProcessingState* state : eligible)
+        std::vector<ProcessingState*> reserved;
+        reserved.reserve(eligible.size());
+        for (const auto& [state, target_regions] : eligible)
         {
-            if (!state->queue_manual())
+            static_cast<void>(target_regions);
+            if (!state->reserve_manual())
+            {
+                for (ProcessingState* const reserved_state : reserved)
+                    reserved_state->cancel_manual_reservation();
                 return {false, runtime_failure, 0U, 0U,
                     "ocr.manual.scheduleFailed"};
+            }
+            reserved.push_back(state);
         }
+
+        // All target states are reserved before any worker can observe the manual request. From
+        // this point the command is committed and every target is dispatched; failures before this
+        // point roll back every reservation above.
+        for (ProcessingState* const state : reserved)
+            state->dispatch_reserved_manual();
+
+        const std::size_t scheduled_regions = std::accumulate(
+            eligible.begin(),
+            eligible.end(),
+            std::size_t{},
+            [](const std::size_t total, const auto& entry)
+            {
+                return total + entry.second;
+            });
         return {
             true,
             scheduled,
             static_cast<std::uint32_t>(eligible.size()),
-            static_cast<std::uint32_t>(region_count),
+            static_cast<std::uint32_t>(scheduled_regions),
             {},
         };
     }
@@ -2132,11 +2209,12 @@ OcrResultApplyResult RuntimeCaptureController::apply_ocr_result(
     }
 }
 
-ManualOcrApplyResult RuntimeCaptureController::request_manual_ocr() noexcept
+ManualOcrApplyResult RuntimeCaptureController::request_manual_ocr(
+    const ManualOcrRequest& request) noexcept
 {
     try
     {
-        return implementation_->request_manual_ocr();
+        return implementation_->request_manual_ocr(request);
     }
     catch (const std::bad_alloc&)
     {

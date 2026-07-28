@@ -258,6 +258,7 @@ public sealed record TranslationChannelDefinition(
     DisplaySlotDefinition DisplaySlot)
 {
     public int RetryCount { get; init; } = 1;
+    public TimeSpan? AttemptTimeout { get; init; }
 }
 
 public sealed record TranslationOutput(

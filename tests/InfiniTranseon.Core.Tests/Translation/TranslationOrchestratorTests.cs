@@ -146,6 +146,35 @@ public sealed class TranslationOrchestratorTests
     }
 
     [Fact]
+    public async Task ChannelAttemptTimeoutOverridesTheProfileDefaultBeforeProviderDispatch()
+    {
+        TranslationRequest? captured = null;
+        using OnlineProviderService providers = CreateProviders(
+            new Dictionary<string, Func<TranslationRequest, ProviderWireEvent[]>>
+            {
+                ["capture"] = request =>
+                {
+                    captured = request;
+                    return Success("ok");
+                },
+            });
+        TranslationChannelDefinition channel = CreateChannel("capture", 0) with
+        {
+            AttemptTimeout = TimeSpan.FromSeconds(11),
+        };
+        var orchestrator = new TranslationOrchestrator(new TranslationChannelRunner(providers));
+
+        await CollectAsync(orchestrator.RunAsync(
+            CreateSource(),
+            [channel],
+            CreateOptions() with { AttemptTimeout = TimeSpan.FromSeconds(2) },
+            TestContext.Current.CancellationToken));
+
+        Assert.NotNull(captured);
+        Assert.Equal(TimeSpan.FromSeconds(11), captured.Timeout);
+    }
+
+    [Fact]
     public async Task WorstCaseCostIsReservedBeforeDispatchAndBudgetBlocksTheNextCall()
     {
         int calls = 0;

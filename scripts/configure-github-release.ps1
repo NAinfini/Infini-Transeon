@@ -3,6 +3,8 @@ param(
     [string] $Repository = 'NAinfini/Infini-Transeon',
     [string] $Environment = 'release',
     [string] $CredentialTarget = 'InfiniTranseon/ReleaseSigning/Ed25519',
+    [switch] $ValidateOnly,
+    [switch] $UploadSecrets,
     [string] $TrustRootSource = (Join-Path $PSScriptRoot `
         '..\src\InfiniTranseon.App\Presentation\Services\ProductionReleaseTrustRoot.cs')
 )
@@ -15,6 +17,9 @@ if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
 }
 if ([string]::IsNullOrWhiteSpace($Environment)) {
     throw 'Environment must not be empty.'
+}
+if ($ValidateOnly -and $UploadSecrets) {
+    throw 'ValidateOnly and UploadSecrets cannot be used together.'
 }
 $trustRootFullPath = (Resolve-Path -LiteralPath $TrustRootSource).Path
 
@@ -30,7 +35,9 @@ namespace InfiniTranseon
     {
         public uint Flags;
         public uint Type;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string TargetName;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string Comment;
         public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
         public uint CredentialBlobSize;
@@ -38,7 +45,9 @@ namespace InfiniTranseon
         public uint Persist;
         public uint AttributeCount;
         public IntPtr Attributes;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string TargetAlias;
+        [MarshalAs(UnmanagedType.LPWStr)]
         public string UserName;
     }
 
@@ -49,6 +58,11 @@ namespace InfiniTranseon
 
         [DllImport("advapi32.dll", EntryPoint = "CredFree", SetLastError = false)]
         public static extern void CredFree(IntPtr credential);
+
+        public static StoredReleaseCredential Read(IntPtr credential)
+        {
+            return Marshal.PtrToStructure<StoredReleaseCredential>(credential);
+        }
     }
 }
 '@
@@ -67,9 +81,7 @@ try {
         $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
         throw "Release signing credential was not found (Win32 $errorCode). Run new-release-signing-key.ps1 first."
     }
-    $credential = [Runtime.InteropServices.Marshal]::PtrToStructure(
-        $credentialPointer,
-        [InfiniTranseon.StoredReleaseCredential])
+    $credential = [InfiniTranseon.ReleaseCredentialReader]::Read($credentialPointer)
     $privateBytes = [byte[]]::new($credential.CredentialBlobSize)
     [Runtime.InteropServices.Marshal]::Copy(
         $credential.CredentialBlob,
@@ -110,6 +122,18 @@ try {
     if ([Convert]::ToHexString($rawPublicKey).ToLowerInvariant() -ne $sourcePublicKey) {
         throw 'The stored release private key does not match the application trust root.'
     }
+
+    if ($ValidateOnly -or -not $UploadSecrets) {
+        return [pscustomobject]@{
+            Repository = $Repository
+            Environment = $Environment
+            ReleaseKeyId = $credential.UserName
+            WindowsCodeSigning = 'unsigned'
+            GitHubSecretChanged = $false
+            Validated = $true
+        }
+    }
+
     $privateKeyBase64 = [Convert]::ToBase64String($privateBytes)
 
     & gh auth status
@@ -131,6 +155,8 @@ try {
         Environment = $Environment
         ReleaseKeyId = $credential.UserName
         WindowsCodeSigning = 'unsigned'
+        GitHubSecretChanged = $true
+        Validated = $true
     }
 }
 finally {

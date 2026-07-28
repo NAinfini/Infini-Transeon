@@ -28,6 +28,11 @@ public sealed class RuntimeStateStore
         get { lock (_gate) return _currentEpoch; }
     }
 
+    public int ActiveTrackCount
+    {
+        get { lock (_gate) return _tracks.Count; }
+    }
+
     /// <summary>
     /// Adopts a new runtime epoch (EngineHost restart / reconnect). All prior track state belongs to
     /// the old runtime and is dropped so late old-epoch events are rejected as stale.

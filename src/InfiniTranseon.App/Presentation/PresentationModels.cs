@@ -1,6 +1,7 @@
 using InfiniTranseon.App.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Profiles;
 
 namespace InfiniTranseon.App.Presentation;
 
@@ -120,7 +121,15 @@ public sealed record WorkbenchChannelDraft(
     string Label,
     bool Enabled,
     int DisplayOrder,
-    IReadOnlyList<string>? RefinementProviderIds = null)
+    IReadOnlyList<string>? RefinementProviderIds = null,
+    int AttemptTimeoutMilliseconds = 30_000,
+    int RetryCount = 0,
+    IReadOnlyList<string>? FallbackProviderIds = null,
+    bool IncludeGameContext = true,
+    bool IncludeRecentContext = true,
+    bool MemoryCacheEnabled = true,
+    bool PersistentCacheEnabled = false,
+    Guid TranslationGroupId = default)
 {
     // XAML 类型信息生成器会为 init-only 属性发出赋值代码(CS8852),故按本文件既有模式
     // (HistoryEvent/ProviderRow)重声明为可写属性。
@@ -135,9 +144,18 @@ public sealed record WorkbenchChannelDraft(
     public int DisplayOrder { get; set; } = DisplayOrder;
 
     public IReadOnlyList<string>? RefinementProviderIds { get; set; } = RefinementProviderIds;
+    public int AttemptTimeoutMilliseconds { get; set; } = AttemptTimeoutMilliseconds;
+    public int RetryCount { get; set; } = RetryCount;
+    public IReadOnlyList<string>? FallbackProviderIds { get; set; } = FallbackProviderIds;
+    public bool IncludeGameContext { get; set; } = IncludeGameContext;
+    public bool IncludeRecentContext { get; set; } = IncludeRecentContext;
+    public bool MemoryCacheEnabled { get; set; } = MemoryCacheEnabled;
+    public bool PersistentCacheEnabled { get; set; } = PersistentCacheEnabled;
+    public Guid TranslationGroupId { get; set; } = TranslationGroupId;
 
     public IReadOnlyList<string> EffectiveRefinementProviderIds =>
         RefinementProviderIds ?? [];
+    public IReadOnlyList<string> EffectiveFallbackProviderIds => FallbackProviderIds ?? [];
 
     public string RefinementSummary =>
         string.Join(" → ", EffectiveRefinementProviderIds);
@@ -175,7 +193,10 @@ public sealed record WorkbenchRegionDraft(
     bool LockDegradation,
     double PreferredFontSize = 24,
     string? OutlineColor = null,
-    double OutlineWidth = 1);
+    double OutlineWidth = 1,
+    int OverlayMaximumHeight = 0,
+    bool OverlayAutomaticShrink = true,
+    bool OverlayNoScrollOverflow = true);
 
 public sealed record WorkbenchTargetDraft(
     Guid TargetId,
@@ -187,6 +208,8 @@ public sealed record WorkbenchTargetDraft(
     int RemainingAreaIntervalMilliseconds,
     IReadOnlyList<WorkbenchRegionDraft> Regions);
 
+public sealed record WorkbenchTranslationGroupDraft(Guid TranslationGroupId, string Name);
+
 public sealed record WorkbenchProfileDraft(
     Guid ProfileId,
     string Name,
@@ -195,7 +218,15 @@ public sealed record WorkbenchProfileDraft(
     string GameName,
     string GameDescription,
     int RecentLineCount,
-    IReadOnlyList<WorkbenchTargetDraft> Targets);
+    IReadOnlyList<WorkbenchTargetDraft> Targets,
+    IReadOnlyList<WorkbenchTranslationGroupDraft>? TranslationGroups = null,
+    Guid ActiveTranslationGroupId = default)
+{
+    public IReadOnlyList<WorkbenchTranslationGroupDraft> EffectiveTranslationGroups =>
+        TranslationGroups is { Count: > 0 }
+            ? TranslationGroups
+            : [new(ProfileDocument.DefaultTranslationGroupId, "Default")];
+}
 
 // Glossary snapshot for the active profile. Carries the entries plus enough context for the page to
 // render an intentional empty state when no profile exists yet.
@@ -326,11 +357,17 @@ public sealed partial class HotkeyEditorRow : ObservableObject
         Scope = binding.Scope;
         Gesture = binding.Gesture;
         Enabled = binding.Enabled;
+        SpecificTargets = binding.EffectiveSpecificTargets.ToArray();
     }
 
     public AppHotkeyAction Action { get; }
 
-    public AppHotkeyScope Scope { get; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChooseSpecificTargets))]
+    public partial AppHotkeyScope Scope { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<AppHotkeyTargetReference> SpecificTargets { get; set; }
 
     [ObservableProperty]
     public partial string ActionText { get; set; } = string.Empty;
@@ -347,7 +384,19 @@ public sealed partial class HotkeyEditorRow : ObservableObject
     [ObservableProperty]
     public partial string StatusText { get; set; } = string.Empty;
 
-    public AppHotkeyBinding ToBinding() => new(Action, Gesture, Enabled, Scope);
+    public bool IsScopeFixed => Action == AppHotkeyAction.EmergencyStop;
+
+    public bool IsComingSoon => Action == AppHotkeyAction.RetranslateCurrent;
+
+    public bool CanEdit => !IsComingSoon;
+
+    public bool CanChangeScope => CanEdit && !IsScopeFixed;
+
+    public bool CanChooseSpecificTargets =>
+        CanEdit && Scope == AppHotkeyScope.SpecificTargetGroup;
+
+    public AppHotkeyBinding ToBinding() => HotkeyBindingRules.Normalize(
+        new(Action, Gesture, Enabled, Scope, SpecificTargets));
 }
 
 public sealed record DiagnosticEvent(

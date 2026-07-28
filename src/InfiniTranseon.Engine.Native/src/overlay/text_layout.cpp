@@ -51,7 +51,7 @@ std::vector<slot_layout> layout_fixed_slots(const region& value, const float pix
         float font_size = value.style.preferred_font_size * pixels_per_dip;
         const float floor = value.style.minimum_font_size * pixels_per_dip;
         std::uint32_t lines = estimate_lines(item.text, available_width, font_size);
-        while (font_size > floor &&
+        while (value.style.automatic_shrink && font_size > floor &&
                (lines > value.style.maximum_lines || lines * font_size * 1.25F > available_height)) {
             font_size = std::max(floor, font_size - pixels_per_dip);
             lines = estimate_lines(item.text, available_width, font_size);

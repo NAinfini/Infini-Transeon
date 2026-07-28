@@ -105,6 +105,7 @@ public sealed class TranslationChannelRunner
         string currentText = source.SourceText;
         int stageIndex = 0;
         string? fallbackFrom = null;
+        TimeSpan attemptTimeout = channel.AttemptTimeout ?? options.AttemptTimeout;
 
         string[] providerAttempts = [channel.InitialProviderId, .. channel.FallbackProviderIds];
         int maximumAttempts = Math.Min(_retryPolicy.MaximumAttempts, channel.RetryCount + 1);
@@ -131,6 +132,7 @@ public sealed class TranslationChannelRunner
                                    channel.Cache,
                                    options.PromptVersion,
                                    options,
+                                   attemptTimeout,
                                    cancellationToken))
                 {
                     attempt = new AttemptResult(
@@ -174,6 +176,7 @@ public sealed class TranslationChannelRunner
                                channel.Cache,
                                $"{options.PromptVersion}:{refinement.PromptTemplateId}",
                                options,
+                               attemptTimeout,
                                cancellationToken))
             {
                 yield return output;
@@ -195,6 +198,7 @@ public sealed class TranslationChannelRunner
         CachePolicy cachePolicy,
         string promptVersion,
         TranslationRunOptions options,
+        TimeSpan attemptTimeout,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var execution = new StageExecutionToken(channelToken, stageId, stageIndex, attempt, 1);
@@ -224,7 +228,7 @@ public sealed class TranslationChannelRunner
             context,
             options.Glossary,
             execution,
-            options.AttemptTimeout,
+            attemptTimeout,
             $"{channelToken.ChannelRunId:N}-{stageIndex}-{attempt}",
             options.MaximumOutputCharacters,
             options.MaximumOutputTokens,
@@ -359,6 +363,11 @@ public sealed class TranslationChannelRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(channel.InitialProviderId);
         if (channel.RetryCount is < 0 or > 1)
             throw new ArgumentException("A translation channel supports at most one retry.", nameof(channel));
+        if (channel.AttemptTimeout is { } timeout &&
+            (timeout < TimeSpan.FromMilliseconds(100) || timeout > TimeSpan.FromMinutes(5)))
+            throw new ArgumentException(
+                "A translation channel timeout must be between 100 milliseconds and five minutes.",
+                nameof(channel));
         if (channel.FallbackProviderIds.Count > 2)
             throw new ArgumentException("A translation channel supports at most two fallback providers.", nameof(channel));
         if (channel.RefinementSteps.Count > 2)

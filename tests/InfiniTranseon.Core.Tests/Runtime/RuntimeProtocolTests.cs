@@ -522,6 +522,9 @@ public sealed class RuntimeProtocolTests
                     MinimumDwellMilliseconds = 650,
                     CrossfadeMilliseconds = 140,
                     ReducedMotion = true,
+                    MaximumHeight = 180,
+                    AutomaticShrink = false,
+                    NoScrollOverflow = true,
                 },
                 [
                     new OverlaySlotSnapshot(firstSlot, 0, OverlaySlotState.Streaming, "勇者：こんにちは", "主译")

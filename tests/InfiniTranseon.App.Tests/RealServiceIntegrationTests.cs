@@ -276,8 +276,22 @@ public sealed class RealServiceIntegrationTests
                             "llm.openai",
                             "llm.anthropic",
                         ],
+                        AttemptTimeoutMilliseconds = 11_000,
+                        RetryCount = 1,
+                        FallbackProviderIds =
+                        [
+                            "translation.google-cloud",
+                            "translation.azure-ai",
+                        ],
+                        IncludeGameContext = false,
+                        IncludeRecentContext = false,
+                        MemoryCacheEnabled = false,
+                        PersistentCacheEnabled = true,
                     },
                 ],
+                OverlayMaximumHeight = 180,
+                OverlayAutomaticShrink = false,
+                OverlayNoScrollOverflow = true,
             };
             WorkbenchProfileDraft changed = loaded with
             {
@@ -313,6 +327,20 @@ public sealed class RealServiceIntegrationTests
                 ["llm.openai", "llm.anthropic"],
                 saved.Targets[0].Regions[0].TranslationChannels[0]
                     .RefinementSteps.Select(step => step.ProviderId));
+            ProfileTranslationChannel savedChannel =
+                saved.Targets[0].Regions[0].TranslationChannels[0];
+            Assert.Equal(11_000, savedChannel.AttemptTimeoutMilliseconds);
+            Assert.Equal(1, savedChannel.RetryCount);
+            Assert.Equal(
+                ["translation.google-cloud", "translation.azure-ai"],
+                savedChannel.FallbackProviderIds);
+            Assert.False(savedChannel.IncludeGameContext);
+            Assert.False(savedChannel.IncludeRecentContext);
+            Assert.False(savedChannel.MemoryCacheEnabled);
+            Assert.True(savedChannel.PersistentCacheEnabled);
+            Assert.Equal(180, saved.Targets[0].Regions[0].Overlay.MaximumHeight);
+            Assert.False(saved.Targets[0].Regions[0].Overlay.AutomaticShrink);
+            Assert.True(saved.Targets[0].Regions[0].Overlay.NoScrollOverflow);
             ProfileRegion remaining = Assert.IsType<ProfileRegion>(
                 saved.Targets[0].RemainingAreaRegion);
             Assert.True(saved.Targets[0].ScanRemainingArea);
@@ -321,6 +349,129 @@ public sealed class RealServiceIntegrationTests
             Assert.Equal(
                 "translation.deepl",
                 Assert.Single(remaining.TranslationChannels).InitialProviderId);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Workbench_reconciles_translation_groups_for_a_remaining_area_only_target()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = NewTempRoot();
+        var options = new AppDataOptions(root);
+        try
+        {
+            var repository = new ProfileRepository(options.DatabasePath);
+            Guid removedGroupId = Guid.NewGuid();
+            Guid addedGroupId = Guid.NewGuid();
+            Guid preservedChannelId = Guid.NewGuid();
+            Guid preservedStageId = Guid.NewGuid();
+            ProfileRegion remainingArea = ProfileRegion.Create(
+                "Remaining area",
+                new NormalizedRect(0, 0, 1, 1)) with
+            {
+                AreaMode = CaptureAreaKind.RemainingArea,
+                TranslationChannels =
+                [
+                    ProfileTranslationChannel.Create("translation.deepl") with
+                    {
+                        ChannelId = preservedChannelId,
+                        TranslationGroupId = ProfileDocument.DefaultTranslationGroupId,
+                        RefinementSteps =
+                        [
+                            new ProfileRefinementStep
+                            {
+                                StageId = preservedStageId,
+                                ProviderId = "llm.openai",
+                                PromptTemplateId = "active-style-prompt",
+                            },
+                        ],
+                    },
+                    ProfileTranslationChannel.Create("translation.deepl") with
+                    {
+                        TranslationGroupId = removedGroupId,
+                    },
+                ],
+            };
+            var original = ProfileDocument.Create("Remaining only", "ja", "en") with
+            {
+                TranslationGroups =
+                [
+                    new ProfileTranslationGroup
+                    {
+                        TranslationGroupId = ProfileDocument.DefaultTranslationGroupId,
+                        Name = "Default",
+                    },
+                    new ProfileTranslationGroup
+                    {
+                        TranslationGroupId = removedGroupId,
+                        Name = "Remove me",
+                    },
+                ],
+                Targets =
+                [
+                    ProfileTarget.Create("Game", CaptureTargetKind.Window) with
+                    {
+                        ScanRemainingArea = true,
+                        RemainingAreaRegion = remainingArea,
+                    },
+                ],
+            };
+            await repository.SaveAsync(original, ct);
+            var service = new RealWorkbenchService(
+                repository,
+                new FakeRuntimeControlService(),
+                new RuntimeCapabilitiesService());
+            WorkbenchProfileDraft loaded = Assert.IsType<WorkbenchProfileDraft>(
+                await service.LoadAsync(original.ProfileId, ct));
+            WorkbenchProfileDraft changed = loaded with
+            {
+                TranslationGroups =
+                [
+                    loaded.EffectiveTranslationGroups.Single(group =>
+                        group.TranslationGroupId ==
+                            ProfileDocument.DefaultTranslationGroupId),
+                    new WorkbenchTranslationGroupDraft(addedGroupId, "New group"),
+                ],
+                ActiveTranslationGroupId = addedGroupId,
+            };
+
+            await service.SaveAndApplyAsync(changed, ct);
+
+            ProfileDocument saved = Assert.IsType<ProfileDocument>(
+                await repository.LoadAsync(original.ProfileId, ct));
+            ProfileRegion savedRemaining = Assert.IsType<ProfileRegion>(
+                Assert.Single(saved.Targets).RemainingAreaRegion);
+            Assert.DoesNotContain(
+                savedRemaining.TranslationChannels,
+                channel => channel.TranslationGroupId == removedGroupId);
+            ProfileTranslationChannel preserved = Assert.Single(
+                savedRemaining.TranslationChannels,
+                channel => channel.TranslationGroupId ==
+                    ProfileDocument.DefaultTranslationGroupId);
+            Assert.Equal(preservedChannelId, preserved.ChannelId);
+            Assert.Equal(
+                preservedStageId,
+                Assert.Single(preserved.RefinementSteps).StageId);
+            ProfileTranslationChannel added = Assert.Single(
+                savedRemaining.TranslationChannels,
+                channel => channel.TranslationGroupId == addedGroupId);
+            Assert.NotEqual(preservedChannelId, added.ChannelId);
+            Assert.NotEqual(
+                preservedStageId,
+                Assert.Single(added.RefinementSteps).StageId);
+            Assert.Equal(preserved.InitialProviderId, added.InitialProviderId);
+            Assert.True(new ProfileValidator().Validate(
+                saved,
+                RuntimeCapabilities.VersionOne,
+                new HashSet<string>(StringComparer.Ordinal)
+                {
+                    "translation.deepl",
+                    "llm.openai",
+                }).IsValid);
         }
         finally
         {
@@ -584,6 +735,46 @@ public sealed class RealServiceIntegrationTests
     // Covers Home profile pinning (decision #8 / D1): pinned profile IDs persist through the
     // Core-backed settings store across a fresh service instance, the same round-trip shape the app
     // relies on when it reloads after a restart.
+    [Fact]
+    public async Task Settings_specific_hotkey_targets_round_trip_as_explicit_profile_target_pairs()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = NewTempRoot();
+        var options = new AppDataOptions(root);
+        try
+        {
+            ISettingsService Make() => new RealSettingsService(
+                new ApplicationSettingsRepository(options.DatabasePath),
+                new FakeSecretReferenceService());
+
+            Guid profileId = Guid.NewGuid();
+            Guid targetId = Guid.NewGuid();
+            ApplicationSettings baseline = await Make().GetSettingsAsync(ct);
+            AppHotkeyBinding[] hotkeys = baseline.EffectiveHotkeys.Select(binding =>
+                binding.Action == AppHotkeyAction.ToggleOverlay
+                    ? binding with
+                    {
+                        Scope = AppHotkeyScope.SpecificTargetGroup,
+                        SpecificTargets = [new AppHotkeyTargetReference(profileId, targetId)],
+                    }
+                    : binding).ToArray();
+
+            await Make().UpdateAsync(baseline with { Hotkeys = hotkeys }, ct);
+
+            AppHotkeyBinding loaded = Assert.Single(
+                (await Make().GetSettingsAsync(ct)).EffectiveHotkeys,
+                binding => binding.Action == AppHotkeyAction.ToggleOverlay);
+            Assert.Equal(AppHotkeyScope.SpecificTargetGroup, loaded.Scope);
+            Assert.Equal(
+                [new AppHotkeyTargetReference(profileId, targetId)],
+                loaded.EffectiveSpecificTargets);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task Settings_pinned_profile_ids_persist_across_new_store_instances()
     {

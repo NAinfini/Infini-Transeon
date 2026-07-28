@@ -48,6 +48,13 @@ $reviewedLicenseOverrides = @{
     'Microsoft.WindowsAppSDK.Runtime@2.2.0' = 'LicenseRef-Microsoft-Software-License-Terms'
     'Microsoft.WindowsAppSDK.Widgets@2.0.5' = 'LicenseRef-Microsoft-Software-License-Terms'
     'Microsoft.WindowsAppSDK.WinUI@2.2.1' = 'LicenseRef-Microsoft-Software-License-Terms'
+
+    # ONNX Runtime ships an MIT license file in both NuGet packages, but CycloneDX
+    # does not convert file-based license metadata into an SPDX expression.
+    # Reviewed against the packaged license files on 2026-07-28. Versions are pinned
+    # so every upgrade forces a fresh review.
+    'Microsoft.ML.OnnxRuntime@1.27.1' = 'MIT'
+    'Microsoft.ML.OnnxRuntime.Managed@1.27.1' = 'MIT'
 }
 $notices = [System.Collections.Generic.List[object]]::new()
 

@@ -23,7 +23,13 @@ foreach ($name in $requiredSecrets) {
     }
 }
 
-$tempRoot = Join-Path $env:RUNNER_TEMP ("infini-release-signing-" + [Guid]::NewGuid().ToString('N'))
+$temporaryBase = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+    [IO.Path]::GetTempPath()
+} else {
+    $env:RUNNER_TEMP
+}
+$tempRoot = Join-Path $temporaryBase (
+    "infini-release-signing-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 $privateKeyPath = Join-Path $tempRoot 'release-ed25519.pem'
 $unsignedManifestPath = Join-Path $tempRoot 'manifest-unsigned.json'

@@ -98,6 +98,12 @@ public interface IRuntimeEngineHostSession : IAsyncDisposable
     ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
         TimeSpan timeout,
         CancellationToken cancellationToken);
+    ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+        RuntimeManualOcrRequest request,
+        TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromException<RuntimeManualOcrAcknowledgement>(
+            new EngineRuntimeUnsupportedOperationException("targetScopedManualOcr"));
     ValueTask<RuntimeOcrResultAcknowledgement> SubmitOcrResultAsync(
         OcrResultSnapshot result,
         TimeSpan timeout,
@@ -373,11 +379,21 @@ public sealed class RuntimeEngineHostSession : IRuntimeEngineHostSession
     public async ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
         TimeSpan timeout,
         CancellationToken cancellationToken)
+        => await RequestManualOcrAsync(
+            RuntimeManualOcrRequest.AllTargets,
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+
+    public async ValueTask<RuntimeManualOcrAcknowledgement> RequestManualOcrAsync(
+        RuntimeManualOcrRequest request,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(request);
         byte[] responsePayload = await RequestAsync(
             RuntimeMessageKind.ControlRequest,
             RuntimeMessageKind.ControlResponse,
-            RuntimeManualOcrPayloadCodec.EncodeRequest(),
+            RuntimeManualOcrPayloadCodec.EncodeRequest(request),
             timeout,
             cancellationToken).ConfigureAwait(false);
         try
