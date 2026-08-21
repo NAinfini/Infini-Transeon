@@ -113,6 +113,7 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
     private readonly bool _reducedMotion;
     private readonly object _budgetGate = new();
     private readonly Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? _budgetSnapshot;
+    private readonly Func<string, RuntimeOcrBackend> _ocrBackendResolver;
     private readonly CancellationTokenSource _stop = new();
     private readonly SemaphoreSlim _configurationGate = new(1, 1);
     private readonly List<BoundTarget> _active = [];
@@ -134,7 +135,9 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
         TimeSpan commandTimeout,
         IRuntimePerformanceController? performanceController = null,
         bool reducedMotion = false,
-        Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? budgetSnapshot = null)
+        Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? budgetSnapshot = null,
+        RuntimeLocalOcrEventHandler? localOcr = null,
+        Func<string, RuntimeOcrBackend>? ocrBackendResolver = null)
         : this(
             session,
             [new RuntimeProfileBinding(profile, profileRevision, bindings)],
@@ -144,7 +147,9 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
             commandTimeout,
             performanceController is null ? [] : [performanceController],
             reducedMotion,
-            budgetSnapshot)
+            budgetSnapshot,
+            localOcr,
+            ocrBackendResolver)
     {
     }
 
@@ -157,7 +162,9 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
         TimeSpan commandTimeout,
         IEnumerable<IRuntimePerformanceController>? performanceControllers = null,
         bool reducedMotion = false,
-        Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? budgetSnapshot = null)
+        Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? budgetSnapshot = null,
+        RuntimeLocalOcrEventHandler? localOcr = null,
+        Func<string, RuntimeOcrBackend>? ocrBackendResolver = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(profiles);
@@ -192,11 +199,13 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
             cloudOcr,
             pipeline.EnqueueAsync,
             targetLifecycle,
-            HandleBudgetSnapshotAsync);
+            HandleBudgetSnapshotAsync,
+            localOcr: localOcr);
         _commandTimeout = commandTimeout;
         _performance = Array.AsReadOnly(ownedPerformance);
         _reducedMotion = reducedMotion;
         _budgetSnapshot = budgetSnapshot;
+        _ocrBackendResolver = ocrBackendResolver ?? (_ => RuntimeOcrBackend.Windows);
     }
 
     public RuntimeBudgetSnapshot? LatestBudgetSnapshot
@@ -271,7 +280,8 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
                         binding.TargetInstanceId,
                         binding.ConfigurationRevision,
                         boundTarget.Profile.ProfileId,
-                        boundTarget.ProfileRevision);
+                        boundTarget.ProfileRevision,
+                        _ocrBackendResolver);
                 RuntimeProcessingConfigurationAcknowledgement processing =
                     await _session.ApplyProcessingConfigurationAsync(
                         configuration,
@@ -358,7 +368,8 @@ public sealed class RuntimeBackendCoordinator : IRecoverableRuntimeBackend, ITra
                         binding.TargetInstanceId,
                         binding.ConfigurationRevision,
                         profile.Profile.ProfileId,
-                        profile.ProfileRevision);
+                        profile.ProfileRevision,
+                        _ocrBackendResolver);
                 RuntimeProcessingConfigurationAcknowledgement processing =
                     await _session.ApplyProcessingConfigurationAsync(
                         configuration,

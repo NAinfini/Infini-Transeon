@@ -30,6 +30,7 @@ public sealed class DesignTokensTests
     [InlineData("SurfaceStroke")]
     [InlineData("AccentDefault")]
     [InlineData("AccentText")]
+    [InlineData("AccentDefaultText")]
     [InlineData("MotionFast")]
     [InlineData("MotionNormal")]
     [InlineData("FontMono")]

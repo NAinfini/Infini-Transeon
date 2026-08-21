@@ -106,11 +106,12 @@ public sealed class CustomRestAdapterStore
         return new CatalogProvider(
             definition.Id,
             definition.DisplayName,
-            "REST · custom",
+            "ProviderKindRestCustom",
             credentials,
-            $"{definition.Method} · {definition.Endpoint.Host}")
+            "ProviderDetailCustomRest")
         {
             IsCustom = true,
+            DetailArguments = [definition.Method, definition.Endpoint.Host],
         };
     }
 

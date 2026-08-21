@@ -72,7 +72,7 @@
             <NavigationView
                 x:Name="Nav"
                 Grid.Row="1"
-                IsBackButtonVisible="Auto"
+                IsBackButtonVisible="Collapsed"
                 IsBackEnabled="False"
                 IsSettingsVisible="False"
                 PaneDisplayMode="Left"

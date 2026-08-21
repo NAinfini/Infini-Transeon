@@ -6,6 +6,10 @@ public delegate ValueTask RuntimeCloudOcrEventHandler(
     RuntimeEngineEvent runtimeEvent,
     CancellationToken cancellationToken);
 
+public delegate ValueTask RuntimeLocalOcrEventHandler(
+    RuntimeEngineEvent runtimeEvent,
+    CancellationToken cancellationToken);
+
 public sealed class RuntimeEngineEventDispatcher
 {
     private readonly RuntimeCloudOcrEventHandler _cloudOcr;
@@ -13,13 +17,15 @@ public sealed class RuntimeEngineEventDispatcher
     private readonly Func<TargetLifecycleEvent, CancellationToken, ValueTask> _targetLifecycle;
     private readonly Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? _budgetSnapshot;
     private readonly int _maximumConcurrentCloudOcr;
+    private readonly RuntimeLocalOcrEventHandler? _localOcr;
 
     public RuntimeEngineEventDispatcher(
         RuntimeCloudOcrEventHandler cloudOcr,
         Func<OcrResultSnapshot, CancellationToken, ValueTask> ocrResult,
         Func<TargetLifecycleEvent, CancellationToken, ValueTask> targetLifecycle,
         Func<RuntimeBudgetSnapshot, CancellationToken, ValueTask>? budgetSnapshot = null,
-        int maximumConcurrentCloudOcr = 4)
+        int maximumConcurrentCloudOcr = 4,
+        RuntimeLocalOcrEventHandler? localOcr = null)
     {
         ArgumentNullException.ThrowIfNull(cloudOcr);
         ArgumentNullException.ThrowIfNull(ocrResult);
@@ -33,6 +39,7 @@ public sealed class RuntimeEngineEventDispatcher
         _targetLifecycle = targetLifecycle;
         _budgetSnapshot = budgetSnapshot;
         _maximumConcurrentCloudOcr = maximumConcurrentCloudOcr;
+        _localOcr = localOcr;
     }
 
     public async ValueTask DispatchAsync(
@@ -53,6 +60,13 @@ public sealed class RuntimeEngineEventDispatcher
             {
                 case RuntimeMessageKind.CloudOcrCropRequest:
                     await _cloudOcr(runtimeEvent, cancellationToken)
+                        .ConfigureAwait(false);
+                    return;
+                case RuntimeMessageKind.LocalOcrCropRequest:
+                    if (_localOcr is null)
+                        throw new RuntimeProtocolException(
+                            RuntimeProtocolError.UnexpectedMessageKind);
+                    await _localOcr(runtimeEvent, cancellationToken)
                         .ConfigureAwait(false);
                     return;
                 case RuntimeMessageKind.OcrResult:
@@ -132,11 +146,12 @@ public sealed class RuntimeEngineEventDispatcher
                 }
 
                 current = enumerator.Current;
-                if (current.MessageKind == RuntimeMessageKind.CloudOcrCropRequest)
+                if (current.MessageKind is RuntimeMessageKind.CloudOcrCropRequest or
+                    RuntimeMessageKind.LocalOcrCropRequest)
                 {
                     while (cloudOcr.Count >= _maximumConcurrentCloudOcr)
                         await ObserveOneCloudOcrAsync(cloudOcr).ConfigureAwait(false);
-                    cloudOcr.Add(DispatchOwnedCloudOcrAsync(current, stop.Token));
+                    cloudOcr.Add(DispatchOwnedOcrAsync(current, stop.Token));
                     current = null;
                 }
                 else
@@ -171,7 +186,7 @@ public sealed class RuntimeEngineEventDispatcher
         }
     }
 
-    private async Task DispatchOwnedCloudOcrAsync(
+    private async Task DispatchOwnedOcrAsync(
         RuntimeEngineEvent runtimeEvent,
         CancellationToken cancellationToken)
     {

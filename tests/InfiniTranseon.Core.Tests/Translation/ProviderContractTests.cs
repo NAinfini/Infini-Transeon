@@ -351,6 +351,9 @@ public sealed class ProviderContractTests
                 Assert.Equal("你好", completed.FinalText);
                 Assert.Equal(2, completed.LastProviderDeltaSequence);
             });
+        Assert.Same(
+            Assert.IsType<ProviderSnapshot>(events[1]).CumulativeText,
+            Assert.IsType<ProviderCompleted>(events[2]).FinalText);
         Assert.Equal([1L, 2L, 3L], events.Select(item => item.Execution.StreamSequence));
     }
 

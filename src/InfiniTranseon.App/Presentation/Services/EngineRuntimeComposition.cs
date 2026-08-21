@@ -1,7 +1,8 @@
-using InfiniTranseon.Contracts.Runtime;
+﻿using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Ocr;
 using InfiniTranseon.Core.Privacy;
+using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Runtime;
 using InfiniTranseon.Core.Scheduling;
 using InfiniTranseon.Core.Settings;
@@ -10,6 +11,65 @@ using InfiniTranseon.Core.Translation.Local;
 using InfiniTranseon.Core.Translation.Rest;
 
 namespace InfiniTranseon.App.Presentation.Services;
+
+/// <summary>
+/// A locally installed model, wired as a translation provider and held open. The worker process and
+/// the usage lease live exactly as long as the caller keeps this: dropping it lets the model be
+/// updated or removed again.
+/// </summary>
+public sealed class LocalTranslationProviderLease : IDisposable
+{
+    private readonly LocalWorkerSessionManager _sessions;
+    private readonly IDisposable _usage;
+    private readonly Task _warm;
+
+    public LocalTranslationProviderLease(
+        ProviderRegistration registration,
+        LocalWorkerSessionManager sessions,
+        IDisposable usage)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(usage);
+        Registration = registration;
+        _sessions = sessions;
+        _usage = usage;
+        _warm = WarmAsync(sessions);
+    }
+
+    public ProviderRegistration Registration { get; }
+
+    /// <summary>
+    /// This lease exists because something is about to translate with the model, so the worker is
+    /// launched either way; starting it here moves the multi-gigabyte model read off the first
+    /// translation instead of leaving the first line of a session seconds behind every later one.
+    /// A failure is not reported here because nothing has been translated yet: the first
+    /// translation repeats the same launch and surfaces the real error code through the provider.
+    /// </summary>
+    private static async Task WarmAsync(LocalWorkerSessionManager sessions)
+    {
+        try
+        {
+            await sessions.WarmAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _warm.GetAwaiter().GetResult();
+            _sessions.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        finally
+        {
+            _usage.Dispose();
+        }
+    }
+}
 
 /// <summary>
 /// Builds the real EngineHost runtime for a resolved profile binding: the shipped provider
@@ -32,6 +92,14 @@ public static class EngineRuntimeComposition
     public static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(30);
     public const int MaximumOutputCharacters = 8_192;
     public const int MaximumOutputTokens = 4_096;
+
+    /// <summary>Provider ids for models that run on this machine. The provider list writes these
+    /// ids, profiles store them, and the runtime resolves them, so the shape lives in one place.
+    /// </summary>
+    public const string LocalTranslationProviderIdPrefix = "translation.local.";
+
+    public static string LocalTranslationProviderId(string modelId) =>
+        LocalTranslationProviderIdPrefix + modelId;
 
     /// <summary>DeepL Pro endpoint definition shared by runtime and credential catalog.</summary>
     public static DeclarativeRestAdapterDefinition DeepLDefinition { get; } =
@@ -129,13 +197,12 @@ public static class EngineRuntimeComposition
     public static GoogleVisionOcrOptions GoogleVisionOptions { get; } = new(
         new Uri("https://vision.googleapis.com/v1/images:annotate"),
         "ocr.google-cloud-vision",
-        ProxyPolicy.System,
-        LanguageHints: []);
+        ProxyPolicy.System);
 
-    /// <summary>Baidu general OCR with its OAuth client-credential token endpoint.</summary>
+    /// <summary>Baidu accurate OCR with automatic language detection and position data.</summary>
     public static BaiduOcrOptions BaiduOcrOptions { get; } = new(
         new Uri("https://aip.baidubce.com/oauth/2.0/token"),
-        new Uri("https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"),
+        new Uri("https://aip.baidubce.com/rest/2.0/ocr/v1/accurate"),
         "ocr.baidu.client-id",
         "ocr.baidu.client-secret",
         ProxyPolicy.System);
@@ -173,33 +240,42 @@ public static class EngineRuntimeComposition
     public static ProviderRegistry BuildProviderRegistry(
         IBoundCredentialStore credentials,
         IReadOnlyList<DeclarativeRestAdapterDefinition>? customAdapters = null,
-        IReadOnlyList<ProviderRegistration>? additionalRegistrations = null)
+        IReadOnlyList<ProviderRegistration>? additionalRegistrations = null,
+        bool strictOffline = false)
     {
         ArgumentNullException.ThrowIfNull(credentials);
-        var registrations =
-            new List<ProviderRegistration>(BuiltInProviderSpecs.CreateTranslationRegistrations(credentials));
-        foreach (DeclarativeRestAdapterDefinition definition in customAdapters ?? [])
+        List<ProviderRegistration> registrations = strictOffline
+            ? []
+            : new List<ProviderRegistration>(
+                BuiltInProviderSpecs.CreateTranslationRegistrations(credentials));
+        if (!strictOffline)
         {
-            registrations.Add(new ProviderRegistration(
-                ProviderDescriptor.Online(
-                    definition.Id,
-                    ProviderKind.Translation,
-                    $"custom-rest-v{definition.SchemaVersion}"),
-                () => new DeclarativeRestProvider(
-                    definition,
-                    ClientFor(definition.Id, definition.Endpoint, ProxyPolicy.System),
-                    credentials)));
+            foreach (DeclarativeRestAdapterDefinition definition in customAdapters ?? [])
+            {
+                registrations.Add(new ProviderRegistration(
+                    ProviderDescriptor.Online(
+                        definition.Id,
+                        ProviderKind.Translation,
+                        $"custom-rest-v{definition.SchemaVersion}"),
+                    () => new DeclarativeRestProvider(
+                        definition,
+                        ClientFor(definition.Id, definition.Endpoint, ProxyPolicy.System),
+                        credentials)));
+            }
         }
-        registrations.AddRange(additionalRegistrations ?? []);
+        registrations.AddRange((additionalRegistrations ?? []).Where(registration =>
+            !strictOffline || !registration.Descriptor.RequiresNetwork));
 
         return new ProviderRegistry(registrations);
     }
 
     public static IReadOnlyList<OcrProviderRegistration> BuildCloudOcrRegistrations(
         IBoundCredentialStore credentials,
-        IReadOnlyDictionary<string, string>? providerEndpoints = null)
+        IReadOnlyDictionary<string, string>? providerEndpoints = null,
+        bool strictOffline = false)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        if (strictOffline) return [];
         return BuiltInProviderSpecs.CreateOcrRegistrations(
             credentials,
             providerEndpoints ?? new Dictionary<string, string>(StringComparer.Ordinal));
@@ -216,26 +292,40 @@ public static class EngineRuntimeComposition
         bool reducedMotion = false,
         IReadOnlyDictionary<string, string>? providerEndpoints = null,
         LocalModelManagementService? localModels = null,
-        AppDataOptions? appData = null)
+        AppDataOptions? appData = null,
+        OcrBackendPreference ocrBackend = OcrBackendPreference.Automatic)
     {
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         LocalProviderResources local = CreateLocalProviders(binding, localModels, appData);
+        bool strictOffline = binding.Profile.StrictOffline;
+        var paddleCatalog = appData is null
+            ? null
+            : new ManagedPaddleOcrModelCatalog(appData.ModelDirectory);
+        var ocrAvailability = new WindowsOcrLanguageAvailability(
+            installedModelLanguages: () => paddleCatalog?.InstalledLanguageTags ?? []);
         OnlineProviderService? providers = null;
         try
         {
             providers = new OnlineProviderService(
-                BuildProviderRegistry(credentials, customAdapters, local.Registrations),
+                BuildProviderRegistry(
+                    credentials,
+                    customAdapters,
+                    local.Registrations,
+                    strictOffline),
                 new ProviderServiceLimits());
             EngineRuntimeBackendFactory backendFactory = EngineRuntimeBackendAssembler.CreateFactory(
                 new EngineRuntimeBackendOptions(binding, providers, CommandTimeout, Stabilizer)
                 {
                     HistorySink = historySink,
-                    CloudOcrProviders = BuildCloudOcrRegistrations(credentials, providerEndpoints),
+                    CloudOcrProviders = BuildCloudOcrRegistrations(
+                        credentials,
+                        providerEndpoints,
+                        strictOffline),
                     TranslationMemory = new TranslationMemory(
                         new TranslationMemoryOptions(
-                            PersistentEnabled: true,
+                            PersistentEnabled: UsesPersistentTranslationMemory(binding.Profile),
                             FuzzyEnabled: false),
                         databasePath),
                     Corrections = new CorrectionStore(databasePath),
@@ -249,6 +339,15 @@ public static class EngineRuntimeComposition
                         },
                     },
                     ReducedMotion = reducedMotion,
+                    OcrBackendResolver = language => OcrRuntimeBackendResolver.Resolve(
+                        ocrBackend,
+                        ocrAvailability,
+                        language),
+                    LocalOcrProbeFactory = paddleCatalog is null || localModels is null
+                        ? null
+                        : () => new PaddleOcrProbe(
+                            new ManagedPaddleOcrModelCatalog(appData!.ModelDirectory),
+                            modelSet => AcquirePaddleOcrUsage(localModels, modelSet)),
                 });
             return EngineRuntimeService.CreateForLaunch(
                 EngineHostLocator.Locate(),
@@ -265,6 +364,88 @@ public static class EngineRuntimeComposition
         }
     }
 
+    private static IDisposable AcquirePaddleOcrUsage(
+        LocalModelManagementService localModels,
+        PaddleOcrModelSet modelSet)
+    {
+        ArgumentNullException.ThrowIfNull(localModels);
+        ArgumentNullException.ThrowIfNull(modelSet);
+        var identities = new HashSet<(string ModelId, string Version)>();
+        foreach (string path in new[]
+        {
+            modelSet.DetectionModelPath,
+            modelSet.RecognitionModelPath,
+            modelSet.ClassificationModelPath,
+        }.OfType<string>())
+        {
+            DirectoryInfo slot = Directory.GetParent(path)
+                ?? throw new InvalidDataException("OCR model path has no package slot.");
+            DirectoryInfo version = slot.Parent
+                ?? throw new InvalidDataException("OCR model path has no package version.");
+            DirectoryInfo model = version.Parent
+                ?? throw new InvalidDataException("OCR model path has no package identity.");
+            identities.Add((model.Name, version.Name));
+        }
+
+        var leases = new List<IDisposable>(identities.Count);
+        try
+        {
+            foreach ((string modelId, string version) in identities)
+                leases.Add(localModels.AcquireUsage(modelId, version));
+            return new OwnedModelLeases(leases);
+        }
+        catch (LocalModelRemovalInProgressException exception)
+        {
+            foreach (IDisposable lease in leases) lease.Dispose();
+            throw new PaddleOcrUnavailableException(
+                PaddleOcrUnavailableException.ModelBusyCode,
+                exception.Message);
+        }
+        catch
+        {
+            foreach (IDisposable lease in leases) lease.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class OwnedModelLeases(IReadOnlyList<IDisposable> leases) : IDisposable
+    {
+        public void Dispose()
+        {
+            for (int index = leases.Count - 1; index >= 0; index--)
+                leases[index].Dispose();
+        }
+    }
+
+    internal static HashSet<string> ReferencedLocalProviderIds(ProfileDocument profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return EnabledTranslationChannels(profile)
+            .SelectMany(channel => new[] { channel.InitialProviderId }
+                .Concat(channel.FallbackProviderIds)
+                .Concat(channel.RefinementSteps.Select(step => step.ProviderId)))
+            .Where(providerId => providerId.StartsWith(
+                LocalTranslationProviderIdPrefix,
+                StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    internal static bool UsesPersistentTranslationMemory(ProfileDocument profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return EnabledTranslationChannels(profile).Any(channel => channel.PersistentCacheEnabled);
+    }
+
+    private static IEnumerable<ProfileTranslationChannel> EnabledTranslationChannels(
+        ProfileDocument profile) => profile.Targets
+        .Where(target => target.Enabled)
+        .SelectMany(target => target.Regions.Concat(target.RemainingAreaRegion is null
+            ? []
+            : [target.RemainingAreaRegion]))
+        .Where(region => region.Enabled && region.TranslationEnabled)
+        .SelectMany(region => region.TranslationChannels)
+        .Where(channel => channel.Enabled);
+
     private static LocalProviderResources CreateLocalProviders(
         RuntimeProfileBinding binding,
         LocalModelManagementService? localModels,
@@ -273,73 +454,91 @@ public static class EngineRuntimeComposition
         if (localModels is null || appData is null)
             return new LocalProviderResources();
 
-        HashSet<string> referenced = binding.Targets
-            .Select(target => target.ProfileTarget)
-            .SelectMany(target => target.Regions
-                .Concat(target.RemainingAreaRegion is null
-                    ? []
-                    : [target.RemainingAreaRegion]))
-            .Where(region => region.Enabled && region.TranslationEnabled)
-            .SelectMany(region => region.TranslationChannels)
-            .Where(channel => channel.Enabled)
-            .SelectMany(channel => new[] { channel.InitialProviderId }
-                .Concat(channel.FallbackProviderIds)
-                .Concat(channel.RefinementSteps.Select(step => step.ProviderId)))
-            .Where(providerId => providerId.StartsWith(
-                "translation.local.",
-                StringComparison.Ordinal))
-            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> referenced = ReferencedLocalProviderIds(binding.Profile);
         if (referenced.Count == 0)
             return new LocalProviderResources();
 
         var resources = new LocalProviderResources();
         try
         {
-            foreach (LocalModelPackageView model in localModels.GetSnapshot().Packages
-                .Where(model => model.State == LocalModelInstallState.Installed))
+            foreach (string providerId in referenced)
             {
-                string providerId = $"translation.local.{model.ModelId}";
-                if (!referenced.Remove(providerId))
-                    continue;
-                string scratch = Path.Combine(
-                    appData.ModelDirectory,
-                    ".worker-scratch",
-                    $"{model.ModelId}-{model.Version}");
-                var sandbox = new LocalWorkerSandboxOptions(
-                    Path.Combine(
-                        AppContext.BaseDirectory,
-                        LocalModelRuntimeAvailability.WorkerExecutableName),
-                    WorkerAssemblyPath: null,
-                    model.PackageDirectory,
-                    scratch,
-                    LocalWorkerProtocol.DefaultMaximumCommittedBytes,
-                    HandshakeTimeout);
-                var sessions = new LocalWorkerSessionManager(
-                    async cancellationToken => await LocalWorkerSandboxLauncher.LaunchAsync(
-                        sandbox,
-                        cancellationToken).ConfigureAwait(false),
-                    new LocalWorkerSessionManagerOptions(
-                        IdleTimeout: TimeSpan.FromSeconds(30),
-                        PinWarm: false));
-                IDisposable lease = localModels.AcquireUsage(model.ModelId, model.Version);
-                resources.Add(
-                    new ProviderRegistration(
-                        new LocalTranslationProvider(
-                            providerId,
-                            model.ModelId,
-                            sessions).Descriptor,
-                        () => new LocalTranslationProvider(
-                            providerId,
-                            model.ModelId,
-                            sessions)),
-                    sessions,
-                    lease);
+                if (CreateLocalTranslationProvider(providerId, localModels, appData) is { } lease)
+                    resources.Add(lease);
             }
             return resources;
         }
         catch
         {
             resources.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Serves <paramref name="providerId"/> from a model installed on this machine, or returns null
+    /// when no installed package answers to that id. Disposing releases the worker and the usage
+    /// lease that keeps the package from being removed underneath it.
+    ///
+    /// Both the running engine and the wizard's translation test resolve local translators here, so
+    /// a model the provider list offers is a model both of them can actually run.
+    /// </summary>
+    public static LocalTranslationProviderLease? CreateLocalTranslationProvider(
+        string providerId,
+        LocalModelManagementService localModels,
+        AppDataOptions appData)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
+        ArgumentNullException.ThrowIfNull(localModels);
+        ArgumentNullException.ThrowIfNull(appData);
+
+        LocalModelPackageView? model = localModels.GetSnapshot().Packages.FirstOrDefault(package =>
+            package.State == LocalModelInstallState.Installed &&
+            string.Equals(
+                LocalTranslationProviderId(package.ModelId),
+                providerId,
+                StringComparison.Ordinal));
+        if (model is null)
+            return null;
+
+        string scratch = Path.Combine(
+            appData.ModelDirectory,
+            ".worker-scratch",
+            $"{model.ModelId}-{model.Version}");
+        var sandbox = new LocalWorkerSandboxOptions(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                LocalModelRuntimeAvailability.WorkerExecutableName),
+            WorkerAssemblyPath: null,
+            model.PackageDirectory,
+            scratch,
+            LocalWorkerProtocol.DefaultMaximumCommittedBytes,
+            HandshakeTimeout);
+        // Pinned rather than idle-retired: the model this worker holds is a multi-gigabyte file, and
+        // reloading it costs seconds that land inside a single translation attempt's timeout. A
+        // player who reads one line, plays for a minute and reads the next would pay that reload
+        // every time. The lease below is what bounds the worker's life instead — it is disposed with
+        // the runtime session that resolved this provider, so the memory is released when the user
+        // stops translating rather than between two sentences.
+        var sessions = new LocalWorkerSessionManager(
+            async cancellationToken => await LocalWorkerSandboxLauncher.LaunchAsync(
+                sandbox,
+                cancellationToken).ConfigureAwait(false),
+            new LocalWorkerSessionManagerOptions(
+                IdleTimeout: TimeSpan.FromSeconds(30),
+                PinWarm: true));
+        try
+        {
+            return new LocalTranslationProviderLease(
+                new ProviderRegistration(
+                    new LocalTranslationProvider(providerId, model.ModelId, sessions).Descriptor,
+                    () => new LocalTranslationProvider(providerId, model.ModelId, sessions)),
+                sessions,
+                localModels.AcquireUsage(model.ModelId, model.Version));
+        }
+        catch
+        {
+            sessions.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
         }
     }
@@ -357,33 +556,20 @@ public static class EngineRuntimeComposition
 
     private sealed class LocalProviderResources : IDisposable
     {
-        private readonly List<LocalWorkerSessionManager> _sessions = [];
-        private readonly List<IDisposable> _leases = [];
+        private readonly List<LocalTranslationProviderLease> _leases = [];
 
         public List<ProviderRegistration> Registrations { get; } = [];
 
-        public void Add(
-            ProviderRegistration registration,
-            LocalWorkerSessionManager sessions,
-            IDisposable lease)
+        public void Add(LocalTranslationProviderLease lease)
         {
-            Registrations.Add(registration);
-            _sessions.Add(sessions);
+            Registrations.Add(lease.Registration);
             _leases.Add(lease);
         }
 
         public void Dispose()
         {
-            try
-            {
-                foreach (LocalWorkerSessionManager sessions in _sessions)
-                    sessions.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            }
-            finally
-            {
-                foreach (IDisposable lease in _leases)
-                    lease.Dispose();
-            }
+            foreach (LocalTranslationProviderLease lease in _leases)
+                lease.Dispose();
         }
     }
 

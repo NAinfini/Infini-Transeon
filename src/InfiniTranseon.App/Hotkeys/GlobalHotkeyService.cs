@@ -209,10 +209,10 @@ public sealed class GlobalHotkeyService : IDisposable
                 result.Applied
                     ? StatusEventSeverity.Information
                     : StatusEventSeverity.Warning,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["action"] = binding.Action.ToString(),
-                    ["scope"] = binding.Scope.ToString(),
+                    ["action"] = binding.Action,
+                    ["scope"] = binding.Scope,
                     ["resolvedTargetCount"] = result.ResolvedTargetCount,
                     ["applied"] = result.Applied,
                 }));
@@ -225,11 +225,11 @@ public sealed class GlobalHotkeyService : IDisposable
                 $"hotkey.{binding.Action}.failed",
                 "status.hotkey.failed",
                 StatusEventSeverity.Error,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["action"] = binding.Action.ToString(),
-                    ["scope"] = binding.Scope.ToString(),
-                    ["error"] = exception.Message,
+                    ["action"] = binding.Action,
+                    ["scope"] = binding.Scope,
+                    ["failureType"] = StatusArgument.Id(exception.GetType().Name),
                 }));
         }
     }

@@ -25,7 +25,10 @@ public sealed record HistoryRecord(
     Guid SourceEventId,
     DateTimeOffset CapturedAtUtc,
     string SourceText,
-    IReadOnlyList<HistoryTranslationResult> Results);
+    IReadOnlyList<HistoryTranslationResult> Results,
+    // The region name as it read when the text was captured. Resolving it from the profile at read
+    // time would rename or lose the region on every later edit, which is not what the entry recorded.
+    string RegionName = "");
 
 public sealed record HistoryCursor(DateTimeOffset CapturedAtUtc, Guid SourceEventId);
 public sealed record HistoryPage(IReadOnlyList<HistoryRecord> Items, HistoryCursor? NextCursor);
@@ -62,13 +65,15 @@ public sealed class HistoryRepository
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO translation_history(
-                profile_id, source_event_id, captured_at_utc, source_text, results_document, byte_size)
-            VALUES ($profile, $event, $captured, $source, $results, $bytes)
+                profile_id, source_event_id, captured_at_utc, source_text, results_document,
+                byte_size, region_name)
+            VALUES ($profile, $event, $captured, $source, $results, $bytes, $region)
             ON CONFLICT(profile_id, source_event_id) DO UPDATE SET
                 captured_at_utc=excluded.captured_at_utc,
                 source_text=excluded.source_text,
                 results_document=excluded.results_document,
-                byte_size=excluded.byte_size;
+                byte_size=excluded.byte_size,
+                region_name=excluded.region_name;
             """;
         command.Parameters.AddWithValue("$profile", record.ProfileId.ToString("D"));
         command.Parameters.AddWithValue("$event", record.SourceEventId.ToString("D"));
@@ -76,6 +81,7 @@ public sealed class HistoryRepository
         command.Parameters.Add("$source", SqliteType.Blob).Value = source;
         command.Parameters.Add("$results", SqliteType.Blob).Value = results;
         command.Parameters.AddWithValue("$bytes", bytes);
+        command.Parameters.AddWithValue("$region", record.RegionName);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await CleanupAsync(connection, transaction, record.ProfileId, cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -94,7 +100,7 @@ public sealed class HistoryRepository
         await using SqliteConnection connection = DatabaseConnection.Open(_databasePath!);
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT source_event_id, captured_at_utc, source_text, results_document
+            SELECT source_event_id, captured_at_utc, source_text, results_document, region_name
             FROM translation_history
             WHERE profile_id = $profile AND (
                 $hasCursor = 0 OR captured_at_utc < $captured OR
@@ -116,7 +122,8 @@ public sealed class HistoryRepository
                 Guid.Parse(reader.GetString(0)),
                 DateTimeOffset.Parse(reader.GetString(1), System.Globalization.CultureInfo.InvariantCulture),
                 Encoding.UTF8.GetString((byte[])reader[2]),
-                JsonSerializer.Deserialize<HistoryTranslationResult[]>((byte[])reader[3]) ?? []));
+                JsonSerializer.Deserialize<HistoryTranslationResult[]>((byte[])reader[3]) ?? [],
+                reader.GetString(4)));
         }
         bool hasMore = result.Count > pageSize;
         if (hasMore) result.RemoveAt(result.Count - 1);
@@ -243,7 +250,9 @@ public sealed class HistoryRepository
         if (record.ProfileId == Guid.Empty || record.SourceEventId == Guid.Empty)
             throw new ArgumentException("History identities cannot be empty.", nameof(record));
         ArgumentException.ThrowIfNullOrWhiteSpace(record.SourceText);
+        ArgumentNullException.ThrowIfNull(record.RegionName);
         if (record.CapturedAtUtc.Offset != TimeSpan.Zero || record.SourceText.Length > 65_536 ||
+            record.RegionName.Length > 256 ||
             record.Results.Count > 20 || record.Results.Any(result =>
                 result.ChannelId == Guid.Empty || string.IsNullOrWhiteSpace(result.ProviderId) ||
                 result.ProviderId.Length > 128 || result.Text.Length > 65_536 ||

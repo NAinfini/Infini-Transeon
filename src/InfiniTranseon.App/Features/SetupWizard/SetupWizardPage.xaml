@@ -34,8 +34,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="4">
-                <TextBlock x:Uid="SetupWizardTitle" Style="{StaticResource PageTitleStyle}" />
-                <TextBlock x:Uid="SetupWizardSubtitle" Style="{StaticResource CaptionTextStyle}" />
+                <TextBlock x:Name="WizardTitle" x:Uid="SetupWizardTitle" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock x:Name="WizardSubtitle" x:Uid="SetupWizardSubtitle" Style="{StaticResource CaptionTextStyle}" />
             </StackPanel>
             <Button
                 x:Name="SaveDraftExitButton"
@@ -61,13 +61,14 @@
                     Grid.Column="0"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left"
+                    AutomationProperties.LabeledBy="{x:Bind Step1CaptionText}"
                     IsEnabled="{x:Bind ViewModel.IsStep1Reachable, Mode=OneWay}"
                     Click="OnStepButtonClick"
                     Tag="0">
                     <StackPanel Spacing="6">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="1" Style="{StaticResource MetricTextStyle}" />
-                            <TextBlock x:Uid="SetupStep1Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="Step1CaptionText" x:Uid="SetupStep1Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
                         </StackPanel>
                         <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
                                 Visibility="{x:Bind ViewModel.IsStep1, Mode=OneWay}" />
@@ -78,13 +79,14 @@
                     Grid.Column="1"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left"
+                    AutomationProperties.LabeledBy="{x:Bind Step2CaptionText}"
                     IsEnabled="{x:Bind ViewModel.IsStep2Reachable, Mode=OneWay}"
                     Click="OnStepButtonClick"
                     Tag="1">
                     <StackPanel Spacing="6">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="2" Style="{StaticResource MetricTextStyle}" />
-                            <TextBlock x:Uid="SetupStep2Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="Step2CaptionText" x:Uid="SetupStep2Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
                         </StackPanel>
                         <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
                                 Visibility="{x:Bind ViewModel.IsStep2, Mode=OneWay}" />
@@ -95,13 +97,14 @@
                     Grid.Column="2"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left"
+                    AutomationProperties.LabeledBy="{x:Bind Step3CaptionText}"
                     IsEnabled="{x:Bind ViewModel.IsStep3Reachable, Mode=OneWay}"
                     Click="OnStepButtonClick"
                     Tag="2">
                     <StackPanel Spacing="6">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="3" Style="{StaticResource MetricTextStyle}" />
-                            <TextBlock x:Uid="SetupStep3Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="Step3CaptionText" x:Uid="SetupStep3Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
                         </StackPanel>
                         <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
                                 Visibility="{x:Bind ViewModel.IsStep3, Mode=OneWay}" />
@@ -112,13 +115,14 @@
                     Grid.Column="3"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left"
+                    AutomationProperties.LabeledBy="{x:Bind Step4CaptionText}"
                     IsEnabled="{x:Bind ViewModel.IsStep4Reachable, Mode=OneWay}"
                     Click="OnStepButtonClick"
                     Tag="3">
                     <StackPanel Spacing="6">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="4" Style="{StaticResource MetricTextStyle}" />
-                            <TextBlock x:Uid="SetupStep4Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="Step4CaptionText" x:Uid="SetupStep4Caption" FontWeight="SemiBold" FontSize="{StaticResource TypeBody}" TextWrapping="Wrap" />
                         </StackPanel>
                         <Border Height="3" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"
                                 Visibility="{x:Bind ViewModel.IsStep4, Mode=OneWay}" />
@@ -142,8 +146,10 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="12">
                             <TextBlock x:Name="SetupStep1Heading" x:Uid="SetupStep1Heading" Style="{StaticResource SectionHeaderStyle}" />
+                            <!-- A left-aligned box sizes to its content, so an empty name field
+                                 rendered as a sliver the user could barely aim at. -->
                             <TextBox x:Uid="SetupProfileNameBox" Text="{x:Bind ViewModel.ProfileName, Mode=TwoWay}"
-                                     MaxWidth="420" HorizontalAlignment="Left" />
+                                     Width="420" HorizontalAlignment="Left" />
                             <TextBlock x:Uid="SetupStep1Body" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
                             <!-- Borderless capture consent needs package identity. Without it the OS
                                  draws its capture border over the game, which users read as a bug in
@@ -153,11 +159,16 @@
                                 Severity="Informational"
                                 IsClosable="True"
                                 IsOpen="False" />
+                            <!-- The checked rows are the whole selection, and they are written in one
+                                 direction only: user click -> view model. Binding SelectedItem back
+                                 into a multi-select list gave the selection a second writer, and the
+                                 two drifted apart — rows the user had unchecked stayed selected in
+                                 the view model, so the preview and the region step kept working on a
+                                 target that was no longer chosen. -->
                             <ListView
                                       x:Name="CaptureTargetList"
                                       AutomationProperties.LabeledBy="{x:Bind SetupStep1Heading}"
                                       ItemsSource="{x:Bind ViewModel.Targets, Mode=OneWay}"
-                                      SelectedItem="{x:Bind ViewModel.SelectedTarget, Mode=TwoWay}"
                                       SelectionChanged="OnCaptureTargetSelectionChanged"
                                       SelectionMode="Multiple" MaxHeight="260" HorizontalAlignment="Stretch">
                                 <ListView.ItemTemplate>
@@ -176,6 +187,34 @@
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
+                            <InfoBar
+                                x:Uid="SetupMissingTargetsBar"
+                                Severity="Warning"
+                                IsClosable="False"
+                                IsOpen="{x:Bind ViewModel.HasMissingTargets, Mode=OneWay}" />
+                            <Grid
+                                ColumnSpacing="8"
+                                Visibility="{x:Bind ViewModel.HasMissingTargets, Mode=OneWay}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <controls:SelectBox
+                                    x:Name="MissingTargetSelector"
+                                    x:Uid="SetupMissingTargetSelector"
+                                    DisplayMemberPath="DisplayName"
+                                    CategoryMemberPath="Kind"
+                                    ItemsSource="{x:Bind ViewModel.MissingTargets, Mode=OneWay}" />
+                                <Button
+                                    x:Uid="SetupRebindTargetButton"
+                                    Grid.Column="1"
+                                    Click="OnRebindMissingTargetClick" />
+                                <Button
+                                    x:Uid="SetupRemoveTargetButton"
+                                    Grid.Column="2"
+                                    Click="OnRemoveMissingTargetClick" />
+                            </Grid>
                             <StackPanel
                                 Spacing="8"
                                 Visibility="{x:Bind ViewModel.CanUseDesktopFixedRegion, Mode=OneWay}">
@@ -291,10 +330,11 @@
                                             SuggestionChosen="OnTargetLanguageSuggestionChosen"
                                             QuerySubmitted="OnTargetLanguageQuerySubmitted" />
                         </Grid>
-                        <ComboBox x:Uid="SetupProviderSelector" MinWidth="280" HorizontalAlignment="Left"
-                                  ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
-                                  SelectedItem="{x:Bind ViewModel.SelectedProvider, Mode=TwoWay}">
-                            <ComboBox.ItemTemplate>
+                        <controls:SelectBox x:Uid="SetupProviderSelector" MinWidth="280" HorizontalAlignment="Left"
+                                            DisplayMemberPath="Name"
+                                            ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
+                                            SelectedItem="{x:Bind ViewModel.SelectedProvider, Mode=TwoWay}">
+                            <controls:SelectBox.ItemTemplate>
                                 <DataTemplate x:DataType="data:ProviderRow">
                                     <StackPanel Spacing="2" Padding="2">
                                         <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
@@ -303,11 +343,15 @@
                                         </TextBlock>
                                     </StackPanel>
                                 </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock x:Uid="SetupSecretHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
+                            </controls:SelectBox.ItemTemplate>
+                        </controls:SelectBox>
+                        <!-- A model running on this machine has no credential to configure. Offering
+                             the button anyway read as "this needs a key I do not have". -->
+                        <TextBlock x:Uid="SetupSecretHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap"
+                                   Visibility="{x:Bind ViewModel.SelectedProvider.CanConfigure, Mode=OneWay}" />
                         <Button x:Uid="SetupConfigureProviderButton"
                                 Click="OnConfigureProviderClick"
+                                Visibility="{x:Bind ViewModel.SelectedProvider.CanConfigure, Mode=OneWay}"
                                 HorizontalAlignment="Left" />
 
                         <Border
@@ -384,14 +428,14 @@
                                 <TextBox x:Name="RegionNameBox" x:Uid="SetupRegionNameBox" />
                                 <Button Grid.Column="1" x:Uid="SetupAddRegionButton" Click="OnAddRegionClick"
                                         Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom" />
-                                <ComboBox Grid.Row="1" Grid.ColumnSpan="2" x:Name="RegionPrioritySelector"
-                                          x:Uid="SetupRegionPriorityBox"
-                                          SelectedIndex="0" HorizontalAlignment="Stretch">
-                                    <ComboBoxItem Content="P0" />
-                                    <ComboBoxItem Content="P1" />
-                                    <ComboBoxItem Content="P2" />
-                                    <ComboBoxItem Content="P3" />
-                                </ComboBox>
+                                <controls:SelectBox Grid.Row="1" Grid.ColumnSpan="2" x:Name="RegionPrioritySelector"
+                                                    x:Uid="SetupRegionPriorityBox"
+                                                    SelectedIndex="0" HorizontalAlignment="Stretch">
+                                    <ListViewItem Content="P0" />
+                                    <ListViewItem Content="P1" />
+                                    <ListViewItem Content="P2" />
+                                    <ListViewItem Content="P3" />
+                                </controls:SelectBox>
                             </Grid>
                             <ListView
                                 x:Name="RegionList"
@@ -449,26 +493,26 @@
                                 <StackPanel Spacing="{StaticResource SpaceM}">
                                     <TextBlock x:Uid="SetupInspectorHeader" FontWeight="SemiBold" />
                                     <TextBox x:Name="InspectorNameBox" x:Uid="SetupRegionNameBox" LostFocus="OnInspectorChanged" />
-                                    <ComboBox
+                                    <controls:SelectBox
                                         x:Name="InspectorPriorityBox"
                                         x:Uid="SetupRegionPriorityBox"
                                         HorizontalAlignment="Stretch"
                                         SelectionChanged="OnInspectorSelectionChanged">
-                                        <ComboBoxItem Content="P0" />
-                                        <ComboBoxItem Content="P1" />
-                                        <ComboBoxItem Content="P2" />
-                                        <ComboBoxItem Content="P3" />
-                                    </ComboBox>
-                                    <ComboBox
+                                        <ListViewItem Content="P0" />
+                                        <ListViewItem Content="P1" />
+                                        <ListViewItem Content="P2" />
+                                        <ListViewItem Content="P3" />
+                                    </controls:SelectBox>
+                                    <controls:SelectBox
                                         x:Name="InspectorContextRoleBox"
                                         x:Uid="SetupRegionContextRoleSelector"
                                         HorizontalAlignment="Stretch"
                                         SelectionChanged="OnInspectorSelectionChanged">
-                                        <ComboBoxItem x:Uid="SetupRegionRoleNone" />
-                                        <ComboBoxItem x:Uid="SetupRegionRoleSpeaker" />
-                                        <ComboBoxItem x:Uid="SetupRegionRoleScene" />
-                                        <ComboBoxItem x:Uid="SetupRegionRoleDialogue" />
-                                    </ComboBox>
+                                        <ListViewItem x:Uid="SetupRegionRoleNone" />
+                                        <ListViewItem x:Uid="SetupRegionRoleSpeaker" />
+                                        <ListViewItem x:Uid="SetupRegionRoleScene" />
+                                        <ListViewItem x:Uid="SetupRegionRoleDialogue" />
+                                    </controls:SelectBox>
                                     <Button
                                         x:Uid="SetupTestOcrButton"
                                         Click="OnTestOcrClick" />

@@ -18,6 +18,8 @@ struct rect_f final {
     float y{};
     float width{};
     float height{};
+
+    [[nodiscard]] friend bool operator==(const rect_f&, const rect_f&) = default;
 };
 
 struct point_f final {
@@ -65,12 +67,22 @@ struct background_frame final {
     color_rgba average{};
 };
 
+// One drawn piece of a slot together with the pixels of captured text it replaces. source_line_count
+// is how many captured lines that rectangle spans, which is what sets the height a drawn line gets.
+struct slot_line final {
+    std::u16string text;
+    rect_f bounds{};
+    std::uint32_t source_line_count{1U};
+
+    [[nodiscard]] friend bool operator==(const slot_line&, const slot_line&) = default;
+};
+
 struct slot final {
     identity id{};
     std::uint32_t order{};
     slot_state state{};
     std::uint32_t stage_index{};
-    std::u16string text;
+    std::vector<slot_line> lines;
     std::u16string label;
 };
 

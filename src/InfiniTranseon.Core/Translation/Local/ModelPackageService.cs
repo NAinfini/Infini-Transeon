@@ -56,21 +56,21 @@ public sealed class ModelPackageService
     private readonly Func<HttpClient> _httpClientFactory;
     private readonly string _managedRoot;
     private readonly Func<string, long> _getAvailableBytes;
-    private readonly Func<string, string, bool> _isModelActive;
+    private readonly Func<string, string, IDisposable> _beginModelRemoval;
     private readonly SemaphoreSlim _mutationGate = new(1, 1);
 
     public ModelPackageService(
         Func<HttpClient> httpClientFactory,
         string managedRoot,
         Func<string, long>? getAvailableBytes = null,
-        Func<string, string, bool>? isModelActive = null)
+        Func<string, string, IDisposable>? beginModelRemoval = null)
     {
         ArgumentNullException.ThrowIfNull(httpClientFactory);
         ArgumentException.ThrowIfNullOrWhiteSpace(managedRoot);
         _httpClientFactory = httpClientFactory;
         _managedRoot = Path.GetFullPath(managedRoot);
         _getAvailableBytes = getAvailableBytes ?? GetAvailableBytes;
-        _isModelActive = isModelActive ?? ((_, _) => false);
+        _beginModelRemoval = beginModelRemoval ?? ((_, _) => NoopDisposable.Instance);
     }
 
     public ModelPackageSnapshot Inspect(
@@ -292,12 +292,10 @@ public sealed class ModelPackageService
         cancellationToken.ThrowIfCancellationRequested();
         if (!userConfirmed)
             throw new InvalidOperationException("Model removal requires explicit user confirmation.");
-        if (_isModelActive(modelId, version))
-            throw new InvalidOperationException("The active model cannot be removed.");
-
         await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            using IDisposable removal = _beginModelRemoval(modelId, version);
             string packageDirectory = ResolvePackageDirectory(modelId, version);
             if (Directory.Exists(packageDirectory))
             {
@@ -462,5 +460,14 @@ public sealed class ModelPackageService
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);
+    }
+
+    private sealed class NoopDisposable : IDisposable
+    {
+        public static NoopDisposable Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

@@ -204,6 +204,25 @@ public sealed class EngineRuntimeServiceTests
     }
 
     [Fact]
+    public async Task StopReachesStoppedWhenBackendTeardownFails()
+    {
+        var harness = new Harness();
+        await using var service = new EngineRuntimeService(
+            Found(), harness.SessionFactory, harness.BackendFactory, FastRestart);
+        List<EngineDiagnostic> diagnostics = [];
+        service.DiagnosticRaised += (_, diagnostic) => diagnostics.Add(diagnostic);
+        await service.StartAsync(TestContext.Current.CancellationToken);
+        harness.Backends.Single().DisposeFailure = new InvalidOperationException("teardown");
+
+        await service.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(EngineRuntimeStatus.Stopped, service.Status);
+        EngineDiagnostic reported = Assert.Single(diagnostics);
+        Assert.Equal("engine.runtime.stopTeardownFailed", reported.ErrorCode);
+        Assert.Equal(RuntimeDiagnosticSeverity.Warning, reported.Severity);
+    }
+
+    [Fact]
     public async Task ControlOperationsBeforeRunningThrowNotRunning()
     {
         var harness = new Harness();
@@ -312,6 +331,7 @@ public sealed class EngineRuntimeServiceTests
 
         public int StartCount { get; private set; }
         public bool Disposed { get; private set; }
+        public Exception? DisposeFailure { get; set; }
         public Task Completion => _completion.Task;
 
         public ValueTask StartAsync(CancellationToken cancellationToken)
@@ -327,6 +347,7 @@ public sealed class EngineRuntimeServiceTests
             Disposed = true;
             _completion.TrySetResult();
             await session.DisposeAsync();
+            if (DisposeFailure is not null) throw DisposeFailure;
         }
     }
 

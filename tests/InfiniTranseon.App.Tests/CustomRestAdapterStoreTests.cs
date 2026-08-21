@@ -31,7 +31,7 @@ public sealed class CustomRestAdapterStoreTests
             Assert.Equal(new Uri("https://api.example.test/v1/translate"), loaded.Endpoint);
             CatalogProvider catalog = Assert.Single(store.GetCatalogProviders());
             Assert.True(catalog.IsCustom);
-            Assert.Equal("REST · custom", catalog.Kind);
+            Assert.Equal("ProviderKindRestCustom", catalog.KindResourceKey);
             Assert.Equal("custom.example.api-key", Assert.Single(catalog.Credentials).Reference);
 
             store.Remove("custom.example");

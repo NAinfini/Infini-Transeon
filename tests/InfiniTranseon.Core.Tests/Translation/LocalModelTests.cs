@@ -1,6 +1,10 @@
+﻿using System.IO.Pipes;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Translation.Local;
 using InfiniTranseon.Core.Updates;
@@ -11,6 +15,9 @@ namespace InfiniTranseon.Core.Tests.Translation;
 
 public sealed class LocalModelTests
 {
+    private static readonly TimeSpan FrameWait = TimeSpan.FromSeconds(5);
+
+
     [Fact]
     public void PhraseTableRuntimeLoadsRequestedManagedModelAndTranslatesWithoutNetwork()
     {
@@ -94,6 +101,137 @@ public sealed class LocalModelTests
         }).Validate());
         Assert.Throws<ArgumentException>(() => (options with { ManagedModelDirectory = "." }).Validate());
     }
+
+    /// <summary>
+    /// A package is downloaded long before the sandbox that reads it exists, so granting the
+    /// AppContainer access to the directory alone left every installed model file unreachable and
+    /// the worker died opening the first one. The grant has to reach the files already there.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void SandboxDirectoryGrantReachesFilesInstalledBeforeIt()
+    {
+        using var package = new TempDirectory();
+        string modelFile = Path.Combine(package.Path, "model.bin");
+        File.WriteAllBytes(modelFile, [1, 2, 3]);
+        // Any well-known SID exercises the propagation; the launcher passes an AppContainer's.
+        var users = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+
+        LocalWorkerSandboxLauncher.ApplyDirectoryAcl(package.Path, users.Value, "GRGX");
+
+        AuthorizationRuleCollection rules = new FileInfo(modelFile)
+            .GetAccessControl()
+            .GetAccessRules(true, true, typeof(SecurityIdentifier));
+        FileSystemAccessRule granted = Assert.Single(
+            rules.Cast<FileSystemAccessRule>(),
+            rule => rule.IdentityReference.Equals(users));
+        Assert.Equal(AccessControlType.Allow, granted.AccessControlType);
+        Assert.True(granted.FileSystemRights.HasFlag(FileSystemRights.ReadData));
+    }
+
+    /// <summary>
+    /// A caption is superseded whenever the screen changes, which cancels the translation in flight.
+    /// Treating that as a broken session tore down a worker holding a multi-gigabyte model, so every
+    /// screen change paid the model load again before it could show anything. The session has to
+    /// survive: the abandoned response is drained and the next request runs on the same worker.
+    /// </summary>
+    [Fact]
+    public async Task SupersedingATranslationKeepsTheWorkerSessionUsable()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string pipeName = "infini-test-" + Guid.NewGuid().ToString("N");
+        await using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        await using var client = new NamedPipeClientStream(
+            ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        Task listening = server.WaitForConnectionAsync(ct);
+        await client.ConnectAsync(ct);
+        await listening;
+
+        Guid epoch = Guid.NewGuid();
+        var worker = new LocalWorkerClient(client, epoch);
+        using var superseded = new CancellationTokenSource();
+
+        Task<LocalTranslationResponse> abandoned = worker
+            .TranslateAsync("model", "en", "zh", "first", 64, superseded.Token).AsTask();
+        LocalTranslationRequest first = await LocalWorkerFrameCodec
+            .ReadAsync<LocalTranslationRequest>(server, ct).AsTask().WaitAsync(FrameWait, ct);
+        await superseded.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned.WaitAsync(FrameWait, ct));
+
+        // The worker still answers the request the caller walked away from.
+        await LocalWorkerFrameCodec.WriteAsync(
+            server,
+            new LocalTranslationResponse(
+                LocalWorkerProtocol.Version, epoch, first.RequestId, true, "第一次", null),
+            ct);
+
+        Task<LocalTranslationResponse> reused = worker
+            .TranslateAsync("model", "en", "zh", "second", 64, ct).AsTask();
+        LocalTranslationRequest second = await LocalWorkerFrameCodec
+            .ReadAsync<LocalTranslationRequest>(server, ct).AsTask().WaitAsync(FrameWait, ct);
+        await LocalWorkerFrameCodec.WriteAsync(
+            server,
+            new LocalTranslationResponse(
+                LocalWorkerProtocol.Version, epoch, second.RequestId, true, "第二次", null),
+            ct);
+
+        LocalTranslationResponse response = await reused.WaitAsync(FrameWait, ct);
+        Assert.Equal("第二次", response.Text);
+        Assert.NotEqual(first.RequestId, second.RequestId);
+        await worker.DisposeAsync();
+    }
+
+    /// <summary>
+    /// The launcher authenticates the worker from these four fields. When the two sides described the
+    /// handshake separately, the names on the wire stopped matching and every field arrived at its
+    /// default — an empty proof that could never authenticate, and a process id of zero that would
+    /// have matched no worker at all.
+    /// </summary>
+    [Fact]
+    public async Task WorkerHandshakeSurvivesTheFrameCodecFieldForField()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var sent = new LocalWorkerHandshake(
+            LocalWorkerProtocol.Version, Guid.NewGuid(), 4242, Convert.ToBase64String([1, 2, 3]));
+        using var frame = new MemoryStream();
+
+        await LocalWorkerFrameCodec.WriteAsync(frame, sent, ct);
+        frame.Position = 0;
+        LocalWorkerHandshake received =
+            await LocalWorkerFrameCodec.ReadAsync<LocalWorkerHandshake>(frame, ct);
+
+        Assert.Equal(sent, received);
+    }
+
+    /// <summary>
+    /// The worker runs in an AppContainer, and Windows builds that container's redirected package
+    /// folders from LOCALAPPDATA while the process is being created. Dropping it from the sanitized
+    /// block made every local translation fail with ERROR_ENVVAR_NOT_FOUND before the worker
+    /// started. Nothing else about this machine may reach the sandbox.
+    /// </summary>
+    [Fact]
+    public void SandboxEnvironmentCarriesLocalAppDataAndNothingElseFromThisMachine()
+    {
+        using var scratch = new TempDirectory();
+
+        SortedDictionary<string, string> values = SanitizedEnvironmentBlock.BuildValues(
+            scratch.Path,
+            Path.Combine(scratch.Path, "worker.exe"));
+
+        Assert.Equal(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            values[SanitizedEnvironmentBlock.LocalAppDataVariable]);
+        Assert.Subset(
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "SystemRoot", "WINDIR", "TEMP", "TMP", "PATH",
+                "DOTNET_BUNDLE_EXTRACT_BASE_DIR", "DOTNET_ROOT",
+                SanitizedEnvironmentBlock.LocalAppDataVariable,
+            },
+            new HashSet<string>(values.Keys, StringComparer.OrdinalIgnoreCase));
+    }
+
     [Theory]
     [InlineData("../escape.bin")]
     [InlineData("C:/escape.bin")]
@@ -763,7 +901,10 @@ public sealed class LocalModelTests
         var active = new ModelPackageService(
             () => throw new InvalidOperationException(),
             temp.Path,
-            isModelActive: (modelId, version) => modelId == "model" && version == "1");
+            beginModelRemoval: (modelId, version) =>
+                modelId == "model" && version == "1"
+                    ? throw new InvalidOperationException("The active model cannot be removed.")
+                    : new CancellationTokenRegistration());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => active.RemoveAsync(
             "model", "1", userConfirmed: false, TestContext.Current.CancellationToken).AsTask());
@@ -801,6 +942,103 @@ public sealed class LocalModelTests
         Assert.Equal("你好", Assert.IsType<ProviderDelta>(events[0]).Text);
         Assert.IsType<ProviderDone>(events[1]);
         Assert.Equal(1, client.CallCount);
+    }
+
+    [Fact]
+    public async Task LocalWorkerManagerWarmStartLaunchesOnceBeforeTheFirstTranslation()
+    {
+        int launches = 0;
+        var session = new StubLocalSession(new StubLocalClient(request => new LocalTranslationResponse(
+            LocalWorkerProtocol.Version,
+            request.WorkerSessionEpoch,
+            request.RequestId,
+            true,
+            "\u4f60\u597d",
+            null)));
+        await using var manager = new LocalWorkerSessionManager(
+            _ =>
+            {
+                launches++;
+                return ValueTask.FromResult<ILocalWorkerSession>(session);
+            },
+            new LocalWorkerSessionManagerOptions(TimeSpan.FromSeconds(30), PinWarm: true));
+
+        await manager.WarmAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, launches);
+
+        await manager.TranslateAsync(
+            "model", "en", "zh-Hans", "hello", 100, TestContext.Current.CancellationToken);
+        Assert.Equal(1, launches);
+    }
+
+    /// <summary>
+    /// A screen with several text blocks translates them at the same instant, and one decoding step
+    /// costs the same whether it produces one line or several, so the blocks that are waiting when
+    /// the worker becomes free have to travel together.
+    /// </summary>
+    [Fact]
+    public async Task LocalWorkerManagerSendsTranslationsThatAreWaitingTogetherInOneWorkerCall()
+    {
+        var client = new LineEchoLocalClient(holdFirstCall: true);
+        var session = new StubLocalSession(client);
+        await using var manager = new LocalWorkerSessionManager(
+            _ => ValueTask.FromResult<ILocalWorkerSession>(session),
+            new LocalWorkerSessionManagerOptions(TimeSpan.FromMinutes(1), PinWarm: true));
+
+        Task<LocalTranslationOutcome> first = manager.TranslateAsync(
+            "model", "en", "zh-Hans", "one", 100, TestContext.Current.CancellationToken).AsTask();
+        await client.FirstCallStarted.WaitAsync(
+            TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+        Task<LocalTranslationOutcome> second = manager.TranslateAsync(
+            "model", "en", "zh-Hans", "two", 100, TestContext.Current.CancellationToken).AsTask();
+        Task<LocalTranslationOutcome> third = manager.TranslateAsync(
+            "model", "en", "zh-Hans", "three", 100, TestContext.Current.CancellationToken).AsTask();
+        client.ReleaseFirstCall();
+
+        Assert.Equal("zh:one", (await first).Text);
+        Assert.Equal("zh:two", (await second).Text);
+        Assert.Equal("zh:three", (await third).Text);
+        Assert.Equal(["one", "two\nthree"], client.Requests);
+    }
+
+    [Fact]
+    public async Task LocalWorkerManagerAsksTheWorkerOnlyForLinesItHasNotTranslated()
+    {
+        var client = new LineEchoLocalClient();
+        await using var manager = new LocalWorkerSessionManager(
+            _ => ValueTask.FromResult<ILocalWorkerSession>(new StubLocalSession(client)),
+            new LocalWorkerSessionManagerOptions(TimeSpan.FromMinutes(1), PinWarm: true));
+
+        LocalTranslationOutcome first = await manager.TranslateAsync(
+            "model", "en", "zh-Hans", "alpha\nbeta", 100, TestContext.Current.CancellationToken);
+        LocalTranslationOutcome second = await manager.TranslateAsync(
+            "model", "en", "zh-Hans", "beta\ngamma", 100, TestContext.Current.CancellationToken);
+        LocalTranslationOutcome third = await manager.TranslateAsync(
+            "model", "en", "zh-Hans", "gamma\nalpha", 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal("zh:alpha\nzh:beta", first.Text);
+        Assert.Equal("zh:beta\nzh:gamma", second.Text);
+        Assert.Equal("zh:gamma\nzh:alpha", third.Text);
+        Assert.Equal(["alpha\nbeta", "gamma"], client.Requests);
+    }
+
+    /// <summary>
+    /// Blank lines are the shape of the block, not text to translate: the worker never sees them,
+    /// and the answer still lines up with the region the block came from.
+    /// </summary>
+    [Fact]
+    public async Task LocalWorkerManagerKeepsBlankLinesInPlaceWithoutSendingThem()
+    {
+        var client = new LineEchoLocalClient();
+        await using var manager = new LocalWorkerSessionManager(
+            _ => ValueTask.FromResult<ILocalWorkerSession>(new StubLocalSession(client)),
+            new LocalWorkerSessionManagerOptions(TimeSpan.FromMinutes(1), PinWarm: true));
+
+        LocalTranslationOutcome outcome = await manager.TranslateAsync(
+            "model", "en", "zh-Hans", "alpha\n\nbeta", 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal("zh:alpha\n\nzh:beta", outcome.Text);
+        Assert.Equal(["alpha\nbeta"], client.Requests);
     }
 
     [Fact]
@@ -876,7 +1114,7 @@ public sealed class LocalModelTests
             _ => ValueTask.FromResult<ILocalWorkerSession>(session),
             new LocalWorkerSessionManagerOptions(TimeSpan.FromMinutes(1), PinWarm: true));
 
-        Task<LocalTranslationResponse> translation = manager.TranslateAsync(
+        Task<LocalTranslationOutcome> translation = manager.TranslateAsync(
             "model", "en", "zh-Hans", "hello", 100,
             TestContext.Current.CancellationToken).AsTask();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
@@ -911,7 +1149,7 @@ public sealed class LocalModelTests
         await Assert.ThrowsAsync<IOException>(() => manager.TranslateAsync(
             "model", "en", "zh-Hans", "hello", 100,
             TestContext.Current.CancellationToken).AsTask());
-        LocalTranslationResponse response = await manager.TranslateAsync(
+        LocalTranslationOutcome response = await manager.TranslateAsync(
             "model", "en", "zh-Hans", "hello", 100,
             TestContext.Current.CancellationToken);
 
@@ -920,36 +1158,31 @@ public sealed class LocalModelTests
         Assert.Equal(1, crashed.DisposeCount);
     }
 
+    /// <summary>
+    /// Retiring a session is the manager's answer to a worker that broke, and disposal has to end
+    /// even when the abandoned request it inherited is still waiting for a frame that will never
+    /// arrive — otherwise stopping the engine outlives the worker it is stopping.
+    /// </summary>
     [Fact]
-    public async Task CancellationAfterRequestWriteRetiresProtocolSessionBeforeNextRequest()
+    public async Task RetiringASessionEndsEvenWhileAnAbandonedRequestIsStillDraining()
     {
-        int launches = 0;
         var stream = new CancelDuringReadStream();
-        var canceledSession = new ClientOwningSession(new LocalWorkerClient(stream, Guid.NewGuid()));
-        var healthy = new StubLocalSession(new StubLocalClient(request => new LocalTranslationResponse(
-            LocalWorkerProtocol.Version,
-            request.WorkerSessionEpoch,
-            request.RequestId,
-            true,
-            "done",
-            null)));
-        await using var manager = new LocalWorkerSessionManager(
-            _ => ValueTask.FromResult<ILocalWorkerSession>(++launches == 1 ? canceledSession : healthy),
+        var session = new ClientOwningSession(new LocalWorkerClient(stream, Guid.NewGuid()));
+        var manager = new LocalWorkerSessionManager(
+            _ => ValueTask.FromResult<ILocalWorkerSession>(session),
             new LocalWorkerSessionManagerOptions(TimeSpan.FromMinutes(1), PinWarm: true));
         using var cancellation = new CancellationTokenSource();
-        Task<LocalTranslationResponse> first = manager.TranslateAsync(
+        Task<LocalTranslationOutcome> superseded = manager.TranslateAsync(
             "model", "en", "zh-Hans", "hello", 100, cancellation.Token).AsTask();
         await stream.ReadStarted.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
 
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
-        Assert.Equal(1, canceledSession.DisposeCount);
-        LocalTranslationResponse second = await manager.TranslateAsync(
-            "model", "en", "zh-Hans", "hello", 100, TestContext.Current.CancellationToken);
-        Assert.True(second.Success);
-        Assert.Equal(2, launches);
-        Assert.Equal(1, canceledSession.DisposeCount);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => superseded);
+        Assert.Equal(0, session.DisposeCount);
+        await manager.DisposeAsync().AsTask().WaitAsync(
+            TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.Equal(1, session.DisposeCount);
     }
 
     [Fact]
@@ -1101,6 +1334,57 @@ public sealed class LocalModelTests
             await release.Task.WaitAsync(cancellationToken);
             return new LocalTranslationResponse(
                 LocalWorkerProtocol.Version, Guid.NewGuid(), Guid.NewGuid(), true, "done", null);
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Answers with one output line per input line, as the native runtime does, and records exactly
+    /// what it was asked for so a test can see which lines reached the worker.
+    /// </summary>
+    private sealed class LineEchoLocalClient : ILocalTranslationClient
+    {
+        private readonly TaskCompletionSource _firstCallStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _firstCallReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<string> _requests = [];
+        private int _calls;
+
+        public LineEchoLocalClient(bool holdFirstCall = false)
+        {
+            if (!holdFirstCall) _firstCallReleased.SetResult();
+        }
+
+        public Task FirstCallStarted => _firstCallStarted.Task;
+
+        public IReadOnlyList<string> Requests
+        {
+            get { lock (_requests) return _requests.ToArray(); }
+        }
+
+        public void ReleaseFirstCall() => _firstCallReleased.TrySetResult();
+
+        public async ValueTask<LocalTranslationResponse> TranslateAsync(
+            string modelId,
+            string sourceLanguage,
+            string targetLanguage,
+            string text,
+            int maximumOutputCharacters,
+            CancellationToken cancellationToken)
+        {
+            lock (_requests) _requests.Add(text);
+            if (Interlocked.Increment(ref _calls) == 1)
+            {
+                _firstCallStarted.TrySetResult();
+                await _firstCallReleased.Task.WaitAsync(cancellationToken);
+            }
+            return new LocalTranslationResponse(
+                LocalWorkerProtocol.Version,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                true,
+                string.Join('\n', text.Split('\n').Select(line => "zh:" + line)),
+                null);
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

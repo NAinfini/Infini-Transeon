@@ -1,4 +1,6 @@
+﻿using System.Globalization;
 using InfiniTranseon.App.Controls;
+using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Storage;
@@ -15,22 +17,38 @@ namespace InfiniTranseon.App.Presentation.Services;
 public sealed class RealProfileService : IProfileService, IProfileTargetDirectory
 {
     private readonly ProfileRepository _repository;
+    private readonly ICaptureProbe _captureProbe;
+    private readonly ResourceTextLookup _text;
     private readonly string _databasePath;
 
     public RealProfileService(
         ProfileRepository repository,
+        ICaptureProbe captureProbe,
+        ResourceTextLookup text,
         string databasePath)
     {
         ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(captureProbe);
+        ArgumentNullException.ThrowIfNull(text);
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         _repository = repository;
+        _captureProbe = captureProbe;
+        _text = text;
         _databasePath = Path.GetFullPath(databasePath);
     }
 
+    /// <summary>
+    /// Lists the stored profiles with the state each one is actually in. The machine is enumerated
+    /// once for the whole list rather than once per card: the answer is the same for all of them, and
+    /// walking every top-level window is not free.
+    /// </summary>
     public async Task<IReadOnlyList<ProfileCard>> GetProfilesAsync(CancellationToken cancellationToken = default)
     {
         IReadOnlyList<ProfileDocument> documents = await _repository.ListAsync(cancellationToken).ConfigureAwait(false);
-        return documents.Select(ToCard).ToArray();
+        CaptureProbeResult probe = await _captureProbe
+            .ProbeAsync(new CaptureProbeRequest(NameFilter: null), cancellationToken)
+            .ConfigureAwait(false);
+        return documents.Select(document => ToCard(document, probe.Targets)).ToArray();
     }
 
     public async Task<IReadOnlyList<ProfileTargetDirectoryEntry>> GetTargetsAsync(
@@ -59,7 +77,7 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
         return document is null ? null : ToEditModel(document);
     }
 
-    public async Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+    public async Task<IReadOnlyList<string>> GetRequiredProviderIdsAsync(
         Guid profileId,
         CancellationToken cancellationToken = default)
     {
@@ -75,19 +93,7 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
             return [];
         }
 
-        return document.Targets
-            .SelectMany(target => target.RemainingAreaRegion is null
-                ? target.Regions
-                : target.Regions.Append(target.RemainingAreaRegion))
-            .Where(region => region.Enabled && region.TranslationEnabled)
-            .SelectMany(region => region.TranslationChannels)
-            .Where(channel => channel.Enabled)
-            .SelectMany(channel => new[] { channel.InitialProviderId }
-                .Concat(channel.FallbackProviderIds)
-                .Concat(channel.RefinementSteps.Select(step => step.ProviderId)))
-            .Where(providerId => !string.IsNullOrWhiteSpace(providerId))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        return ProfileProviderReadiness.GetRequiredProviderIds(document);
     }
 
     public async Task<Guid> SaveAsync(ProfileEditModel profile, CancellationToken cancellationToken = default)
@@ -170,6 +176,59 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
 
         ProfileTarget? primaryExistingTarget = existing.Targets.FirstOrDefault(target =>
             target.TargetId == edit.TargetId) ?? existing.Targets.FirstOrDefault();
+        string? existingPrimaryProviderId = primaryExistingTarget?.Regions
+            .SelectMany(region => region.TranslationChannels)
+            .Select(channel => channel.InitialProviderId)
+            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+        bool primaryProviderChanged = !string.IsNullOrWhiteSpace(providerId) &&
+            !string.Equals(
+                providerId,
+                existingPrimaryProviderId,
+                StringComparison.OrdinalIgnoreCase);
+
+        List<ProfileTranslationChannel> PrimaryChannels(ProfileRegion? preserved)
+        {
+            if (preserved is null)
+            {
+                return string.IsNullOrWhiteSpace(providerId)
+                    ? []
+                    : [ProfileTranslationChannel.Create(providerId) with { DisplayOrder = 0 }];
+            }
+            if (!primaryProviderChanged || string.IsNullOrWhiteSpace(providerId))
+            {
+                return preserved.TranslationChannels;
+            }
+
+            List<ProfileTranslationChannel> channels = preserved.TranslationChannels.ToList();
+            if (channels.Count == 0)
+            {
+                channels.Add(ProfileTranslationChannel.Create(providerId) with { DisplayOrder = 0 });
+                return channels;
+            }
+
+            ProfileTranslationChannel current = channels[0];
+            channels[0] = current with
+            {
+                InitialProviderId = providerId,
+                DisplayLabel = string.IsNullOrWhiteSpace(current.DisplayLabel) ||
+                    string.Equals(
+                        current.DisplayLabel,
+                        current.InitialProviderId,
+                        StringComparison.OrdinalIgnoreCase)
+                            ? providerId
+                            : current.DisplayLabel,
+                FallbackProviderIds = current.FallbackProviderIds
+                    .Where(id => !string.Equals(id, providerId, StringComparison.Ordinal))
+                    .ToList(),
+                RefinementSteps = current.RefinementSteps
+                    .Where(step => !string.Equals(
+                        step.ProviderId,
+                        providerId,
+                        StringComparison.Ordinal))
+                    .ToList(),
+            };
+            return channels;
+        }
 
         List<ProfileRegion> BuildPrimaryRegions(ProfileTarget? existingTarget)
         {
@@ -181,12 +240,7 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
                     ? null
                     : existingRegions.GetValueOrDefault(region.RegionId);
                 var bounds = new NormalizedRect(region.X, region.Y, region.Width, region.Height);
-                List<ProfileTranslationChannel> channels = string.IsNullOrWhiteSpace(providerId)
-                    ? preserved?.TranslationChannels ?? []
-                    :
-                    [
-                        ProfileTranslationChannel.Create(providerId) with { DisplayOrder = 0 },
-                    ];
+                List<ProfileTranslationChannel> channels = PrimaryChannels(preserved);
                 return (preserved ?? ProfileRegion.Create(region.Name, bounds)) with
                 {
                     RegionId = region.RegionId == Guid.Empty
@@ -196,6 +250,10 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
                     Bounds = bounds,
                     Priority = ProfilePresentationMapper.Priority(region.Priority),
                     ContextRole = ProfilePresentationMapper.ContextRole(region.ContextRole),
+                    Ocr = preserved?.Ocr ?? new ProfileOcrSettings
+                    {
+                        RecognitionLanguage = edit.SourceLanguage,
+                    },
                     TranslationChannels = channels,
                 };
             }).ToList();
@@ -215,6 +273,10 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
                 {
                     Priority = ProfilePresentationMapper.Priority(region.Priority),
                     ContextRole = ProfilePresentationMapper.ContextRole(region.ContextRole),
+                    Ocr = new ProfileOcrSettings
+                    {
+                        RecognitionLanguage = edit.SourceLanguage,
+                    },
                     TranslationChannels = channels,
                 };
             }).ToList();
@@ -230,13 +292,23 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
                 ? BuildPrimaryRegions(primaryExistingTarget)
                 : existingTarget?.Regions ?? BuildNewTargetRegions();
             CaptureTargetKind kind = ProfilePresentationMapper.CaptureTargetKind(captureTarget.Kind);
+            string targetName = string.IsNullOrWhiteSpace(captureTarget.Name)
+                ? edit.Name
+                : captureTarget.Name;
+            bool bindingChanged = existingTarget is not null &&
+                (existingTarget.Kind != kind ||
+                    !string.Equals(
+                        CaptureTargetResolver.WantedName(existingTarget),
+                        targetName,
+                        StringComparison.OrdinalIgnoreCase));
             targets.Add((existingTarget ?? ProfileTarget.Create(captureTarget.Name, kind)) with
             {
                 TargetId = captureTarget.TargetId == Guid.Empty
                     ? existingTarget?.TargetId ?? Guid.NewGuid()
                     : captureTarget.TargetId,
-                Name = string.IsNullOrWhiteSpace(captureTarget.Name) ? edit.Name : captureTarget.Name,
+                Name = targetName,
                 Kind = kind,
+                MachineBinding = bindingChanged ? null : existingTarget?.MachineBinding,
                 DesktopRegion = captureTarget.DesktopRegion,
                 Regions = regions,
             });
@@ -255,7 +327,9 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
         return ProfileDocumentData.WithResolution(document, edit.Resolution);
     }
 
-    private static ProfileCard ToCard(ProfileDocument document)
+    private ProfileCard ToCard(
+        ProfileDocument document,
+        IReadOnlyList<CaptureProbeTarget> liveTargets)
     {
         ProfileTarget? target = document.Targets.FirstOrDefault();
         // The "scan remaining area" region is a real, translatable region — it is simply stored
@@ -268,22 +342,70 @@ public sealed class RealProfileService : IProfileService, IProfileTargetDirector
         int channelCount = document.Targets.Sum(current =>
             AllRegions(current).Sum(region => region.TranslationChannels.Count));
         string resolution = ProfileDocumentData.ReadResolution(document);
+
+        // A profile with several targets can start only if every one of them resolves, so the card
+        // reports the whole set rather than the first target it happens to list.
+        ProfileTargetMatchState matchState = target is null
+            ? ProfileTargetMatchState.NotConfigured
+            : document.Targets.All(current => CaptureTargetResolver.Matches(current, liveTargets))
+                ? ProfileTargetMatchState.Matched
+                : ProfileTargetMatchState.Missing;
+        CaptureProbeTarget? liveTarget = target is null
+            ? null
+            : CaptureTargetResolver.Find(target, liveTargets);
+
         return new ProfileCard(
             document.ProfileId,
             document.Name,
             target is null
-                ? "No capture target"
+                ? _text("ProfileTargetNone")
                 : document.Targets.Count > 1
-                    ? $"{target.Name} ({target.Kind}) +{document.Targets.Count - 1}"
-                    : $"{target.Name} ({target.Kind})",
+                    ? string.Format(
+                        CultureInfo.CurrentCulture,
+                        _text("ProfileTargetDescriptionMore"),
+                        target.Name,
+                        _text(TargetKindResourceKey(target.Kind)),
+                        document.Targets.Count - 1)
+                    : string.Format(
+                        CultureInfo.CurrentCulture,
+                        _text("ProfileTargetDescription"),
+                        target.Name,
+                        _text(TargetKindResourceKey(target.Kind))),
             string.IsNullOrEmpty(resolution) ? "—" : resolution,
-            $"{document.SourceLanguage} → {document.TargetLanguage}",
+            string.Format(
+                CultureInfo.CurrentCulture,
+                _text("ProfileLanguagePair"),
+                LanguageCatalog.DisplayNameFor(document.SourceLanguage, _text("UiLanguageTag")),
+                LanguageCatalog.DisplayNameFor(document.TargetLanguage, _text("UiLanguageTag"))),
             regionCount,
             channelCount,
-            "Ready",
-            StatusSeverity.Info,
-            "Start");
+            matchState,
+            _text(MatchStateResourceKey(matchState)),
+            matchState == ProfileTargetMatchState.Matched
+                ? StatusSeverity.Success
+                : StatusSeverity.Warning,
+            _text("ProfileActionStart"),
+            IsPinned: false,
+            TargetProbeId: liveTarget?.TargetId.Value ?? Guid.Empty,
+            TargetNativeHandle: liveTarget?.NativeHandle ?? 0,
+            TargetProbeKind: liveTarget?.Kind ?? string.Empty);
     }
+
+    private static string TargetKindResourceKey(CaptureTargetKind kind) => kind switch
+    {
+        CaptureTargetKind.Window => "ProfileTargetKindWindow",
+        CaptureTargetKind.Display => "ProfileTargetKindDisplay",
+        CaptureTargetKind.DesktopFixedRegion => "ProfileTargetKindDesktopRegion",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    private static string MatchStateResourceKey(ProfileTargetMatchState state) => state switch
+    {
+        ProfileTargetMatchState.Matched => "ProfileMatchStateMatched",
+        ProfileTargetMatchState.Missing => "ProfileMatchStateMissing",
+        ProfileTargetMatchState.NotConfigured => "ProfileMatchStateNotConfigured",
+        _ => throw new ArgumentOutOfRangeException(nameof(state)),
+    };
 
     private static ProfileEditModel ToEditModel(ProfileDocument document)
     {

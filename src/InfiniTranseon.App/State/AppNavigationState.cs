@@ -23,12 +23,15 @@ public sealed record ProfileWorkspaceNavigation(Guid ProfileId, WorkspaceSection
 public sealed class AppNavigationRequest(
     GlobalDestination? globalDestination,
     Guid profileId,
-    WorkspaceSection? workspaceSection) : EventArgs
+    WorkspaceSection? workspaceSection,
+    bool isProfileSetup = false) : EventArgs
 {
     public GlobalDestination? GlobalDestination { get; } = globalDestination;
     public Guid ProfileId { get; } = profileId;
     public WorkspaceSection? WorkspaceSection { get; } = workspaceSection;
-    public bool IsWorkspace => ProfileId != Guid.Empty && WorkspaceSection is not null;
+    public bool IsProfileSetup { get; } = isProfileSetup;
+    public bool IsWorkspace => !IsProfileSetup &&
+        ProfileId != Guid.Empty && WorkspaceSection is not null;
 }
 
 /// <summary>
@@ -50,5 +53,17 @@ public sealed class AppNavigationState
         }
 
         NavigationRequested?.Invoke(this, new AppNavigationRequest(null, profileId, section));
+    }
+
+    public void NavigateToProfileSetup(Guid profileId)
+    {
+        if (profileId == Guid.Empty)
+        {
+            throw new ArgumentException("Target management requires a profile ID.", nameof(profileId));
+        }
+
+        NavigationRequested?.Invoke(
+            this,
+            new AppNavigationRequest(null, profileId, null, isProfileSetup: true));
     }
 }

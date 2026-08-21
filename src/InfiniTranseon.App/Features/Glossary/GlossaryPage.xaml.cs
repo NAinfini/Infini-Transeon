@@ -15,9 +15,8 @@ namespace InfiniTranseon.App.Features.Glossary;
 
 public sealed partial class GlossaryPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private bool _loadingPrompt;
     private Guid _profileId;
     private string? _editingSourceTerm;
@@ -30,6 +29,13 @@ public sealed partial class GlossaryPage : Page
         _workbench = App.GetService<WorkbenchViewModel>();
         _navigation = App.GetService<AppNavigationState>();
         InitializeComponent();
+        string uiLanguage = Strings.GetString("UiLanguageTag");
+        ContextSourceLanguageBox.Header = Strings.GetString("ContextSourceLanguageBox/Header");
+        ContextSourceLanguageBox.DisplayMemberPath = nameof(LanguageOption.DisplayName);
+        ContextSourceLanguageBox.ItemsSource = LanguageCatalog.CreateSourceOptions(uiLanguage);
+        ContextTargetLanguageBox.Header = Strings.GetString("ContextTargetLanguageBox/Header");
+        ContextTargetLanguageBox.DisplayMemberPath = nameof(LanguageOption.DisplayName);
+        ContextTargetLanguageBox.ItemsSource = LanguageCatalog.CreateTargetOptions(uiLanguage);
     }
 
     public GlossaryViewModel ViewModel { get; }
@@ -60,8 +66,12 @@ public sealed partial class GlossaryPage : Page
             if (_profileId != Guid.Empty)
             {
                 await _workbench.EnsureLoadedAsync(_profileId);
-                ContextSourceLanguageBox.Text = _workbench.SourceLanguage;
-                ContextTargetLanguageBox.Text = _workbench.TargetLanguage;
+                ContextSourceLanguageBox.SelectedItem = LanguageFor(
+                    ContextSourceLanguageBox,
+                    _workbench.SourceLanguage);
+                ContextTargetLanguageBox.SelectedItem = LanguageFor(
+                    ContextTargetLanguageBox,
+                    _workbench.TargetLanguage);
                 ContextGameNameBox.Text = _workbench.GameName;
                 ContextGameDescriptionBox.Text = _workbench.GameDescription;
                 ContextRecentLinesBox.Value = _workbench.RecentLineCount;
@@ -212,8 +222,23 @@ public sealed partial class GlossaryPage : Page
     private void OnGameContextTextChanged(object sender, TextChangedEventArgs e) =>
         PushGameContextEdit();
 
+    private void OnGameContextSelectionChanged(object? sender, EventArgs e) =>
+        PushGameContextEdit();
+
+    /// <summary>
+    /// The option carrying a stored tag. A profile written before a language left the catalog — or by
+    /// a provider-specific tag the catalog never listed — has no option, and the selector then shows
+    /// nothing rather than silently renaming the pair to something the user did not choose.
+    /// </summary>
+    private static LanguageOption? LanguageFor(Controls.SelectBox box, string code) =>
+        box.Items.OfType<LanguageOption>().FirstOrDefault(option =>
+            string.Equals(option.Code, code, StringComparison.OrdinalIgnoreCase));
+
     private void OnGameContextValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args) =>
         PushGameContextEdit();
+
+    private static string SelectedLanguage(Controls.SelectBox box) =>
+        box.SelectedItem is LanguageOption option ? option.Code : string.Empty;
 
     /// <summary>
     /// Mirrors the context card into the shared workbench draft on every keystroke. The card is not
@@ -225,22 +250,21 @@ public sealed partial class GlossaryPage : Page
     {
         if (_loadingPrompt || _profileId == Guid.Empty)
             return;
-        _workbench.SourceLanguage = ContextSourceLanguageBox.Text.Trim();
-        _workbench.TargetLanguage = ContextTargetLanguageBox.Text.Trim();
+        _workbench.SourceLanguage = SelectedLanguage(ContextSourceLanguageBox);
+        _workbench.TargetLanguage = SelectedLanguage(ContextTargetLanguageBox);
         _workbench.GameName = ContextGameNameBox.Text.Trim();
         _workbench.GameDescription = ContextGameDescriptionBox.Text.Trim();
         _workbench.RecentLineCount = double.IsNaN(ContextRecentLinesBox.Value)
             ? 6
             : checked((int)Math.Round(ContextRecentLinesBox.Value));
-        _workbench.MarkEditorChanged();
     }
 
     private async void OnSaveGameContextClick(object sender, RoutedEventArgs e)
     {
         if (_profileId == Guid.Empty)
             return;
-        string source = ContextSourceLanguageBox.Text.Trim();
-        string target = ContextTargetLanguageBox.Text.Trim();
+        string source = SelectedLanguage(ContextSourceLanguageBox);
+        string target = SelectedLanguage(ContextTargetLanguageBox);
         if (source.Length == 0 || target.Length == 0 ||
             string.Equals(source, target, StringComparison.CurrentCultureIgnoreCase))
         {
@@ -374,9 +398,7 @@ public sealed partial class GlossaryPage : Page
         await dialog.ShowAsync();
     }
 
-    private async void OnStylePromptVersionChanged(
-        object sender,
-        SelectionChangedEventArgs e)
+    private async void OnStylePromptVersionChanged(object? sender, EventArgs e)
     {
         RefreshPromptEditor();
         if (_loadingPrompt ||

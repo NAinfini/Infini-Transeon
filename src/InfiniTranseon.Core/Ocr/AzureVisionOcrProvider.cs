@@ -76,8 +76,10 @@ public sealed class AzureVisionOcrProvider : IOcrProvider
         if (string.IsNullOrWhiteSpace(key))
             throw new OcrRoutingException("ocr.credentialMissing", "Azure Vision credential is missing.");
 
+        string? language = CloudOcrLanguageMapper.AzureVisionLanguage(request.RecognitionLanguage);
         Uri endpoint = new(_options.Endpoint,
-            "computervision/imageanalysis:analyze?api-version=2024-02-01&features=read");
+            "computervision/imageanalysis:analyze?api-version=2024-02-01&features=read" +
+            (language is null ? string.Empty : "&language=" + Uri.EscapeDataString(language)));
         using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new ReadOnlyMemoryContent(request.EncodedCrop),

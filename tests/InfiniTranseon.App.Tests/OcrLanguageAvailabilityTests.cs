@@ -60,7 +60,7 @@ public sealed class OcrLanguageAvailabilityTests
     [Fact]
     public void No_recognizers_at_all_leaves_every_language_unreadable() =>
         Assert.All(
-            LanguageCatalog.CreateTargetOptions(),
+            LanguageCatalog.CreateTargetOptions("en-US"),
             option => Assert.Equal(
                 OcrLanguageSource.NotInstalled,
                 WithWindows().StatusFor(option.Code).Source));
@@ -73,7 +73,7 @@ public sealed class OcrLanguageAvailabilityTests
     public void Every_catalog_source_language_can_be_resolved()
     {
         IOcrLanguageAvailability availability = WithWindows("en-US");
-        foreach (LanguageOption option in LanguageCatalog.CreateSourceOptions())
+        foreach (LanguageOption option in LanguageCatalog.CreateSourceOptions("en-US"))
         {
             Assert.NotNull(availability.StatusFor(option.Code));
         }

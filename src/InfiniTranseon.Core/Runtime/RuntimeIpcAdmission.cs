@@ -13,6 +13,7 @@ public static class RuntimeMessageLaneClassifier
     public static RuntimeMessageLane Classify(RuntimeMessageKind kind) => kind switch
     {
         RuntimeMessageKind.OcrResult or RuntimeMessageKind.CloudOcrCropRequest or
+            RuntimeMessageKind.LocalOcrCropRequest or
             RuntimeMessageKind.Thumbnail =>
             RuntimeMessageLane.Data,
         _ => RuntimeMessageLane.Control,

@@ -13,9 +13,8 @@ namespace InfiniTranseon.App.Features.Workspace;
 
 public sealed partial class WorkspaceOverviewPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private readonly IProfileService _profiles;
     private readonly ISecretReferenceService _secrets;
     private readonly AppNavigationState _navigation;
@@ -76,7 +75,7 @@ public sealed partial class WorkspaceOverviewPage : Page
     /// </summary>
     private async Task ApplyReadinessAsync(ProfileCard profile)
     {
-        bool targetReady = profile.MatchSeverity == StatusSeverity.Success;
+        bool targetReady = profile.MatchState == ProfileTargetMatchState.Matched;
         ApplyReadinessRow(
             TargetReadinessIcon,
             TargetReadinessText,
@@ -107,70 +106,57 @@ public sealed partial class WorkspaceOverviewPage : Page
                 profile.ChannelCount),
             RegionReadinessRow);
 
-        // A profile can pass every structural check and still be unable to translate a single line
-        // because the provider's key was never entered, was rotated, or was cleared. Resolving this
-        // only at the first frame produced three green ticks over an unusable profile.
-        string[] providerIds =
-            [.. await _profiles.GetTranslationProviderIdsAsync(profile.ProfileId)];
-        string[] unconfigured = [.. await FindUnconfiguredProvidersAsync(providerIds)];
-        bool credentialsReady = providerIds.Length > 0 && unconfigured.Length == 0;
+        // This shared preflight covers both translation channels and enabled cloud OCR regions. It
+        // uses the same credential bindings as runtime startup, so a green row cannot turn into a
+        // first-frame provider failure.
+        IReadOnlyList<ProviderReadinessStatus> providerReadiness =
+            await ProfileProviderReadiness.EvaluateAsync(
+                await _profiles.GetRequiredProviderIdsAsync(profile.ProfileId),
+                ProfileProviderReadiness.GetCatalog(App.GetService<CustomRestAdapterStore>()),
+                _secrets);
+        ProviderReadinessStatus[] unconfigured =
+            [.. providerReadiness.Where(status => !status.IsReady)];
+        bool credentialsReady = providerReadiness.Count > 0 && unconfigured.Length == 0;
         ApplyReadinessRow(
             CredentialReadinessIcon,
             CredentialReadinessText,
             credentialsReady,
-            providerIds.Length == 0
+            providerReadiness.Count == 0
                 ? Strings.GetString("WorkspaceCredentialsNoProvider")
                 : credentialsReady
                     ? string.Format(
                         Strings.GetString("WorkspaceCredentialsReady"),
-                        string.Join("、", providerIds.Select(DisplayNameFor)))
+                        string.Join("、", providerReadiness.Select(status => status.DisplayName)))
                     : string.Format(
                         Strings.GetString("WorkspaceCredentialsNotReady"),
-                        string.Join("、", unconfigured.Select(DisplayNameFor))),
+                        string.Join("、", unconfigured.Select(status => status.DisplayName))),
             CredentialReadinessRow);
 
         bool ready = targetReady && languageReady && regionsReady && credentialsReady;
         StartButton.IsEnabled = ready;
-        ToolTipService.SetToolTip(
-            StartButton,
-            ready ? null : Strings.GetString("WorkspaceStartBlocked"));
-    }
 
-    /// <summary>
-    /// Provider ids with at least one credential the store does not hold.
-    /// <see cref="ISecretReferenceService.HasSecretAsync"/> already returns false when *any* of a
-    /// provider's credentials is absent, but it also returns false for providers that use none at
-    /// all (local models), so those are excluded by consulting the catalog first.
-    /// </summary>
-    private async Task<IReadOnlyList<string>> FindUnconfiguredProvidersAsync(
-        IReadOnlyList<string> providerIds)
-    {
-        List<string> unconfigured = [];
-        foreach (string providerId in providerIds)
-        {
-            if (FindCatalogProvider(providerId) is not { RequiresCredential: true })
+        // Naming the outstanding steps in order turns four independent checks into a route the user
+        // can follow. Each name matches the readiness row above it, so the text says where to click.
+        string[] outstanding =
+        [
+            .. new (bool Ready, string Key)[]
             {
-                continue;
+                (targetReady, "WorkspaceStepTarget"),
+                (languageReady, "WorkspaceStepLanguage"),
+                (regionsReady, "WorkspaceStepRegions"),
+                (credentialsReady, "WorkspaceStepCredentials"),
             }
-            if (!await _secrets.HasSecretAsync(providerId))
-            {
-                unconfigured.Add(providerId);
-            }
-        }
-        return unconfigured;
+            .Where(step => !step.Ready)
+            .Select(step => Strings.GetString(step.Key)),
+        ];
+        StartBlockedText.Text = ready
+            ? string.Empty
+            : string.Format(
+                Strings.GetString("WorkspaceStartBlocked"),
+                string.Join(Strings.GetString("ListSeparator"), outstanding));
+        StartBlockedText.Visibility = ready ? Visibility.Collapsed : Visibility.Visible;
+        ToolTipService.SetToolTip(StartButton, ready ? null : StartBlockedText.Text);
     }
-
-    /// <summary>Built-in providers plus imported custom REST adapters, matched by id or display
-    /// name — the same resolution the secret service performs.</summary>
-    private static CatalogProvider? FindCatalogProvider(string providerId) =>
-        ProviderCatalog.Default
-            .Concat(App.GetService<CustomRestAdapterStore>().GetCatalogProviders())
-            .FirstOrDefault(provider =>
-                string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(provider.DisplayName, providerId, StringComparison.OrdinalIgnoreCase));
-
-    private static string DisplayNameFor(string providerId) =>
-        FindCatalogProvider(providerId)?.DisplayName ?? providerId;
 
     private static void ApplyReadinessRow(
         FontIcon icon,
@@ -209,10 +195,10 @@ public sealed partial class WorkspaceOverviewPage : Page
     }
 
     private void OnEditCaptureClick(object sender, RoutedEventArgs e) =>
-        _navigation.NavigateToProfile(_profileId, WorkspaceSection.Capture);
+        _navigation.NavigateToProfileSetup(_profileId);
 
     private void OnTargetReadinessClick(object sender, RoutedEventArgs e) =>
-        _navigation.NavigateToProfile(_profileId, WorkspaceSection.Capture);
+        _navigation.NavigateToProfileSetup(_profileId);
 
     private void OnLanguageReadinessClick(object sender, RoutedEventArgs e) =>
         _navigation.NavigateToProfile(_profileId, WorkspaceSection.Language);

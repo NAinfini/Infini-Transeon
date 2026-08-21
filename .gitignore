@@ -11,6 +11,10 @@
 /*.obj
 /CMakeUserPresets.json
 
+# A locally signed model catalog for developer runs. The catalog that ships is signed by the release
+# job with that release's sequence number; committing a copy would invite shipping a stale one.
+/packaging/model-catalog.json
+
 # Per-project outputs: these legitimately appear at every project level, so they stay unanchored.
 # Do not add a source directory named bin, obj, or TestResults.
 bin/

@@ -165,6 +165,7 @@ public sealed class CloudOcrRouter : IDisposable
                 request.PixelWidth,
                 request.PixelHeight,
                 explicitCloudConsent: true,
+                request.RecognitionLanguage,
                 request.ConsentPolicyRevision,
                 request.EncodedByteCeiling,
                 request.DeadlineUtc,
@@ -175,7 +176,8 @@ public sealed class CloudOcrRouter : IDisposable
                 authorized.MimeType,
                 authorized.EncodedCrop,
                 authorized.PixelWidth,
-                authorized.PixelHeight);
+                authorized.PixelHeight,
+                authorized.RecognitionLanguage);
             OcrResultSnapshot result = await providerLease.Provider
                 .RecognizeAsync(providerRequest, deadline.Token)
                 .ConfigureAwait(false);

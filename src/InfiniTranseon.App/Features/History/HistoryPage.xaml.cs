@@ -22,10 +22,10 @@ public sealed record HistoryGroupDisplay(string Label, IReadOnlyList<HistoryEven
 
 public sealed partial class HistoryPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private Guid? _profileId;
+    private bool _loadingHistoryConfiguration;
     public HistoryPage()
     {
         ViewModel = App.GetService<HistoryViewModel>();
@@ -50,7 +50,70 @@ public sealed partial class HistoryPage : Page
     {
         ViewModel.SelectProfile(_profileId);
         await ViewModel.InitializeAsync();
+        SyncHistoryConfiguration();
         RefreshDisplayGroups();
+    }
+
+    private void SyncHistoryConfiguration()
+    {
+        _loadingHistoryConfiguration = true;
+        try
+        {
+            ProfileHistoryEnabledToggle.IsOn = ViewModel.ProfileHistoryEnabled;
+            HistoryAgeDaysBox.Value = Math.Clamp(
+                ViewModel.ProfileHistoryMaxAgeDays,
+                1,
+                ViewModel.GlobalHistoryMaxAgeDays);
+            HistoryMaximumMegabytesBox.Value = Math.Max(
+                1,
+                ViewModel.ProfileHistoryMaxBytes / (1024d * 1024d));
+            UpdateHistoryLimitState();
+        }
+        finally
+        {
+            _loadingHistoryConfiguration = false;
+        }
+    }
+
+    private void OnProfileHistoryEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_loadingHistoryConfiguration) UpdateHistoryLimitState();
+    }
+
+    private void UpdateHistoryLimitState()
+    {
+        bool enabled = ViewModel.CanConfigureProfileHistory &&
+            ProfileHistoryEnabledToggle.IsOn;
+        HistoryAgeDaysBox.IsEnabled = enabled;
+        HistoryMaximumMegabytesBox.IsEnabled = enabled;
+    }
+
+    private async void OnSaveProfileHistoryClick(object sender, RoutedEventArgs e)
+    {
+        if (!ViewModel.CanConfigureProfileHistory ||
+            double.IsNaN(HistoryAgeDaysBox.Value) ||
+            double.IsNaN(HistoryMaximumMegabytesBox.Value))
+        {
+            return;
+        }
+
+        SaveProfileHistoryButton.IsEnabled = false;
+        try
+        {
+            int maxAgeDays = (int)Math.Round(HistoryAgeDaysBox.Value);
+            long maxBytes = checked((long)Math.Round(HistoryMaximumMegabytesBox.Value) *
+                1024 * 1024);
+            await ViewModel.UpdateProfileConfigurationAsync(
+                ProfileHistoryEnabledToggle.IsOn,
+                maxAgeDays,
+                maxBytes);
+            SyncHistoryConfiguration();
+            RefreshDisplayGroups();
+        }
+        finally
+        {
+            SaveProfileHistoryButton.IsEnabled = ViewModel.CanConfigureProfileHistory;
+        }
     }
 
     private void OnFilterChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -59,7 +122,7 @@ public sealed partial class HistoryPage : Page
         ApplyFilter();
     }
 
-    private void OnDateFilterChanged(object sender, SelectionChangedEventArgs e) => ApplyFilter();
+    private void OnDateFilterChanged(object? sender, EventArgs e) => ApplyFilter();
 
     private void ApplyFilter()
     {

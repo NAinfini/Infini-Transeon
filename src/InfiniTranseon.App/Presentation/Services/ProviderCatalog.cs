@@ -19,16 +19,27 @@ public sealed record CatalogCredential(
         BindingResolver?.Invoke(providerEndpoints) ?? Binding;
 }
 
+/// <summary>
+/// A catalog entry names its taxonomy, description and unavailable state by resource key rather than
+/// by prose. The catalog is a static table shared by services that must not depend on the resource
+/// system — it is read on background threads and in tests where MRT is not registered — so the text
+/// is resolved once, at the point a row is built for display.
+/// </summary>
 public sealed record CatalogProvider(
     string Id,
     string DisplayName,
-    string Kind,
+    string KindResourceKey,
     IReadOnlyList<CatalogCredential> Credentials,
-    string Detail)
+    string DetailResourceKey)
 {
     public bool IsSelectable { get; init; } = true;
 
-    public string? UnavailableStateText { get; init; }
+    /// <summary>Composite format arguments for <see cref="DetailResourceKey"/>. Entries whose
+    /// description embeds machine data — an endpoint host, an HTTP method — name a format string and
+    /// supply the data here, so the sentence around the data stays translatable.</summary>
+    public IReadOnlyList<object?> DetailArguments { get; init; } = [];
+
+    public string? UnavailableStateResourceKey { get; init; }
 
     public CatalogProviderCapability Capability { get; init; } =
         CatalogProviderCapability.Translation;
@@ -42,18 +53,18 @@ public sealed record CatalogProvider(
     public CatalogProvider(
         string id,
         string displayName,
-        string kind,
+        string kindResourceKey,
         string? credentialReference,
         CredentialBinding? binding,
-        string detail)
+        string detailResourceKey)
         : this(
             id,
             displayName,
-            kind,
+            kindResourceKey,
             credentialReference is not null && binding is not null
                 ? [new CatalogCredential(credentialReference, "API key", binding)]
                 : [],
-            detail)
+            detailResourceKey)
     {
         if ((credentialReference is null) != (binding is null))
             throw new ArgumentException("Credential reference and binding must be supplied together.");
@@ -82,16 +93,11 @@ public enum CatalogProviderCapability
 /// </summary>
 public static class ProviderCatalog
 {
+    // Built-ins only. A local model is not a built-in: it exists on this machine or it does not, and
+    // LocalModelManagementService is the only thing that knows which. A static entry here claimed
+    // "not installed" for as long as the process lived, which outlived the download that installed it.
     public static IReadOnlyList<CatalogProvider> Default { get; } =
-    [
-        .. BuiltInProviderSpecs.All.Select(spec => spec.Catalog),
-        new("translation.local.madlad", "Local MADLAD-400 3B", "NMT · local", null, null,
-            "Optional model · never downloaded automatically")
-        {
-            IsSelectable = false,
-            UnavailableStateText = "Not installed · install on explicit request",
-        },
-    ];
+        [.. BuiltInProviderSpecs.All.Select(spec => spec.Catalog)];
 
     public static CatalogProvider? Find(string idOrDisplayName) => Default.FirstOrDefault(provider =>
         string.Equals(provider.Id, idOrDisplayName, StringComparison.OrdinalIgnoreCase) ||

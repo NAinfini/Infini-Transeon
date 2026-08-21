@@ -376,10 +376,19 @@ public sealed record RuntimeOverlayAcknowledgement
 
 public static class RuntimeOverlayDesiredStatePayloadCodec
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
     public const int FixedPayloadBytes = 48;
     public const int FixedRegionBytes = 136;
     public const int FixedSlotBytes = 40;
+    public const int FixedLineBytes = 24;
+
+    /// <summary>
+    /// A slot carries one entry per captured line it covers, so the bound is the number of text
+    /// lines a capture region can plausibly hold. It exists to reject a corrupt count before the
+    /// decoder allocates for it; the character budget is what actually limits real payloads.
+    /// </summary>
+    public const int MaxLinesPerSlot = 256;
+
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] Encode(OverlayDesiredState state)
@@ -392,11 +401,16 @@ public static class RuntimeOverlayDesiredStatePayloadCodec
             payloadBytes = checked(payloadBytes + FixedRegionBytes);
             foreach (OverlaySlotSnapshot slot in region.OrderedSlots)
             {
-                if (slot.Text is null || slot.Label is null || !Enum.IsDefined(slot.State))
+                if (slot.Lines is null || slot.Label is null || !Enum.IsDefined(slot.State) ||
+                    slot.Lines.Count > MaxLinesPerSlot)
                     throw new ArgumentException("Overlay slot state is invalid.", nameof(state));
-                totalCharacters = checked(totalCharacters + slot.Text.Length + slot.Label.Length);
-                payloadBytes = checked(payloadBytes + FixedSlotBytes +
-                    StrictUtf8.GetByteCount(slot.Label) + StrictUtf8.GetByteCount(slot.Text));
+                totalCharacters = checked(totalCharacters + slot.Label.Length);
+                payloadBytes = checked(payloadBytes + FixedSlotBytes + StrictUtf8.GetByteCount(slot.Label));
+                foreach (OverlayTextLine line in slot.Lines)
+                {
+                    totalCharacters = checked(totalCharacters + line.Text.Length);
+                    payloadBytes = checked(payloadBytes + FixedLineBytes + StrictUtf8.GetByteCount(line.Text));
+                }
             }
         }
         if (totalCharacters > RuntimeCapabilities.VersionOne.MaxOverlayCharsPerTarget ||
@@ -447,17 +461,27 @@ public static class RuntimeOverlayDesiredStatePayloadCodec
             offset += FixedRegionBytes;
             foreach (OverlaySlotSnapshot slot in region.OrderedSlots)
             {
-                int labelBytes = StrictUtf8.GetByteCount(slot.Label);
-                int textBytes = StrictUtf8.GetByteCount(slot.Text);
                 slot.SlotId.TryWriteBytes(bytes[offset..(offset + 16)]);
                 BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 16)..], slot.Order);
                 BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 20)..], (int)slot.State);
-                BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 24)..], labelBytes);
-                BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 28)..], textBytes);
+                BinaryPrimitives.WriteInt32LittleEndian(
+                    bytes[(offset + 24)..], StrictUtf8.GetByteCount(slot.Label));
+                BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 28)..], slot.Lines.Count);
                 BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 32)..], slot.StageIndex);
                 offset += FixedSlotBytes;
                 offset += StrictUtf8.GetBytes(slot.Label, bytes[offset..]);
-                offset += StrictUtf8.GetBytes(slot.Text, bytes[offset..]);
+                foreach (OverlayTextLine line in slot.Lines)
+                {
+                    BinaryPrimitives.WriteInt32LittleEndian(
+                        bytes[offset..], StrictUtf8.GetByteCount(line.Text));
+                    BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 4)..], line.Bounds.X);
+                    BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 8)..], line.Bounds.Y);
+                    BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 12)..], line.Bounds.Width);
+                    BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 16)..], line.Bounds.Height);
+                    BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 20)..], line.SourceLineCount);
+                    offset += FixedLineBytes;
+                    offset += StrictUtf8.GetBytes(line.Text, bytes[offset..]);
+                }
             }
         }
         return payload;
@@ -535,27 +559,44 @@ public static class RuntimeOverlayDesiredStatePayloadCodec
                 {
                     Require(payload, offset, FixedSlotBytes);
                     int labelBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 24)..]);
-                    int textBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 28)..]);
-                    if (labelBytes < 0 || textBytes < 0 ||
-                        labelBytes > RuntimeProtocol.MaxPayloadBytes - textBytes)
+                    int lineCount = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 28)..]);
+                    if (labelBytes < 0 || labelBytes > RuntimeProtocol.MaxPayloadBytes ||
+                        lineCount is < 0 or > MaxLinesPerSlot)
                         throw new InvalidDataException("Overlay slot text lengths are invalid.");
-                    int variableBytes = checked(labelBytes + textBytes);
-                    Require(payload, offset + FixedSlotBytes, variableBytes);
-                    string label = StrictUtf8.GetString(payload.Slice(offset + FixedSlotBytes, labelBytes));
-                    string text = StrictUtf8.GetString(payload.Slice(offset + FixedSlotBytes + labelBytes, textBytes));
-                    totalCharacters = checked(totalCharacters + label.Length + text.Length);
                     if (!payload.Slice(offset + 36, 4).SequenceEqual(new byte[4]))
                         throw new InvalidDataException("Overlay slot reserved bytes are invalid.");
-                    slots.Add(new OverlaySlotSnapshot(
-                        new Guid(payload.Slice(offset, 16)),
-                        BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 16)..]),
-                        (OverlaySlotState)BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 20)..]),
-                        text,
-                        label)
+                    Guid slotId = new(payload.Slice(offset, 16));
+                    int order = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 16)..]);
+                    var slotState = (OverlaySlotState)BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 20)..]);
+                    int stageIndex = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 32)..]);
+                    Require(payload, offset + FixedSlotBytes, labelBytes);
+                    string label = StrictUtf8.GetString(payload.Slice(offset + FixedSlotBytes, labelBytes));
+                    totalCharacters = checked(totalCharacters + label.Length);
+                    offset = checked(offset + FixedSlotBytes + labelBytes);
+                    var lines = new OverlayTextLine[lineCount];
+                    for (int lineIndex = 0; lineIndex < lineCount; lineIndex++)
                     {
-                        StageIndex = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 32)..]),
+                        Require(payload, offset, FixedLineBytes);
+                        int lineTextBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[offset..]);
+                        if (lineTextBytes < 0 || lineTextBytes > RuntimeProtocol.MaxPayloadBytes)
+                            throw new InvalidDataException("Overlay slot text lengths are invalid.");
+                        var lineBounds = new OverlayPixelRect(
+                            BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 4)..]),
+                            BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 8)..]),
+                            BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 12)..]),
+                            BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 16)..]));
+                        int sourceLineCount = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 20)..]);
+                        Require(payload, offset + FixedLineBytes, lineTextBytes);
+                        string lineText = StrictUtf8.GetString(
+                            payload.Slice(offset + FixedLineBytes, lineTextBytes));
+                        totalCharacters = checked(totalCharacters + lineText.Length);
+                        lines[lineIndex] = new OverlayTextLine(lineText, lineBounds, sourceLineCount);
+                        offset = checked(offset + FixedLineBytes + lineTextBytes);
+                    }
+                    slots.Add(new OverlaySlotSnapshot(slotId, order, slotState, lines, label)
+                    {
+                        StageIndex = stageIndex,
                     });
-                    offset = checked(offset + FixedSlotBytes + variableBytes);
                 }
                 regions.Add(new OverlayRegionSnapshot(regionId, bounds, style, slots));
             }

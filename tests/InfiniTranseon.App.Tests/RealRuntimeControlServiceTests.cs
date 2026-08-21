@@ -67,12 +67,18 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         string targetKind = "Window",
         OverlayPixelRect? desktopRegion = null,
         bool failStart = false,
-        IReadOnlyList<ProfileCaptureTargetDraft>? captureTargets = null)
+        IReadOnlyList<ProfileCaptureTargetDraft>? captureTargets = null,
+        ApplicationSettings? applicationSettings = null,
+        Func<ProfileDocument, ProfileDocument>? transformProfile = null,
+        Action<ProfileDocument, RuntimeProfileBinding, IRuntimeTranslationRecordSink?, ApplicationSettings>?
+            observeLaunch = null,
+        Action<FakeSettingsService>? observeSettings = null,
+        Func<ISecretReferenceService, CancellationToken, Task>? configureSecrets = null)
     {
         var options = new AppDataOptions(_root);
         options.EnsureRootExists();
         var repository = new ProfileRepository(options.DatabasePath);
-        var profileService = new RealProfileService(repository, options.DatabasePath);
+        var profileService = new RealProfileService(repository, new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
         Guid profileId = await profileService.SaveAsync(
             new ProfileEditModel(
                 Guid.Empty, "Visual novel", "ja", "zh-Hans", Guid.NewGuid(), "Notepad", targetKind,
@@ -82,20 +88,42 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
                 captureTargets),
             ct);
 
+        if (transformProfile is not null)
+        {
+            ProfileDocument stored = await repository.LoadAsync(profileId, ct) ??
+                throw new InvalidOperationException("Test profile was not persisted.");
+            await repository.SaveAsync(transformProfile(stored), ct);
+        }
+
         var engine = new ScriptedEngine { FailStart = failStart };
         var runtimeState = new RuntimeStateStore();
         var eventHub = new RuntimeEventHub();
+        var settings = new FakeSettingsService();
+        observeSettings?.Invoke(settings);
+        if (applicationSettings is not null)
+        {
+            await settings.UpdateAsync(applicationSettings, ct);
+        }
+        var credentials = new InMemoryCredentialStore();
+        var secrets = new RealSecretReferenceService(credentials, ProviderCatalog.Default);
+        await secrets.SetSecretAsync("translation.deepl", "test-key", ct);
+        if (configureSecrets is not null)
+        {
+            await configureSecrets(secrets, ct);
+        }
         var service = new RealRuntimeControlService(
             repository,
             new ScriptedCaptureProbe(probeTargets),
-            new FakeSettingsService(),
-            new InMemoryCredentialStore(),
+            settings,
+            secrets,
+            credentials,
             new RuntimeCapabilitiesService(),
             runtimeState,
             eventHub,
             options,
-            (_, binding, _, _) =>
+            (profile, binding, history, launchSettings) =>
             {
+                observeLaunch?.Invoke(profile, binding, history, launchSettings);
                 engine.Binding = binding;
                 return engine;
             });
@@ -113,7 +141,7 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         ProfileTarget target = profile.Targets[0];
         ProfileRegion region = target.Regions[0];
         ProfileTranslationChannel alternateChannel =
-            ProfileTranslationChannel.Create("translation.google") with
+            ProfileTranslationChannel.Create("translation.deepl") with
             {
                 TranslationGroupId = alternateGroupId,
             };
@@ -312,6 +340,133 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Global_strict_offline_is_applied_to_the_runtime_profile()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        ProfileDocument? launchedProfile = null;
+        RuntimeProfileBinding? launchedBinding = null;
+        (RealRuntimeControlService service, Guid profileId, _, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                applicationSettings: new ApplicationSettings(
+                    UiThemePreference.System,
+                    StrictOffline: true,
+                    HistoryRetention.Days30,
+                    "en-US"),
+                observeLaunch: (profile, binding, _, _) =>
+                {
+                    launchedProfile = profile;
+                    launchedBinding = binding;
+                });
+
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+
+            Assert.True(launchedProfile?.StrictOffline);
+            Assert.True(launchedBinding?.Profile.StrictOffline);
+            Assert.All(launchedBinding!.Targets, target => Assert.True(target.RunOptions.StrictOffline));
+        }
+    }
+
+    [Fact]
+    public async Task Runtime_settings_change_rebuilds_the_running_engine_with_the_new_policy()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        FakeSettingsService? settings = null;
+        int launchCount = 0;
+        RuntimeProfileBinding? latestBinding = null;
+        (RealRuntimeControlService service, Guid profileId, _, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                observeLaunch: (_, binding, _, _) =>
+                {
+                    launchCount++;
+                    latestBinding = binding;
+                },
+                observeSettings: value => settings = value);
+
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            Assert.False(latestBinding!.Profile.StrictOffline);
+
+            ApplicationSettings current = await settings!.GetSettingsAsync(ct);
+            await settings.UpdateAsync(current with { StrictOffline = true }, ct);
+            ProfileRuntimeApplyResult result = await service.ApplySettingsAsync(ct);
+
+            Assert.Equal(ProfileRuntimeApplyResult.Restarted, result);
+            Assert.Equal(2, launchCount);
+            Assert.True(latestBinding!.Profile.StrictOffline);
+        }
+    }
+
+    [Fact]
+    public async Task Profile_history_consent_is_required_even_when_global_retention_is_enabled()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        IRuntimeTranslationRecordSink? launchedHistory = null;
+        (RealRuntimeControlService service, Guid profileId, _, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                observeLaunch: (_, _, history, _) => launchedHistory = history);
+
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            Assert.Null(launchedHistory);
+        }
+    }
+
+    [Fact]
+    public async Task Profile_history_retention_overrides_the_global_default()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        IRuntimeTranslationRecordSink? launchedHistory = null;
+        (RealRuntimeControlService service, Guid profileId, _, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                applicationSettings: new ApplicationSettings(
+                    UiThemePreference.System,
+                    StrictOffline: false,
+                    HistoryRetention.Days90,
+                    "en-US"),
+                transformProfile: profile => profile with
+                {
+                    History = new ProfileHistorySettings
+                    {
+                        Enabled = true,
+                        MaxAgeDays = 1,
+                        MaxBytes = 2 * 1024,
+                    },
+                },
+                observeLaunch: (_, _, history, _) => launchedHistory = history);
+
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            Assert.NotNull(launchedHistory);
+
+            await launchedHistory!.SaveAsync(
+                profileId,
+                Generation(DateTimeOffset.UtcNow.AddDays(-2)),
+                "Dialogue",
+                [],
+                ct);
+
+            var repository = new HistoryRepository(
+                new AppDataOptions(_root).DatabasePath,
+                new HistoryOptions(Enabled: true, Retention: TimeSpan.FromDays(365)));
+            HistoryPage page = await repository.ReadPageAsync(profileId, 10, null, ct);
+            Assert.Empty(page.Items);
+        }
+    }
+
+    [Fact]
     public async Task Start_rejects_unknown_profile_with_stable_reason_code()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
@@ -338,6 +493,79 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
             Assert.Equal("targetNotFound", error.ReasonCode);
             Assert.Equal("Notepad", error.Detail);
             Assert.Equal(EngineRuntimeStatus.Stopped, service.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Start_rejects_missing_cloud_ocr_credential_before_creating_the_engine()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        int factoryCalls = 0;
+        (RealRuntimeControlService service, Guid profileId, _, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                transformProfile: profile => WithCloudOcr(profile, "ocr.google-cloud-vision"),
+                observeLaunch: (_, _, _, _) => factoryCalls++);
+
+        await using (service)
+        {
+            EngineStartException error = await Assert.ThrowsAsync<EngineStartException>(
+                () => service.StartAsync(profileId, ct));
+
+            Assert.Equal("providerNotReady", error.ReasonCode);
+            Assert.Equal(0, factoryCalls);
+        }
+    }
+
+    [Fact]
+    public async Task Apply_rejects_missing_cloud_ocr_credential_before_hot_apply_or_restart()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        int factoryCalls = 0;
+        (RealRuntimeControlService service, Guid profileId, ScriptedEngine engine, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                observeLaunch: (_, _, _, _) => factoryCalls++);
+
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            var repository = new ProfileRepository(new AppDataOptions(_root).DatabasePath);
+            ProfileDocument stored = await repository.LoadAsync(profileId, ct) ??
+                throw new InvalidOperationException("Test profile disappeared.");
+            await repository.SaveAsync(WithCloudOcr(stored, "ocr.google-cloud-vision"), ct);
+
+            EngineStartException error = await Assert.ThrowsAsync<EngineStartException>(
+                () => service.ApplyProfileAsync(profileId, ct));
+
+            Assert.Equal("providerNotReady", error.ReasonCode);
+            Assert.Equal(1, factoryCalls);
+            Assert.False(engine.Binding!.Profile.Targets[0].Regions[0].Ocr.UseCloudOcr);
+        }
+    }
+
+    [Fact]
+    public async Task Start_continues_after_the_selected_cloud_ocr_credential_is_configured()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        int factoryCalls = 0;
+        (RealRuntimeControlService service, Guid profileId, _, _, _) =
+            await BuildWithRuntimeAsync(
+                [Window("Notepad")],
+                ct,
+                transformProfile: profile => WithCloudOcr(profile, "ocr.google-cloud-vision"),
+                observeLaunch: (_, _, _, _) => factoryCalls++,
+                configureSecrets: (secrets, token) => secrets.SetSecretAsync(
+                    "ocr.google-cloud-vision", "test-key", token));
+
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+
+            Assert.Equal(EngineRuntimeStatus.Running, service.Status);
+            Assert.Equal(1, factoryCalls);
         }
     }
 
@@ -400,6 +628,28 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Failing_stop_still_releases_the_engine_so_the_profile_can_start_again()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        (RealRuntimeControlService service, Guid profileId, ScriptedEngine engine) =
+            await BuildAsync([Window("Notepad")], ct);
+        await using (service)
+        {
+            await service.StartAsync(profileId, ct);
+            engine.FailStop = true;
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.StopAsync(ct));
+
+            Assert.True(engine.Disposed);
+            Assert.Empty(service.GetRunningTargets());
+
+            engine.FailStop = false;
+            await service.StartAsync(profileId, ct);
+            Assert.Equal(EngineRuntimeStatus.Running, service.Status);
+        }
+    }
+
     // --- C2: engine live events -> RuntimeStateStore admission -> RuntimeEventHub -----------------
 
     private static readonly TargetInstanceId LiveTarget =
@@ -449,6 +699,54 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
                 null,
                 null),
             DateTimeOffset.UtcNow);
+
+    private static TextGeneration Generation(DateTimeOffset capturedAtUtc)
+    {
+        var source = new SourceGenerationToken(
+            Guid.NewGuid(),
+            new TargetInstanceId(Guid.NewGuid()),
+            CaptureAreaKey.FullTarget,
+            new TextTrackId(Guid.NewGuid()),
+            1,
+            1);
+        return new TextGeneration(
+            new CaptureTargetId(Guid.NewGuid()),
+            source,
+            new SourceEventId(Guid.NewGuid()),
+            new NormalizedRect(0, 0, 1, 1),
+            "old source",
+            [new TextLine("old source", new NormalizedRect(0, 0, 1, 1), 1)],
+            capturedAtUtc,
+            1,
+            1);
+    }
+
+    private static ProfileDocument WithCloudOcr(ProfileDocument profile, string providerId)
+    {
+        ProfileTarget target = profile.Targets[0];
+        ProfileRegion region = target.Regions[0];
+        return profile with
+        {
+            Targets =
+            [
+                target with
+                {
+                    Regions =
+                    [
+                        region with
+                        {
+                            Ocr = region.Ocr with
+                            {
+                                UseCloudOcr = true,
+                                CloudConsentPolicyRevision = 1,
+                                ProviderId = providerId,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+    }
 
     [Fact]
     public async Task Accepted_translation_flows_from_engine_event_through_admission_into_the_hub()
@@ -608,6 +906,7 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         public RuntimeProfileBinding? Binding { get; set; }
 
         public bool FailStart { get; set; }
+        public bool FailStop { get; set; }
         public bool FailHotApply { get; set; }
         public RuntimeVisibleReplayResult? LastTranslationGroupReplay { get; set; }
 
@@ -667,6 +966,7 @@ public sealed class RealRuntimeControlServiceTests : IDisposable
         {
             Transition(EngineRuntimeStatus.Stopping);
             _snapshots.Clear();
+            if (FailStop) throw new InvalidOperationException("scripted.stopFailed");
             Transition(EngineRuntimeStatus.Stopped);
             return ValueTask.CompletedTask;
         }

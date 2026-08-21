@@ -10,7 +10,8 @@ public static class ProfileRuntimeConfigurationFactory
         TargetInstanceId targetInstanceId,
         long configurationRevision,
         Guid profileId,
-        long profileRevision)
+        long profileRevision,
+        Func<string, RuntimeOcrBackend>? ocrBackendResolver = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(targetInstanceId);
@@ -31,7 +32,9 @@ public static class ProfileRuntimeConfigurationFactory
             });
         RuntimeProcessingRegion[] regions = configuredRegions
             .Where(region => region.Enabled)
-            .Select(CreateRegion)
+            .Select(region => CreateRegion(
+                region,
+                ocrBackendResolver ?? (_ => RuntimeOcrBackend.Windows)))
             .ToArray();
         return new RuntimeProcessingConfiguration(
             targetInstanceId,
@@ -44,9 +47,14 @@ public static class ProfileRuntimeConfigurationFactory
             regions);
     }
 
-    private static RuntimeProcessingRegion CreateRegion(ProfileRegion region)
+    private static RuntimeProcessingRegion CreateRegion(
+        ProfileRegion region,
+        Func<string, RuntimeOcrBackend> ocrBackendResolver)
     {
         string preprocessing = JsonSerializer.Serialize(region.Ocr.PreprocessingSteps);
+        RuntimeOcrBackend backend = region.Ocr.UseCloudOcr
+            ? RuntimeOcrBackend.Cloud
+            : ocrBackendResolver(region.Ocr.RecognitionLanguage);
         return new RuntimeProcessingRegion(
             new RegionId(region.RegionId),
             region.Bounds,
@@ -55,7 +63,7 @@ public static class ProfileRuntimeConfigurationFactory
             ToMilliseconds(region.RecognitionInterval, 16, nameof(region.RecognitionInterval)),
             region.LockDegradation,
             region.Ocr.DetectOrientation,
-            region.Ocr.UseCloudOcr,
+            backend,
             region.Ocr.CloudConsentPolicyRevision,
             region.Ocr.DetectionScale,
             (RuntimeLineBreakMode)region.LineBreakMode,

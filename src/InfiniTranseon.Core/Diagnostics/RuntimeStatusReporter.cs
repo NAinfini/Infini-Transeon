@@ -31,7 +31,7 @@ public sealed class RuntimeStatusReporter
             lifecycle.ErrorCode is not null || RequiresAttention(lifecycle.Target.State)
                 ? StatusEventSeverity.Warning
                 : StatusEventSeverity.Information,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["targetId"] = lifecycle.Target.TargetId.Value,
                 ["targetInstanceId"] = lifecycle.Target.TargetInstanceId.Value,
@@ -55,7 +55,7 @@ public sealed class RuntimeStatusReporter
             failure.ErrorCode,
             "status.runtime.pipeline.failure",
             StatusEventSeverity.Error,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["targetInstanceId"] = failure.TargetInstanceId?.Value,
                 ["textTrackId"] = failure.TextTrackId?.Value,
@@ -79,7 +79,7 @@ public sealed class RuntimeStatusReporter
             degradation.Kind == DegradationEventKind.Recovered
                 ? StatusEventSeverity.Information
                 : StatusEventSeverity.Warning,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["profileId"] = profileId,
                 ["kind"] = degradation.Kind,

@@ -7,6 +7,7 @@ public sealed class RuntimeIpcAdmissionTests
 {
     [Theory]
     [InlineData(RuntimeMessageKind.CloudOcrCropRequest, RuntimeMessageLane.Data)]
+    [InlineData(RuntimeMessageKind.LocalOcrCropRequest, RuntimeMessageLane.Data)]
     [InlineData(RuntimeMessageKind.OcrResult, RuntimeMessageLane.Data)]
     [InlineData(RuntimeMessageKind.Thumbnail, RuntimeMessageLane.Data)]
     [InlineData(RuntimeMessageKind.ControlRequest, RuntimeMessageLane.Control)]

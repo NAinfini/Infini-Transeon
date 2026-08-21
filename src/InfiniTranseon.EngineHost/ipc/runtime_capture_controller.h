@@ -26,9 +26,10 @@ namespace infini::runtime
 [[nodiscard]] bool manual_ocr_target_available(
     std::uint32_t lifecycle_state,
     bool latest_frame_available) noexcept;
-[[nodiscard]] bool manual_ocr_allows_signature(
+[[nodiscard]] bool ocr_signature_allows_dispatch(
     bool manual_requested,
-    bool meaningfully_changed) noexcept;
+    bool meaningfully_changed,
+    std::size_t automatic_observations) noexcept;
 
 struct AdapterGpuBudget final
 {
@@ -106,12 +107,14 @@ class RuntimeCaptureController final
 public:
     using lifecycle_callback = std::function<void(const CaptureTargetLifecycleEvent&)>;
     using cloud_ocr_callback = std::function<bool(const CloudOcrCropEvent&)>;
+    using local_ocr_callback = std::function<bool(const LocalOcrCropEvent&)>;
     using ocr_result_callback = std::function<bool(const OcrResultCommand&)>;
 
     RuntimeCaptureController(
         lifecycle_callback callback,
         std::array<std::byte, 16U> runtime_epoch,
         cloud_ocr_callback cloud_ocr,
+        local_ocr_callback local_ocr,
         ocr_result_callback ocr_result);
     ~RuntimeCaptureController();
     RuntimeCaptureController(const RuntimeCaptureController&) = delete;

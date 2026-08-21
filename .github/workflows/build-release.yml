@@ -85,7 +85,7 @@ jobs:
           ctest --test-dir artifacts/cmake/windows-x64 -C Release --output-on-failure
 
       - name: Managed release tests
-        run: dotnet test InfiniTranseon.sln -c Release --no-restore
+        run: dotnet test --solution InfiniTranseon.sln --configuration Release --no-restore
 
       - name: Benchmark contract smoke
         run: dotnet run --project benchmarks/GameOcrBench/GameOcrBench.csproj -c Release --no-build -- benchmarks/GameOcrBench/smoke-samples.json artifacts/game-ocr-bench-smoke.json

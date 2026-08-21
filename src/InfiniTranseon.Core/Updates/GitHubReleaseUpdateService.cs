@@ -129,6 +129,10 @@ public sealed class GitHubReleaseUpdateService : IReleaseUpdateClient
             : null;
         if (string.IsNullOrWhiteSpace(releaseTag))
             throw new InvalidDataException("GitHub release metadata has no tag identity.");
+        string tagVersionText = releaseTag.StartsWith('v') ? releaseTag[1..] : releaseTag;
+        if (!Version.TryParse(tagVersionText.Split('-', 2)[0], out Version? tagVersion))
+            throw new InvalidDataException("GitHub release metadata has an invalid tag identity.");
+        if (tagVersion <= context.CurrentVersion) return null;
         if (!release.RootElement.TryGetProperty("assets", out JsonElement assets) ||
             assets.ValueKind != JsonValueKind.Array || assets.GetArrayLength() > 64)
             throw new InvalidDataException("GitHub release metadata has an invalid asset list.");
@@ -155,13 +159,11 @@ public sealed class GitHubReleaseUpdateService : IReleaseUpdateClient
         ValidateManifest(manifest, context, assetUris, releaseTag);
         if (!_sequence.TryAccept(manifest.ReleaseSequence))
             throw new InvalidDataException("Release manifest downgrade was rejected.");
-        var version = Version.Parse(manifest.ReleaseVersion.Split('-', 2)[0]);
-        if (version <= context.CurrentVersion) return null;
         UpdateArtifact[] result = manifest.Artifacts.Select(artifact => new UpdateArtifact(
             assetUris[artifact.FileName], artifact.FileName, artifact.ByteSize,
             artifact.Sha256, artifact.CodeSigning, artifact.AuthenticodePublisher)).ToArray();
         return new UpdateMetadata(
-            version, manifest.ReleaseSequence, manifest.Channel, manifest.Architecture,
+            tagVersion, manifest.ReleaseSequence, manifest.Channel, manifest.Architecture,
             manifest.PublishedAtUtc, result, keyId);
     }
 

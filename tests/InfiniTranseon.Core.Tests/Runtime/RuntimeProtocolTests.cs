@@ -17,7 +17,7 @@ public sealed class RuntimeProtocolTests
     public void MessageKindWireNumbersAreContiguousAndStable()
     {
         Assert.Equal(
-            Enumerable.Range(0, 28),
+            Enumerable.Range(0, 29),
             Enum.GetValues<RuntimeMessageKind>().Select(value => (int)value));
     }
 
@@ -190,7 +190,7 @@ public sealed class RuntimeProtocolTests
         Assert.Equal(RuntimeProtocol.MaxInFlightBytes,
             backpressure.GetProperty("sharedMaxBytes").GetInt64());
         Assert.Equal(
-            ["CloudOcrCropRequest", "OcrResult", "Thumbnail"],
+            ["CloudOcrCropRequest", "LocalOcrCropRequest", "OcrResult", "Thumbnail"],
             backpressure.GetProperty("dataLaneKinds").EnumerateArray()
                 .Select(item => item.GetString()).OfType<string>().ToArray());
         Assert.Equal("caller-configured-finite-window",
@@ -221,6 +221,7 @@ public sealed class RuntimeProtocolTests
     [Theory]
     [InlineData(RuntimeMessageKind.OcrResult)]
     [InlineData(RuntimeMessageKind.CloudOcrCropRequest)]
+    [InlineData(RuntimeMessageKind.LocalOcrCropRequest)]
     [InlineData(RuntimeMessageKind.TranslationOutput)]
     [InlineData(RuntimeMessageKind.TranslationStreamSnapshot)]
     [InlineData(RuntimeMessageKind.OverlayDesiredState)]
@@ -306,7 +307,7 @@ public sealed class RuntimeProtocolTests
                 recognitionIntervalMilliseconds: 125,
                 lockDegradation: true,
                 detectOrientation: true,
-                useCloudOcr: false,
+                ocrBackend: RuntimeOcrBackend.Windows,
                 cloudConsentPolicyRevision: 0,
                 detectionScale: 0.75,
                 lineBreakMode: RuntimeLineBreakMode.KeyValueRows,
@@ -325,6 +326,10 @@ public sealed class RuntimeProtocolTests
         Assert.Equal(value.ScanRemainingArea, decoded.ScanRemainingArea);
         Assert.Equal(value.RemainingAreaIntervalMilliseconds, decoded.RemainingAreaIntervalMilliseconds);
         Assert.Equal(value.Regions, decoded.Regions);
+        byte[] invalidBackend = RuntimeProcessingConfigurationPayloadCodec.Encode(value);
+        invalidBackend[RuntimeProcessingConfigurationPayloadCodec.FixedPayloadBytes + 57] = 3;
+        Assert.Throws<InvalidDataException>(() =>
+            RuntimeProcessingConfigurationPayloadCodec.Decode(invalidBackend));
         Assert.Throws<InvalidDataException>(() =>
             RuntimeProcessingConfigurationPayloadCodec.Decode(new byte[55]));
         Assert.Throws<ArgumentOutOfRangeException>(() => new RuntimeProcessingConfiguration(
@@ -357,6 +362,7 @@ public sealed class RuntimeProtocolTests
         OcrExecutionToken token = OcrToken(resultSequence: 2, isManual: true);
         using var value = new CloudOcrCropRequest(
             token, "image/png", [1, 2, 3, 4], 640, 160, true,
+            recognitionLanguage: "ja-JP",
             consentPolicyRevision: 7,
             encodedByteCeiling: 1024,
             deadlineUtc: deadline,
@@ -372,6 +378,48 @@ public sealed class RuntimeProtocolTests
         Assert.Equal(1024, decoded.EncodedByteCeiling);
         Assert.Equal(deadline, decoded.DeadlineUtc);
         Assert.Equal("ocr.tencent", decoded.ProviderId);
+        Assert.Equal("ja-JP", decoded.RecognitionLanguage);
+
+        using var automatic = new CloudOcrCropRequest(
+            token, "image/png", [0x91, 0x02, 0xf3], 640, 160, true,
+            recognitionLanguage: "auto",
+            consentPolicyRevision: 7,
+            encodedByteCeiling: 1024,
+            deadlineUtc: deadline,
+            providerId: "ocr.tencent");
+        using CloudOcrCropRequest automaticDecoded = RuntimeCloudOcrCropRequestPayloadCodec.Decode(
+            RuntimeCloudOcrCropRequestPayloadCodec.Encode(automatic));
+
+        Assert.Equal("auto", automaticDecoded.RecognitionLanguage);
+        Assert.Equal(new byte[] { 0x91, 0x02, 0xf3 }, automaticDecoded.EncodedCrop.ToArray());
+    }
+
+    [Fact]
+    public void LocalOcrCropPayloadRoundTripsWithoutCloudConsentFields()
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
+        OcrExecutionToken token = OcrToken(resultSequence: 3, isManual: false);
+        using var value = new LocalOcrCropRequest(
+            token,
+            "image/png",
+            [9, 8, 7],
+            480,
+            120,
+            "ja-JP",
+            encodedByteCeiling: 2048,
+            deadlineUtc: deadline);
+
+        using LocalOcrCropRequest decoded = RuntimeLocalOcrCropRequestPayloadCodec.Decode(
+            RuntimeLocalOcrCropRequestPayloadCodec.Encode(value));
+
+        Assert.Equal(token, decoded.ExecutionToken);
+        Assert.Equal("image/png", decoded.MimeType);
+        Assert.Equal(new byte[] { 9, 8, 7 }, decoded.EncodedCrop.ToArray());
+        Assert.Equal("ja-JP", decoded.RecognitionLanguage);
+        Assert.Equal(2048, decoded.EncodedByteCeiling);
+        Assert.Equal(deadline, decoded.DeadlineUtc);
+        Assert.Throws<ArgumentException>(() => new LocalOcrCropRequest(
+            token, "image/png", [1], 1, 1, "auto"));
     }
 
     [Fact]
@@ -527,11 +575,24 @@ public sealed class RuntimeProtocolTests
                     NoScrollOverflow = true,
                 },
                 [
-                    new OverlaySlotSnapshot(firstSlot, 0, OverlaySlotState.Streaming, "勇者：こんにちは", "主译")
+                    new OverlaySlotSnapshot(
+                        firstSlot,
+                        0,
+                        OverlaySlotState.Streaming,
+                        [
+                            new OverlayTextLine("勇者：こんにちは", new OverlayPixelRect(12, 34, 900, 60)),
+                            new OverlayTextLine("元気ですか", new OverlayPixelRect(12, 94, 900, 60)),
+                        ],
+                        "主译")
                     {
                         StageIndex = 2,
                     },
-                    new OverlaySlotSnapshot(Guid.NewGuid(), 1, OverlaySlotState.Waiting, "", "候选 2"),
+                    new OverlaySlotSnapshot(
+                        Guid.NewGuid(),
+                        1,
+                        OverlaySlotState.Waiting,
+                        [new OverlayTextLine("", new OverlayPixelRect(12, 34, 900, 120), 2)],
+                        "候选 2"),
                 ])]);
 
         OverlayDesiredState decoded = RuntimeOverlayDesiredStatePayloadCodec.Decode(
@@ -545,7 +606,9 @@ public sealed class RuntimeProtocolTests
         Assert.Equal(value.Regions[0].Bounds, region.Bounds);
         Assert.Equal(value.Regions[0].Style, region.Style);
         Assert.Equal(firstSlot, region.OrderedSlots[0].SlotId);
-        Assert.Equal("勇者：こんにちは", region.OrderedSlots[0].Text);
+        Assert.Equal("勇者：こんにちは\n元気ですか", region.OrderedSlots[0].Text);
+        Assert.Equal(value.Regions[0].OrderedSlots[0].Lines, region.OrderedSlots[0].Lines);
+        Assert.Equal(value.Regions[0].OrderedSlots[1].Lines, region.OrderedSlots[1].Lines);
         Assert.Equal("主译", region.OrderedSlots[0].Label);
         Assert.Equal(2, region.OrderedSlots[0].StageIndex);
     }

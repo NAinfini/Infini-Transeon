@@ -16,7 +16,7 @@ public sealed class OverlayStateCoordinatorTests
         SourceGenerationToken first = Source(epoch, target, regionId, 1);
 
         OverlayDesiredState initial = coordinator.BeginRegion(
-            regionId, first, new OverlayPixelRect(10, 20, 300, 100), Style(), channels);
+            regionId, first, new OverlayPixelRect(10, 20, 300, 100), Style(), [], channels);
 
         OverlayRegionSnapshot initialRegion = Assert.Single(initial.Regions);
         Assert.Equal(2, initialRegion.OrderedSlots.Count);
@@ -26,7 +26,7 @@ public sealed class OverlayStateCoordinatorTests
 
         SourceGenerationToken second = Source(epoch, target, regionId, 2);
         OverlayDesiredState replacement = coordinator.BeginRegion(
-            regionId, second, new OverlayPixelRect(10, 20, 300, 100), Style(), channels);
+            regionId, second, new OverlayPixelRect(10, 20, 300, 100), Style(), [], channels);
         Assert.True(replacement.OverlayRevision > streaming.OverlayRevision);
         Assert.False(coordinator.TryApply(
             Output(first, channels[0], "旧译文", completed: true), out _));
@@ -48,7 +48,7 @@ public sealed class OverlayStateCoordinatorTests
         TranslationChannelDefinition channel = Channel(0, "Primary");
         SourceGenerationToken source = Source(epoch, target, regionId, 1);
         coordinator.BeginRegion(
-            regionId, source, new OverlayPixelRect(0, 0, 200, 80), Style(), [channel]);
+            regionId, source, new OverlayPixelRect(0, 0, 200, 80), Style(), [], [channel]);
         TranslationOutput newer = Output(source, channel, "润色", completed: true, stageIndex: 2);
         Assert.True(coordinator.TryApply(newer, out OverlayDesiredState? state));
         Assert.False(coordinator.TryApply(
@@ -73,7 +73,7 @@ public sealed class OverlayStateCoordinatorTests
         SourceGenerationToken source = Source(epoch, target, regionId, 1);
         Guid runId = Guid.NewGuid();
         coordinator.BeginRegion(
-            regionId, source, new OverlayPixelRect(0, 0, 200, 80), Style(), [channel]);
+            regionId, source, new OverlayPixelRect(0, 0, 200, 80), Style(), [], [channel]);
         Assert.True(coordinator.TryApply(
             Output(source, channel, "初译", completed: true, stageIndex: 1, channelRunId: runId), out _));
 
@@ -87,6 +87,42 @@ public sealed class OverlayStateCoordinatorTests
         clock.Advance(TimeSpan.FromMilliseconds(450));
         Assert.Equal(TimeSpan.Zero,
             coordinator.GetRefinementDelay(refinement, TimeSpan.FromMilliseconds(650)));
+    }
+
+    /// <summary>
+    /// The overlay has to leave the screen looking like itself: a translated line belongs on the
+    /// pixels the line it replaces occupied, not at the top of the region. That only holds while the
+    /// translation still has one line per captured line, which is why the fallback matters as much.
+    /// </summary>
+    [Fact]
+    public void PlacesEachTranslatedLineOverTheCapturedLineItReplaces()
+    {
+        Guid epoch = Guid.NewGuid();
+        var target = new TargetInstanceId(Guid.NewGuid());
+        Guid regionId = Guid.NewGuid();
+        var coordinator = new OverlayStateCoordinator(epoch, target);
+        TranslationChannelDefinition channel = Channel(0, "Primary");
+        SourceGenerationToken source = Source(epoch, target, regionId, 1);
+        Guid runId = Guid.NewGuid();
+        OverlayPixelRect[] sourceLines = [new(10, 20, 300, 40), new(10, 60, 300, 40)];
+        var bounds = new OverlayPixelRect(10, 20, 300, 80);
+        coordinator.BeginRegion(regionId, source, bounds, Style(), sourceLines, [channel]);
+
+        Assert.True(coordinator.TryApply(
+            Output(source, channel, "第一行\n第二行", completed: true, channelRunId: runId),
+            out OverlayDesiredState? placed));
+        OverlaySlotSnapshot slot = placed!.Regions[0].OrderedSlots[0];
+        Assert.Equal(new[] { "第一行", "第二行" }, slot.Lines.Select(line => line.Text).ToArray());
+        Assert.Equal(sourceLines, slot.Lines.Select(line => line.Bounds).ToArray());
+        Assert.All(slot.Lines, line => Assert.Equal(1, line.SourceLineCount));
+        Assert.Equal("第一行\n第二行", slot.Text);
+
+        Assert.True(coordinator.TryApply(
+            Output(source, channel, "合并成一行", completed: true, stageIndex: 2, channelRunId: runId),
+            out OverlayDesiredState? merged));
+        OverlayTextLine band = Assert.Single(merged!.Regions[0].OrderedSlots[0].Lines);
+        Assert.Equal(bounds, band.Bounds);
+        Assert.Equal(2, band.SourceLineCount);
     }
 
     private static TranslationChannelDefinition Channel(int order, string label)

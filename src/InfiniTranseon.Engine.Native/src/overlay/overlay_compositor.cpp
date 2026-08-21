@@ -25,19 +25,25 @@ using com_ptr = Microsoft::WRL::ComPtr<T>;
     return {value.red, value.green, value.blue, value.alpha};
 }
 
-[[nodiscard]] std::wstring display_text(const slot& value) {
-    std::wstring result(value.label.begin(), value.label.end());
-    if (!result.empty()) result.append(L"  ");
-    if (!value.text.empty()) result.append(value.text.begin(), value.text.end());
-    else {
-        switch (value.state) {
-        case slot_state::waiting: result.append(L"\u2026"); break;
-        case slot_state::timeout: result.append(L"\u23f1"); break;
-        case slot_state::failure: result.append(L"\u00d7"); break;
-        case slot_state::cancelled: result.append(L"\u2014"); break;
-        default: break;
-        }
+// The channel label appears only when the channel has stopped trying and has nothing to show: that
+// is the one case where the user needs to know which channel produced the marker. A line that has
+// its translation draws the translation alone, and a line still waiting on one draws nothing at all
+// rather than covering the words it is about to replace with a placeholder.
+[[nodiscard]] std::wstring display_text(
+    const slot_line& line,
+    const slot_state state,
+    const std::u16string& label) {
+    if (!line.text.empty()) return {line.text.begin(), line.text.end()};
+    const wchar_t* marker{};
+    switch (state) {
+    case slot_state::timeout: marker = L"\u23f1"; break;
+    case slot_state::failure: marker = L"\u00d7"; break;
+    case slot_state::cancelled: marker = L"\u2014"; break;
+    default: return {};
     }
+    std::wstring result(label.begin(), label.end());
+    if (!result.empty()) result.append(L"  ");
+    result.append(marker);
     return result;
 }
 
@@ -225,42 +231,19 @@ compositor_error overlay_compositor::render(
                 });
             if (iterator != previous->regions.end()) previous_region = &*iterator;
         }
-        for (const slot_layout& layout : layout_fixed_slots(region, dpi_scale)) {
-            const auto slot_iterator = std::find_if(
-                region.ordered_slots.begin(), region.ordered_slots.end(),
-                [&layout](const slot& item) { return item.id == layout.slot_id; });
-            if (slot_iterator == region.ordered_slots.end()) continue;
-            const float padding = region.style.padding * dpi_scale;
-            const D2D1_RECT_F bounds = D2D1::RectF(
-                layout.bounds.x + padding,
-                layout.bounds.y,
-                layout.bounds.x + layout.bounds.width - padding,
-                layout.bounds.y + layout.bounds.height);
+        const DWRITE_TEXT_ALIGNMENT alignment =
+            region.style.alignment == text_alignment::center
+                ? DWRITE_TEXT_ALIGNMENT_CENTER
+                : region.style.alignment == text_alignment::right
+                    ? DWRITE_TEXT_ALIGNMENT_TRAILING
+                    : DWRITE_TEXT_ALIGNMENT_LEADING;
+        const float padding = region.style.padding * dpi_scale;
+        for (const slot& current : region.ordered_slots) {
             const auto draw_slot = [&](const slot& value, const float opacity) -> bool {
                 if (opacity <= 0.0F) return true;
-                std::wstring text = display_text(value);
-                com_ptr<IDWriteTextFormat> format;
-                if (FAILED(impl_->write_factory->CreateTextFormat(
-                        L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
-                        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                        layout.font_size, L"", &format))) return false;
-                const DWRITE_TEXT_ALIGNMENT alignment =
-                    region.style.alignment == text_alignment::center
-                        ? DWRITE_TEXT_ALIGNMENT_CENTER
-                        : region.style.alignment == text_alignment::right
-                            ? DWRITE_TEXT_ALIGNMENT_TRAILING
-                            : DWRITE_TEXT_ALIGNMENT_LEADING;
-                static_cast<void>(format->SetTextAlignment(alignment));
-                static_cast<void>(format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER));
-                static_cast<void>(format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP));
-                com_ptr<IDWriteInlineObject> trimming_sign;
-                if (layout.overflow && region.style.no_scroll_overflow) {
-                    const DWRITE_TRIMMING trimming{
-                        DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0U, 0U};
-                    if (SUCCEEDED(impl_->write_factory->CreateEllipsisTrimmingSign(
-                            format.Get(), &trimming_sign)))
-                        static_cast<void>(format->SetTrimming(&trimming, trimming_sign.Get()));
-                }
+                const std::vector<line_layout> layout =
+                    layout_slot_lines(region, value, dpi_scale);
+                if (layout.size() != value.lines.size()) return true;
                 color_rgba text_color = treatment.text;
                 text_color.alpha *= opacity;
                 com_ptr<ID2D1SolidColorBrush> text_brush;
@@ -273,36 +256,64 @@ compositor_error overlay_compositor::render(
                     if (FAILED(impl_->d2d_context->CreateSolidColorBrush(
                             to_d2d(outline_color), &outline_brush))) return false;
                 }
-                if (outline_brush) {
-                    const float outline = region.style.outline_width * dpi_scale;
-                    for (const D2D1_POINT_2F offset : {
-                            D2D1::Point2F(-outline, 0.0F),
-                            D2D1::Point2F(outline, 0.0F),
-                            D2D1::Point2F(0.0F, -outline),
-                            D2D1::Point2F(0.0F, outline)}) {
-                        const D2D1_RECT_F outline_bounds = D2D1::RectF(
-                            bounds.left + offset.x, bounds.top + offset.y,
-                            bounds.right + offset.x, bounds.bottom + offset.y);
-                        impl_->d2d_context->DrawText(
-                            text.c_str(), static_cast<UINT32>(text.size()), format.Get(),
-                            outline_bounds, outline_brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                            DWRITE_MEASURING_MODE_NATURAL);
+                for (std::size_t index = 0; index < layout.size(); ++index) {
+                    const std::wstring text =
+                        display_text(value.lines[index], value.state, value.label);
+                    if (text.empty()) continue;
+                    const line_layout& placed = layout[index];
+                    const D2D1_RECT_F bounds = D2D1::RectF(
+                        placed.bounds.x + padding,
+                        placed.bounds.y,
+                        placed.bounds.x + placed.bounds.width - padding,
+                        placed.bounds.y + placed.bounds.height);
+                    com_ptr<IDWriteTextFormat> format;
+                    if (FAILED(impl_->write_factory->CreateTextFormat(
+                            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                            placed.font_size, L"", &format))) return false;
+                    static_cast<void>(format->SetTextAlignment(alignment));
+                    static_cast<void>(
+                        format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER));
+                    static_cast<void>(format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP));
+                    com_ptr<IDWriteInlineObject> trimming_sign;
+                    if (placed.overflow && region.style.no_scroll_overflow) {
+                        const DWRITE_TRIMMING trimming{
+                            DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0U, 0U};
+                        if (SUCCEEDED(impl_->write_factory->CreateEllipsisTrimmingSign(
+                                format.Get(), &trimming_sign)))
+                            static_cast<void>(format->SetTrimming(&trimming, trimming_sign.Get()));
                     }
+                    if (outline_brush) {
+                        const float outline = region.style.outline_width * dpi_scale;
+                        for (const D2D1_POINT_2F offset : {
+                                D2D1::Point2F(-outline, 0.0F),
+                                D2D1::Point2F(outline, 0.0F),
+                                D2D1::Point2F(0.0F, -outline),
+                                D2D1::Point2F(0.0F, outline)}) {
+                            const D2D1_RECT_F outline_bounds = D2D1::RectF(
+                                bounds.left + offset.x, bounds.top + offset.y,
+                                bounds.right + offset.x, bounds.bottom + offset.y);
+                            impl_->d2d_context->DrawText(
+                                text.c_str(), static_cast<UINT32>(text.size()), format.Get(),
+                                outline_bounds, outline_brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                                DWRITE_MEASURING_MODE_NATURAL);
+                        }
+                    }
+                    impl_->d2d_context->DrawText(
+                        text.c_str(), static_cast<UINT32>(text.size()), format.Get(), bounds,
+                        text_brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                        DWRITE_MEASURING_MODE_NATURAL);
                 }
-                impl_->d2d_context->DrawText(
-                    text.c_str(), static_cast<UINT32>(text.size()), format.Get(), bounds,
-                    text_brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                    DWRITE_MEASURING_MODE_NATURAL);
                 return true;
             };
             const slot* previous_slot = nullptr;
             if (previous_region != nullptr) {
                 const auto iterator = std::ranges::find_if(
                     previous_region->ordered_slots,
-                    [&slot_iterator](const slot& value) { return value.id == slot_iterator->id; });
+                    [&current](const slot& value) { return value.id == current.id; });
                 if (iterator != previous_region->ordered_slots.end() &&
-                    slot_iterator->stage_index > iterator->stage_index &&
-                    slot_iterator->text != iterator->text)
+                    current.stage_index > iterator->stage_index &&
+                    current.lines != iterator->lines)
                     previous_slot = &*iterator;
             }
             const float region_progress = region.style.reduced_motion ||
@@ -317,8 +328,7 @@ compositor_error overlay_compositor::render(
             if (previous_slot != nullptr &&
                 !draw_slot(*previous_slot, 1.0F - region_progress))
                 return compositor_error::drawing_failed;
-            if (!draw_slot(*slot_iterator,
-                    previous_slot == nullptr ? 1.0F : region_progress))
+            if (!draw_slot(current, previous_slot == nullptr ? 1.0F : region_progress))
                 return compositor_error::drawing_failed;
         }
     }

@@ -1,4 +1,4 @@
-using InfiniTranseon.App.Controls;
+﻿using InfiniTranseon.App.Controls;
 using InfiniTranseon.App.Controls.Dialogs;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
@@ -30,12 +30,12 @@ namespace InfiniTranseon.App.Features.Workspace;
 /// </summary>
 public sealed partial class CaptureSectionPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     private readonly IRuntimeControlService _runtime;
     private readonly IProfileService _profiles;
+    private readonly ISettingsService _settings;
     private readonly ICaptureProbe _captureProbe;
     private readonly IStillFrameProbe _stillFrames;
     private readonly DialogService _dialogs;
@@ -45,6 +45,10 @@ public sealed partial class CaptureSectionPage : Page
     };
     private bool _updatingInspector;
     private bool _previewInFlight;
+    private IReadOnlyList<ProviderRow> _cloudOcrProviders = [];
+    private readonly IReadOnlyList<LanguageOption> _recognitionLanguages;
+    private string? _selectedOcrProviderId;
+    private string? _selectedRecognitionLanguage;
     private Guid _requestedProfileId;
 
     public CaptureSectionPage()
@@ -52,9 +56,12 @@ public sealed partial class CaptureSectionPage : Page
         ViewModel = App.GetService<WorkbenchViewModel>();
         _runtime = App.GetService<IRuntimeControlService>();
         _profiles = App.GetService<IProfileService>();
+        _settings = App.GetService<ISettingsService>();
         _captureProbe = App.GetService<ICaptureProbe>();
         _stillFrames = App.GetService<IStillFrameProbe>();
         _dialogs = new DialogService(() => XamlRoot);
+        _recognitionLanguages = LanguageCatalog.CreateSourceOptions(
+            Strings.GetString("UiLanguageTag"));
         InitializeComponent();
         _previewTimer.Tick += OnPreviewTimerTick;
     }
@@ -100,6 +107,24 @@ public sealed partial class CaptureSectionPage : Page
                 ViewModel.ErrorMessage);
             return;
         }
+        try
+        {
+            IReadOnlyList<ProviderRow> providers = await _settings.GetProvidersAsync();
+            _cloudOcrProviders = providers
+                .Where(provider => provider.IsSelectable &&
+                    provider.IsOcrProvider &&
+                    !provider.IsLocalModel)
+                .OrderByDescending(provider => provider.IsReady)
+                .ThenBy(provider => provider.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception exception)
+        {
+            ShowInfo(
+                InfoBarSeverity.Warning,
+                Strings.GetString("WorkbenchOcrCatalogErrorTitle"),
+                exception.Message);
+        }
         TargetSelector.ItemsSource = ViewModel.Targets;
         TargetSelector.SelectedItem = ViewModel.SelectedTarget;
         RefreshTargetSelection();
@@ -117,7 +142,7 @@ public sealed partial class CaptureSectionPage : Page
         Canvas.PreviewSource = null;
     }
 
-    private void OnTargetSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnTargetSelectionChanged(object? sender, EventArgs e)
     {
         if (TargetSelector.SelectedItem is WorkbenchTargetItem target)
         {
@@ -216,7 +241,7 @@ public sealed partial class CaptureSectionPage : Page
     }
 
     private void OnCanvasRegionDragStarted(object sender, WorkbenchRegionItem region) =>
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
 
     private void OnCanvasRegionAdded(object sender, RegionDrawStartedEventArgs e)
     {
@@ -227,7 +252,6 @@ public sealed partial class CaptureSectionPage : Page
 
     private void OnCanvasRegionChanged(object sender, WorkbenchRegionItem region)
     {
-        ViewModel.MarkEditorChanged(createUndoPoint: false);
         RefreshInspector();
         RefreshEditorState();
     }
@@ -265,15 +289,18 @@ public sealed partial class CaptureSectionPage : Page
             RegionPriorityBox.SelectedIndex = (int)region.Priority;
             ContextRoleBox.SelectedIndex = (int)region.ContextRole;
             RegionLockToggle.IsOn = region.LockDegradation;
-            OcrProviderBox.Text = region.OcrProviderId;
-            RecognitionLanguageBox.Text = region.RecognitionLanguage;
+            _selectedOcrProviderId = region.OcrProviderId;
+            _selectedRecognitionLanguage = region.RecognitionLanguage;
+            RestoreOcrProviderText();
+            RestoreRecognitionLanguageText();
+            OcrProviderBox.IsEnabled = region.UseCloudOcr;
             DetectOrientationToggle.IsOn = region.DetectOrientation;
             CloudOcrToggle.IsOn = region.UseCloudOcr;
             RecognitionIntervalBox.Value = region.RecognitionIntervalMilliseconds;
             DetectionScaleBox.Value = region.DetectionScale;
-            SelectCombo(LineBreakModeBox, region.LineBreakMode);
+            LineBreakModeBox.SelectedItem = region.LineBreakMode;
             CustomSeparatorBox.Text = region.CustomLineSeparator ?? string.Empty;
-            SelectCombo(LineAlignmentBox, region.LineAlignment);
+            LineAlignmentBox.SelectedItem = region.LineAlignment;
             MaximumLinesBox.Value = region.MaximumLines;
             RegionXBox.Value = region.X;
             RegionYBox.Value = region.Y;
@@ -289,7 +316,7 @@ public sealed partial class CaptureSectionPage : Page
 
     private void OnInspectorChanged(object sender, RoutedEventArgs e) => CommitInspector();
 
-    private void OnInspectorSelectionChanged(object sender, SelectionChangedEventArgs e) => CommitInspector();
+    private void OnInspectorSelectionChanged(object? sender, EventArgs e) => CommitInspector();
 
     private void OnInspectorNumberChanged(NumberBox sender, NumberBoxValueChangedEventArgs args) =>
         CommitInspector();
@@ -301,14 +328,14 @@ public sealed partial class CaptureSectionPage : Page
             return;
         }
 
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
         region.Name = RegionNameBox.Text.Trim();
         region.Enabled = RegionEnabledToggle.IsOn;
         region.Priority = (RegionPriorityLevel)Math.Max(0, RegionPriorityBox.SelectedIndex);
         region.ContextRole = (RegionContextRole)Math.Max(0, ContextRoleBox.SelectedIndex);
         region.LockDegradation = RegionLockToggle.IsOn;
-        region.OcrProviderId = OcrProviderBox.Text.Trim();
-        region.RecognitionLanguage = RecognitionLanguageBox.Text.Trim();
+        region.OcrProviderId = _selectedOcrProviderId ?? region.OcrProviderId;
+        region.RecognitionLanguage = _selectedRecognitionLanguage ?? region.RecognitionLanguage;
         region.DetectOrientation = DetectOrientationToggle.IsOn;
         region.RecognitionIntervalMilliseconds = IntegerValue(
             RecognitionIntervalBox,
@@ -316,11 +343,11 @@ public sealed partial class CaptureSectionPage : Page
         region.DetectionScale = double.IsNaN(DetectionScaleBox.Value)
             ? region.DetectionScale
             : DetectionScaleBox.Value;
-        region.LineBreakMode = SelectedText(LineBreakModeBox, "PreserveLines");
+        region.LineBreakMode = LineBreakModeBox.SelectedItem as string ?? "PreserveLines";
         region.CustomLineSeparator = string.IsNullOrEmpty(CustomSeparatorBox.Text)
             ? null
             : CustomSeparatorBox.Text;
-        region.LineAlignment = SelectedText(LineAlignmentBox, "Auto");
+        region.LineAlignment = LineAlignmentBox.SelectedItem as string ?? "Auto";
         region.MaximumLines = IntegerValue(MaximumLinesBox, region.MaximumLines);
         RefreshEditorState();
     }
@@ -362,7 +389,7 @@ public sealed partial class CaptureSectionPage : Page
             return;
         }
 
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
         target.DetectionLongEdge = IntegerValue(DetectionLongEdgeBox, target.DetectionLongEdge);
         target.ScanRemainingArea = ScanRemainingAreaToggle.IsOn;
         target.RemainingAreaIntervalMilliseconds = IntegerValue(
@@ -395,10 +422,169 @@ public sealed partial class CaptureSectionPage : Page
             }
         }
 
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
         region.UseCloudOcr = CloudOcrToggle.IsOn;
         region.CloudConsentPolicyRevision = region.UseCloudOcr ? 1 : 0;
+        OcrProviderBox.IsEnabled = region.UseCloudOcr;
+        if (region.UseCloudOcr && !_cloudOcrProviders.Any(provider =>
+                string.Equals(provider.Id, region.OcrProviderId, StringComparison.Ordinal)))
+        {
+            _selectedOcrProviderId = null;
+            OcrProviderBox.Text = string.Empty;
+            OcrProviderBox.ItemsSource = _cloudOcrProviders;
+            OcrProviderBox.IsSuggestionListOpen = _cloudOcrProviders.Count > 0;
+        }
         RefreshEditorState();
+    }
+
+    private void OnOcrProviderGotFocus(object sender, RoutedEventArgs e)
+    {
+        OcrProviderBox.ItemsSource = _cloudOcrProviders;
+        OcrProviderBox.IsSuggestionListOpen = true;
+    }
+
+    private void OnOcrProviderTextChanged(
+        AutoSuggestBox sender,
+        AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (_updatingInspector ||
+            args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            return;
+        }
+
+        sender.ItemsSource = FilterCloudOcrProviders(sender.Text);
+    }
+
+    private void OnOcrProviderSuggestionChosen(
+        AutoSuggestBox sender,
+        AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (args.SelectedItem is ProviderRow provider) CommitOcrProvider(provider);
+    }
+
+    private void OnOcrProviderQuerySubmitted(
+        AutoSuggestBox sender,
+        AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        ProviderRow? provider = args.ChosenSuggestion as ProviderRow ??
+            _cloudOcrProviders.FirstOrDefault(item =>
+                string.Equals(item.Id, args.QueryText?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.Name, args.QueryText?.Trim(), StringComparison.CurrentCultureIgnoreCase));
+        IReadOnlyList<ProviderRow> matches = FilterCloudOcrProviders(args.QueryText);
+        provider ??= matches.Count == 1 ? matches[0] : null;
+        if (provider is null)
+        {
+            RestoreOcrProviderText();
+            return;
+        }
+        CommitOcrProvider(provider);
+    }
+
+    private void OnOcrProviderLostFocus(object sender, RoutedEventArgs e) =>
+        RestoreOcrProviderText();
+
+    private IReadOnlyList<ProviderRow> FilterCloudOcrProviders(string? query)
+    {
+        string normalized = query?.Trim() ?? string.Empty;
+        return normalized.Length == 0
+            ? _cloudOcrProviders
+            : _cloudOcrProviders.Where(provider =>
+                provider.Name.Contains(normalized, StringComparison.CurrentCultureIgnoreCase) ||
+                provider.Id.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                provider.Kind.Contains(normalized, StringComparison.CurrentCultureIgnoreCase))
+                .ToArray();
+    }
+
+    private void CommitOcrProvider(ProviderRow provider)
+    {
+        _selectedOcrProviderId = provider.Id;
+        bool wasUpdating = _updatingInspector;
+        _updatingInspector = true;
+        OcrProviderBox.Text = provider.Name;
+        _updatingInspector = wasUpdating;
+        OcrProviderBox.IsSuggestionListOpen = false;
+        CommitInspector();
+    }
+
+    private void RestoreOcrProviderText()
+    {
+        ProviderRow? provider = _cloudOcrProviders.FirstOrDefault(item =>
+            string.Equals(item.Id, _selectedOcrProviderId, StringComparison.Ordinal));
+        bool wasUpdating = _updatingInspector;
+        _updatingInspector = true;
+        OcrProviderBox.Text = provider?.Name ?? _selectedOcrProviderId ?? string.Empty;
+        _updatingInspector = wasUpdating;
+    }
+
+    private void OnRecognitionLanguageGotFocus(object sender, RoutedEventArgs e)
+    {
+        RecognitionLanguageBox.ItemsSource = _recognitionLanguages;
+        RecognitionLanguageBox.IsSuggestionListOpen = true;
+    }
+
+    private void OnRecognitionLanguageTextChanged(
+        AutoSuggestBox sender,
+        AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (!_updatingInspector &&
+            args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            sender.ItemsSource = LanguageCatalog.Filter(_recognitionLanguages, sender.Text);
+        }
+    }
+
+    private void OnRecognitionLanguageSuggestionChosen(
+        AutoSuggestBox sender,
+        AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (args.SelectedItem is LanguageOption language) CommitRecognitionLanguage(language);
+    }
+
+    private void OnRecognitionLanguageQuerySubmitted(
+        AutoSuggestBox sender,
+        AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        LanguageOption? language = args.ChosenSuggestion as LanguageOption ??
+            _recognitionLanguages.FirstOrDefault(option =>
+                string.Equals(option.Code, args.QueryText?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(option.DisplayName, args.QueryText?.Trim(),
+                    StringComparison.CurrentCultureIgnoreCase));
+        IReadOnlyList<LanguageOption> matches = LanguageCatalog.Filter(
+            _recognitionLanguages,
+            args.QueryText);
+        language ??= matches.Count == 1 ? matches[0] : null;
+        if (language is null)
+        {
+            RestoreRecognitionLanguageText();
+            return;
+        }
+        CommitRecognitionLanguage(language);
+    }
+
+    private void OnRecognitionLanguageLostFocus(object sender, RoutedEventArgs e) =>
+        RestoreRecognitionLanguageText();
+
+    private void CommitRecognitionLanguage(LanguageOption language)
+    {
+        _selectedRecognitionLanguage = language.Code;
+        bool wasUpdating = _updatingInspector;
+        _updatingInspector = true;
+        RecognitionLanguageBox.Text = language.DisplayName;
+        _updatingInspector = wasUpdating;
+        RecognitionLanguageBox.IsSuggestionListOpen = false;
+        CommitInspector();
+    }
+
+    private void RestoreRecognitionLanguageText()
+    {
+        LanguageOption? language = _recognitionLanguages.FirstOrDefault(option =>
+            string.Equals(option.Code, _selectedRecognitionLanguage, StringComparison.OrdinalIgnoreCase));
+        bool wasUpdating = _updatingInspector;
+        _updatingInspector = true;
+        RecognitionLanguageBox.Text = language?.DisplayName ??
+            _selectedRecognitionLanguage ?? string.Empty;
+        _updatingInspector = wasUpdating;
     }
 
     // -- Save / undo / redo -------------------------------------------------------------------
@@ -425,13 +611,13 @@ public sealed partial class CaptureSectionPage : Page
         RefreshEditorState();
     }
 
-    private void OnUndoClick(object sender, RoutedEventArgs e)
+    private void Undo()
     {
         ViewModel.Undo();
         RestoreViewModelSelection();
     }
 
-    private void OnRedoClick(object sender, RoutedEventArgs e)
+    private void Redo()
     {
         ViewModel.Redo();
         RestoreViewModelSelection();
@@ -558,7 +744,7 @@ public sealed partial class CaptureSectionPage : Page
             }
             Canvas.CoordinateWidth = frame.PixelWidth;
             Canvas.CoordinateHeight = frame.PixelHeight;
-            Canvas.PreviewSource = await CreateBitmapAsync(frame);
+            Canvas.PreviewSource = await CapturePreviewImaging.FromStillFrameAsync(frame);
             PreviewStatusText.Text = string.Format(
                 Strings.GetString("WorkbenchPreviewStillFrame"),
                 frame.PixelWidth,
@@ -603,26 +789,6 @@ public sealed partial class CaptureSectionPage : Page
         PreviewStatusIcon.Foreground = new SolidColorBrush(ColorHelper.FromArgb(255, 255, 185, 0));
     }
 
-    private static async Task<ImageSource> CreateBitmapAsync(StillFrameProbeResult frame)
-    {
-        using var stream = new InMemoryRandomAccessStream();
-        BitmapEncoder encoder =
-            await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
-        encoder.SetPixelData(
-            BitmapPixelFormat.Bgra8,
-            BitmapAlphaMode.Ignore,
-            (uint)frame.PixelWidth,
-            (uint)frame.PixelHeight,
-            96,
-            96,
-            frame.BgraPixels);
-        await encoder.FlushAsync();
-        stream.Seek(0);
-        var bitmap = new BitmapImage();
-        await bitmap.SetSourceAsync(stream);
-        return bitmap;
-    }
-
     private void ClearPreview()
     {
         Canvas.PreviewSource = null;
@@ -658,13 +824,13 @@ public sealed partial class CaptureSectionPage : Page
         }
         if (ctrl && e.Key == VirtualKey.Z)
         {
-            OnUndoClick(UndoButton, new RoutedEventArgs());
+            Undo();
             e.Handled = true;
             return;
         }
         if (ctrl && e.Key == VirtualKey.Y)
         {
-            OnRedoClick(RedoButton, new RoutedEventArgs());
+            Redo();
             e.Handled = true;
             return;
         }
@@ -691,7 +857,7 @@ public sealed partial class CaptureSectionPage : Page
         {
             return;
         }
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
         Canvas.NudgeSelectedRegion(region, dx, dy);
         RefreshInspector();
         RefreshEditorState();
@@ -703,7 +869,7 @@ public sealed partial class CaptureSectionPage : Page
         DependencyObject? element = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
         while (element is not null)
         {
-            if (element is TextBox or NumberBox or ComboBox or PasswordBox or RichEditBox)
+            if (element is TextBox or NumberBox or ComboBox or Controls.SelectBox or PasswordBox or RichEditBox)
             {
                 return true;
             }
@@ -722,8 +888,6 @@ public sealed partial class CaptureSectionPage : Page
 
     private void RefreshEditorState()
     {
-        UndoButton.IsEnabled = ViewModel.CanUndo;
-        RedoButton.IsEnabled = ViewModel.CanRedo;
         DirtyStatusText.Text = ViewModel.IsDirty
             ? Strings.GetString("WorkbenchUnsavedStatus")
             : Strings.GetString("WorkbenchSavedStatus");
@@ -746,21 +910,6 @@ public sealed partial class CaptureSectionPage : Page
         PageInfoBar.Message = message;
         PageInfoBar.IsOpen = true;
     }
-
-    private static void SelectCombo(ComboBox combo, string value)
-    {
-        combo.SelectedItem = combo.Items
-            .OfType<ComboBoxItem>()
-            .FirstOrDefault(item => string.Equals(
-                item.Tag?.ToString() ?? item.Content?.ToString(),
-                value,
-                StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string SelectedText(ComboBox combo, string fallback) =>
-        (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ??
-        (combo.SelectedItem as ComboBoxItem)?.Content?.ToString() ??
-        fallback;
 
     private static int IntegerValue(NumberBox box, int fallback) =>
         double.IsNaN(box.Value) ? fallback : checked((int)Math.Round(box.Value));

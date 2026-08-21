@@ -23,17 +23,32 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
     /// <summary>The supplied id matches no built-in or imported provider.</summary>
     public const string ProviderUnknownCode = "translation.probe.providerUnknown";
 
+    /// <summary>The selected provider requires the network, which the current global policy blocks.</summary>
+    public const string StrictOfflineCode = "translation.probe.strictOffline";
+
     private readonly IBoundCredentialStore _credentials;
     private readonly CustomRestAdapterStore _customAdapters;
+    private readonly LocalModelManagementService _localModels;
+    private readonly ISettingsService _settings;
+    private readonly AppDataOptions _appData;
 
     public CatalogTranslationProbe(
         IBoundCredentialStore credentials,
-        CustomRestAdapterStore customAdapters)
+        CustomRestAdapterStore customAdapters,
+        LocalModelManagementService localModels,
+        ISettingsService settings,
+        AppDataOptions appData)
     {
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(customAdapters);
+        ArgumentNullException.ThrowIfNull(localModels);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(appData);
         _credentials = credentials;
         _customAdapters = customAdapters;
+        _localModels = localModels;
+        _settings = settings;
+        _appData = appData;
     }
 
     public async ValueTask<TranslationProbeResult> TranslateAsync(
@@ -48,6 +63,18 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
         }
 
         IReadOnlyList<DeclarativeRestAdapterDefinition> customDefinitions = _customAdapters.Load();
+        if (request.ProviderId.StartsWith(
+                EngineRuntimeComposition.LocalTranslationProviderIdPrefix,
+                StringComparison.Ordinal))
+        {
+            return await TranslateLocallyAsync(
+                    request,
+                    request.ProviderId,
+                    customDefinitions,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         CatalogProvider? provider = ProviderCatalog.Default
             .Concat(_customAdapters.GetCatalogProviders())
             .FirstOrDefault(candidate =>
@@ -58,6 +85,14 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
         {
             return new TranslationProbeResult(
                 request.ProviderId, string.Empty, TimeSpan.Zero, ProviderUnknownCode);
+        }
+
+        ApplicationSettings settings =
+            await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        if (settings.StrictOffline)
+        {
+            return new TranslationProbeResult(
+                provider.Id, string.Empty, TimeSpan.Zero, StrictOfflineCode);
         }
 
         foreach (CatalogCredential credential in provider.Credentials)
@@ -86,6 +121,37 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
         ProviderRegistry registry =
             EngineRuntimeComposition.BuildProviderRegistry(_credentials, customDefinitions);
         return await new TranslationProbe(registry, provider.Id)
+            .TranslateAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs the test through a model installed on this machine. The worker starts for this call and
+    /// is shut down again afterwards: the test must not leave a multi-gigabyte model resident
+    /// because someone pressed a button once.
+    /// </summary>
+    private async ValueTask<TranslationProbeResult> TranslateLocallyAsync(
+        TranslationProbeRequest request,
+        string providerId,
+        IReadOnlyList<DeclarativeRestAdapterDefinition> customDefinitions,
+        CancellationToken cancellationToken)
+    {
+        using LocalTranslationProviderLease? lease =
+            EngineRuntimeComposition.CreateLocalTranslationProvider(
+                providerId,
+                _localModels,
+                _appData);
+        if (lease is null)
+        {
+            return new TranslationProbeResult(
+                providerId, string.Empty, TimeSpan.Zero, ProviderUnknownCode);
+        }
+
+        ProviderRegistry registry = EngineRuntimeComposition.BuildProviderRegistry(
+            _credentials,
+            customDefinitions,
+            [lease.Registration]);
+        return await new TranslationProbe(registry, providerId)
             .TranslateAsync(request, cancellationToken)
             .ConfigureAwait(false);
     }

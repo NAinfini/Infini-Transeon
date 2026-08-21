@@ -81,6 +81,39 @@ public sealed class RuntimeEngineEventDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchesLocalOcrCropOnlyToTheLocalHandler()
+    {
+        int cloudCalls = 0;
+        int localCalls = 0;
+        var dispatcher = new RuntimeEngineEventDispatcher(
+            (_, _) =>
+            {
+                cloudCalls++;
+                return ValueTask.CompletedTask;
+            },
+            (_, _) => ValueTask.CompletedTask,
+            (_, _) => ValueTask.CompletedTask,
+            localOcr: (_, _) =>
+            {
+                localCalls++;
+                return ValueTask.CompletedTask;
+            });
+        using var runtimeEvent = new RuntimeEngineEvent(
+            RuntimeMessageKind.LocalOcrCropRequest,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddSeconds(10),
+            [1]);
+
+        await dispatcher.DispatchAsync(
+            runtimeEvent,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, cloudCalls);
+        Assert.Equal(1, localCalls);
+    }
+
+    [Fact]
     public async Task PumpDisposesSensitivePayloadWhenHandlerFails()
     {
         Guid epoch = Guid.NewGuid();
@@ -152,8 +185,11 @@ public sealed class RuntimeEngineEventDispatcherTests
         Assert.True(nativeEvent.IsDisposed);
     }
 
-    [Fact]
-    public async Task CloudOcrConcurrencyNeverExceedsTheConfiguredRuntimeCapacity()
+    [Theory]
+    [InlineData(RuntimeMessageKind.CloudOcrCropRequest)]
+    [InlineData(RuntimeMessageKind.LocalOcrCropRequest)]
+    public async Task OcrCropConcurrencyNeverExceedsTheConfiguredRuntimeCapacity(
+        RuntimeMessageKind messageKind)
     {
         Guid epoch = Guid.NewGuid();
         var release = new TaskCompletionSource(
@@ -161,27 +197,30 @@ public sealed class RuntimeEngineEventDispatcherTests
         int active = 0;
         int maximum = 0;
         int calls = 0;
-        var dispatcher = new RuntimeEngineEventDispatcher(
-            async (_, cancellationToken) =>
+        async ValueTask Handle(RuntimeEngineEvent _, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref calls);
+            int current = Interlocked.Increment(ref active);
+            int observed;
+            do
             {
-                Interlocked.Increment(ref calls);
-                int current = Interlocked.Increment(ref active);
-                int observed;
-                do
-                {
-                    observed = Volatile.Read(ref maximum);
-                    if (current <= observed) break;
-                }
-                while (Interlocked.CompareExchange(ref maximum, current, observed) != observed);
-                try { await release.Task.WaitAsync(cancellationToken); }
-                finally { Interlocked.Decrement(ref active); }
-            },
+                observed = Volatile.Read(ref maximum);
+                if (current <= observed) break;
+            }
+            while (Interlocked.CompareExchange(ref maximum, current, observed) != observed);
+            try { await release.Task.WaitAsync(cancellationToken); }
+            finally { Interlocked.Decrement(ref active); }
+        }
+        var dispatcher = new RuntimeEngineEventDispatcher(
+            (runtimeEvent, cancellationToken) => Handle(runtimeEvent, cancellationToken),
             (_, _) => ValueTask.CompletedTask,
             (_, _) => ValueTask.CompletedTask,
-            maximumConcurrentCloudOcr: 2);
+            maximumConcurrentCloudOcr: 2,
+            localOcr: (runtimeEvent, cancellationToken) =>
+                Handle(runtimeEvent, cancellationToken));
         RuntimeEngineEvent[] runtimeEvents = Enumerable.Range(0, 3)
             .Select(_ => new RuntimeEngineEvent(
-                RuntimeMessageKind.CloudOcrCropRequest,
+                messageKind,
                 Guid.NewGuid(),
                 epoch,
                 DateTimeOffset.UtcNow.AddSeconds(10),

@@ -13,7 +13,6 @@ public sealed record TencentCloudOcrOptions(
     string SecretKeyReference,
     string? SessionTokenReference,
     ProxyPolicy ProxyPolicy,
-    string LanguageType = "auto",
     int MaximumResponseBytes = 2 * 1024 * 1024,
     Func<DateTimeOffset>? Clock = null);
 
@@ -34,7 +33,6 @@ public sealed class TencentCloudOcrProvider : IOcrProvider
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.SecretIdReference);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.SecretKeyReference);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.LanguageType);
         if (!options.Endpoint.IsAbsoluteUri || options.Endpoint.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(options.Endpoint.UserInfo) ||
             options.Endpoint.AbsolutePath != "/" ||
@@ -74,6 +72,7 @@ public sealed class TencentCloudOcrProvider : IOcrProvider
         ArgumentNullException.ThrowIfNull(request);
         if (request.EncodedCrop.IsEmpty || request.EncodedCrop.Length > 7_500_000)
             throw new OcrRoutingException("ocr.tencent.requestTooLarge", "OCR crop exceeds Tencent's request limit.");
+        string languageType = CloudOcrLanguageMapper.TencentLanguageType(request.RecognitionLanguage);
         string? secretId;
         string? secretKey;
         string? sessionToken = null;
@@ -102,7 +101,7 @@ public sealed class TencentCloudOcrProvider : IOcrProvider
             _options.SessionTokenReference is not null && string.IsNullOrWhiteSpace(sessionToken))
             throw new OcrRoutingException("ocr.credentialMissing", "Tencent OCR credentials are missing.");
 
-        byte[] body = CreateBody(request.EncodedCrop.Span, _options.LanguageType);
+        byte[] body = CreateBody(request.EncodedCrop.Span, languageType);
         using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
         {
             Content = new ByteArrayContent(body),

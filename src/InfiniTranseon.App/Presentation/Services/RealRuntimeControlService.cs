@@ -4,6 +4,7 @@ using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Privacy;
 using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Runtime;
+using InfiniTranseon.Core.Settings;
 using InfiniTranseon.Core.Storage;
 using InfiniTranseon.Core.Diagnostics;
 using InfiniTranseon.Core.Translation;
@@ -52,6 +53,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
     private readonly ProfileRepository _profiles;
     private readonly ICaptureProbe _captureProbe;
     private readonly ISettingsService _settings;
+    private readonly ISecretReferenceService _secrets;
     private readonly IBoundCredentialStore _credentials;
     private readonly RuntimeCapabilitiesService _capabilities;
     private readonly RuntimeStateStore _runtimeState;
@@ -79,6 +81,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
     private IEngineRuntime? _engine;
     private ProfileDocument? _activeProfile;
     private RuntimeProfileBinding? _activeBinding;
+    private ApplicationSettings? _activeApplicationSettings;
     private EngineRuntimeStatusChange? _lastChange;
     private readonly HashSet<Guid> _pausedProfileTargets = [];
     private readonly HashSet<Guid> _hiddenProfileTargets = [];
@@ -89,6 +92,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         ProfileRepository profiles,
         ICaptureProbe captureProbe,
         ISettingsService settings,
+        ISecretReferenceService secrets,
         IBoundCredentialStore credentials,
         RuntimeCapabilitiesService capabilities,
         RuntimeStateStore runtimeState,
@@ -101,6 +105,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             profiles,
             captureProbe,
             settings,
+            secrets,
             credentials,
             capabilities,
             runtimeState,
@@ -118,6 +123,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         ProfileRepository profiles,
         ICaptureProbe captureProbe,
         ISettingsService settings,
+        ISecretReferenceService secrets,
         IBoundCredentialStore credentials,
         RuntimeCapabilitiesService capabilities,
         RuntimeStateStore runtimeState,
@@ -131,6 +137,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         ArgumentNullException.ThrowIfNull(profiles);
         ArgumentNullException.ThrowIfNull(captureProbe);
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(capabilities);
         ArgumentNullException.ThrowIfNull(runtimeState);
@@ -139,6 +146,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _profiles = profiles;
         _captureProbe = captureProbe;
         _settings = settings;
+        _secrets = secrets;
         _credentials = credentials;
         _capabilities = capabilities;
         _runtimeState = runtimeState;
@@ -147,7 +155,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _statusLog = statusLog;
         _customRestAdapters = customRestAdapters;
         _localModels = localModels;
-        _engineFactory = engineFactory ?? ((_, binding, history, settings) =>
+        _engineFactory = engineFactory ?? (EngineFactory)((_, binding, history, settings) =>
             EngineRuntimeComposition.CreateEngine(
                 binding,
                 _credentials,
@@ -158,7 +166,13 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 settings.ReducedMotion,
                 settings.EffectiveProviderEndpoints,
                 _localModels,
-                _options));
+                _options,
+                settings.OcrBackend switch
+                {
+                    AppOcrBackend.Windows => OcrBackendPreference.Windows,
+                    AppOcrBackend.Local => OcrBackendPreference.Local,
+                    _ => OcrBackendPreference.Automatic,
+                }));
     }
 
     public EngineRuntimeStatus Status =>
@@ -249,15 +263,17 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             // replaced by a fresh launch.
             await DisposeEngineAsync().ConfigureAwait(false);
 
-            ProfileDocument profile =
+            ProfileDocument storedProfile =
                 await _profiles.LoadAsync(profileId, cancellationToken).ConfigureAwait(false)
                 ?? throw new EngineStartException("profileNotFound", profileId.ToString("D"));
-            RuntimeProfileBinding binding =
-                await ResolveBindingAsync(profile, cancellationToken).ConfigureAwait(false);
             ApplicationSettings applicationSettings =
                 await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+            ProfileDocument profile = ApplyApplicationPolicies(storedProfile, applicationSettings);
+            await EnsureProviderReadinessAsync(profile, cancellationToken).ConfigureAwait(false);
+            RuntimeProfileBinding binding =
+                await ResolveBindingAsync(profile, cancellationToken).ConfigureAwait(false);
             IRuntimeTranslationRecordSink? historySink =
-                CreateHistorySink(applicationSettings);
+                CreateHistorySink(profile, applicationSettings);
 
             IEngineRuntime engine = _engineFactory(
                 profile,
@@ -268,6 +284,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             _engine = engine;
             _activeProfile = profile;
             _activeBinding = binding;
+            _activeApplicationSettings = applicationSettings;
             try
             {
                 await engine.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -302,9 +319,18 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             {
                 return;
             }
-            await engine.StopAsync(cancellationToken).ConfigureAwait(false);
-            await DisposeEngineAsync().ConfigureAwait(false);
-            TargetsChanged?.Invoke(this, EventArgs.Empty);
+            try
+            {
+                await engine.StopAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                // Whoever claims the engine slot owns releasing it. A stop that reports a failure
+                // still has to hand the slot back, or StartAsync keeps rejecting the profile as
+                // already running for the rest of the session.
+                await DisposeEngineAsync().ConfigureAwait(false);
+                TargetsChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
         finally
         {
@@ -337,7 +363,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 paused ? "runtime.control.paused" : "runtime.control.resumed",
                 "status.runtime.control.pause",
                 StatusEventSeverity.Information,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
                     ["paused"] = paused,
                     ["targetCount"] = binding.Targets.Count,
@@ -374,7 +400,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 visible ? "runtime.overlay.shown" : "runtime.overlay.hidden",
                 "status.runtime.control.overlay",
                 StatusEventSeverity.Information,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
                     ["visible"] = visible,
                     ["targetCount"] = binding.Targets.Count,
@@ -399,7 +425,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 "runtime.ocr.manual.scheduled",
                 "status.runtime.control.manualOcr",
                 StatusEventSeverity.Information,
-                new Dictionary<string, object?>()));
+                new Dictionary<string, StatusArgument>()));
         }
         catch (EngineRuntimeCommandRejectedException exception)
         {
@@ -409,9 +435,9 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 exception.ErrorCode,
                 "status.runtime.control.manualOcrRejected",
                 StatusEventSeverity.Warning,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["operation"] = exception.OperationKey,
+                    ["operation"] = StatusArgument.Id(exception.OperationKey),
                 }));
             throw;
         }
@@ -423,9 +449,9 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 "runtime.ocr.manual.failed",
                 "status.runtime.control.manualOcrFailed",
                 StatusEventSeverity.Error,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["exceptionType"] = exception.GetType().Name,
+                    ["exceptionType"] = StatusArgument.Id(exception.GetType().Name),
                 }));
             throw;
         }
@@ -498,7 +524,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                     status,
                     "status.runtime.translationGroup",
                     StatusEventSeverity.Information,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, StatusArgument>
                     {
                         ["profileId"] = updated.ProfileId,
                         ["translationGroupId"] = translationGroupId,
@@ -692,10 +718,10 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 exception.ErrorCode,
                 "status.runtime.control.manualOcrRejected",
                 StatusEventSeverity.Warning,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["operation"] = exception.OperationKey,
-                    ["scope"] = selection.Mode.ToString(),
+                    ["operation"] = StatusArgument.Id(exception.OperationKey),
+                    ["scope"] = selection.Mode,
                 }));
             throw;
         }
@@ -724,13 +750,33 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         }
     }
 
+    public async Task<ProfileRuntimeApplyResult> ApplySettingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return _activeProfile is { } profile
+                ? await ApplyProfileLockedAsync(profile.ProfileId, cancellationToken)
+                    .ConfigureAwait(false)
+                : ProfileRuntimeApplyResult.SavedOnly;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private async Task<ProfileRuntimeApplyResult> ApplyProfileLockedAsync(
         Guid profileId,
         CancellationToken cancellationToken)
     {
-        ProfileDocument updated =
+        ProfileDocument storedProfile =
             await _profiles.LoadAsync(profileId, cancellationToken).ConfigureAwait(false)
             ?? throw new EngineStartException("profileNotFound", profileId.ToString("D"));
+        ApplicationSettings applicationSettings =
+            await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        ProfileDocument updated = ApplyApplicationPolicies(storedProfile, applicationSettings);
         if (_engine is null ||
             _engine.Status != EngineRuntimeStatus.Running ||
             _activeProfile?.ProfileId != profileId ||
@@ -739,7 +785,15 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             return ProfileRuntimeApplyResult.SavedOnly;
         }
 
-        if (_engine is IHotConfigurableEngineRuntime hot &&
+        await EnsureProviderReadinessAsync(updated, cancellationToken).ConfigureAwait(false);
+
+        bool requiresRebuild = RequiresEngineRebuild(
+            _activeProfile,
+            updated,
+            _activeApplicationSettings,
+            applicationSettings);
+        if (!requiresRebuild &&
+            _engine is IHotConfigurableEngineRuntime hot &&
             TryCreateHotBinding(updated, _activeBinding, out RuntimeProfileBinding? binding))
         {
             try
@@ -748,13 +802,14 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                     .ConfigureAwait(false);
                 _activeProfile = updated;
                 _activeBinding = binding;
+                _activeApplicationSettings = applicationSettings;
                 _statusLog?.Record(new StatusEvent(
                     DateTimeOffset.UtcNow,
                     "runtime.configuration",
                     "runtime.configuration.hotApplied",
                     "status.runtime.configuration.hotApplied",
                     StatusEventSeverity.Information,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, StatusArgument>
                     {
                         ["profileId"] = profileId,
                         ["profileRevision"] = binding!.ProfileRevision,
@@ -770,10 +825,10 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                     "runtime.configuration.hotApplyFailed",
                     "status.runtime.configuration.restartFallback",
                     StatusEventSeverity.Warning,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, StatusArgument>
                     {
                         ["profileId"] = profileId,
-                        ["exceptionType"] = exception.GetType().Name,
+                        ["exceptionType"] = StatusArgument.Id(exception.GetType().Name),
                     }));
             }
         }
@@ -781,10 +836,8 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         await DisposeEngineAsync(preserveControlState: true).ConfigureAwait(false);
         RuntimeProfileBinding restartedBinding =
             await ResolveBindingAsync(updated, cancellationToken).ConfigureAwait(false);
-        ApplicationSettings applicationSettings =
-            await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
         IRuntimeTranslationRecordSink? historySink =
-            CreateHistorySink(applicationSettings);
+            CreateHistorySink(updated, applicationSettings);
         IEngineRuntime restarted = _engineFactory(
             updated,
             restartedBinding,
@@ -794,6 +847,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _engine = restarted;
         _activeProfile = updated;
         _activeBinding = restartedBinding;
+        _activeApplicationSettings = applicationSettings;
         try
         {
             await restarted.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -875,10 +929,10 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             "runtime.control.noMatchingTarget",
             "status.runtime.control.noMatchingTarget",
             StatusEventSeverity.Warning,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["operation"] = new StatusIdentifier(operation),
-                ["scope"] = selection.Mode.ToString(),
+                ["scope"] = selection.Mode,
                 ["resolvedTargetCount"] = 0,
             }));
         return new RuntimeScopedControlResult(
@@ -898,10 +952,10 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             $"runtime.control.{operation}.scopedApplied",
             "status.runtime.control.scopedApplied",
             StatusEventSeverity.Information,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["operation"] = new StatusIdentifier(operation),
-                ["scope"] = selection.Mode.ToString(),
+                ["scope"] = selection.Mode,
                 ["resolvedTargetCount"] = targetCount,
                 ["state"] = state,
             }));
@@ -962,6 +1016,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _engine = null;
         _activeProfile = null;
         _activeBinding = null;
+        _activeApplicationSettings = null;
         _isPaused = false;
         _isOverlayVisible = true;
         if (!preserveControlState)
@@ -1006,7 +1061,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             change.ErrorCode is null
                 ? StatusEventSeverity.Information
                 : StatusEventSeverity.Error,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["state"] = change.Status,
                 ["searchedPathCount"] = change.SearchedPaths.Count,
@@ -1025,7 +1080,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             lifecycle.ErrorCode is null
                 ? StatusEventSeverity.Information
                 : StatusEventSeverity.Warning,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["targetId"] = lifecycle.Target.TargetId.Value,
                 ["targetInstanceId"] = lifecycle.Target.TargetInstanceId.Value,
@@ -1053,7 +1108,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             "runtime.budget.updated",
             "status.runtime.performance.budget",
             StatusEventSeverity.Information,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["runtimeEpoch"] = budget.Snapshot.RuntimeEpoch,
                 ["snapshotRevision"] = budget.Snapshot.SnapshotRevision,
@@ -1072,7 +1127,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             diagnostic.Severity >= RuntimeDiagnosticSeverity.Error
                 ? StatusEventSeverity.Error
                 : StatusEventSeverity.Warning,
-            new Dictionary<string, object?>()));
+            new Dictionary<string, StatusArgument>()));
         // Persistent JSONL logging above is unchanged; this additionally pushes the diagnostic onto
         // the in-memory hub so the (future) Activity page can render it without polling the log file.
         _eventHub.PublishDiagnosticRaised(new RuntimeDiagnosticRaised(
@@ -1183,7 +1238,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             $"runtime.state.{admission}",
             "status.runtime.state.admissionRejected",
             StatusEventSeverity.Trace,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
                 ["source"] = new StatusIdentifier(source),
                 ["rejectionCount"] = count,
@@ -1191,14 +1246,12 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
     }
 
     private IRuntimeTranslationRecordSink? CreateHistorySink(
+        ProfileDocument profile,
         ApplicationSettings settings)
     {
-        HistoryOptions historyOptions = settings.HistoryRetention switch
-        {
-            HistoryRetention.Days30 => new HistoryOptions(Enabled: true, Retention: TimeSpan.FromDays(30)),
-            HistoryRetention.Days90 => new HistoryOptions(Enabled: true, Retention: TimeSpan.FromDays(90)),
-            _ => new HistoryOptions(Enabled: false),
-        };
+        HistoryOptions historyOptions = RealHistoryService.CreateHistoryOptions(
+            profile,
+            settings.HistoryRetention);
         if (!historyOptions.Enabled)
         {
             return null;
@@ -1207,6 +1260,66 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             new RecentTranslationBuffer(),
             new HistoryRepository(_options.DatabasePath, historyOptions));
     }
+
+    private static ProfileDocument ApplyApplicationPolicies(
+        ProfileDocument profile,
+        ApplicationSettings settings) =>
+        settings.StrictOffline && !profile.StrictOffline
+            ? profile with { StrictOffline = true }
+            : profile;
+
+    private async Task EnsureProviderReadinessAsync(
+        ProfileDocument profile,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ProviderReadinessStatus> statuses =
+            await ProfileProviderReadiness.EvaluateAsync(
+                ProfileProviderReadiness.GetRequiredProviderIds(profile),
+                ProfileProviderReadiness.GetCatalog(_customRestAdapters),
+                _secrets,
+                cancellationToken).ConfigureAwait(false);
+        ProviderReadinessStatus[] unavailable = [.. statuses.Where(status => !status.IsReady)];
+        if (unavailable.Length > 0)
+        {
+            throw new EngineStartException(
+                "providerNotReady",
+                string.Join(", ", unavailable.Select(status => status.DisplayName)));
+        }
+    }
+
+    private static bool RequiresEngineRebuild(
+        ProfileDocument previousProfile,
+        ProfileDocument updatedProfile,
+        ApplicationSettings? previousSettings,
+        ApplicationSettings updatedSettings)
+    {
+        if (previousSettings is null ||
+            previousProfile.StrictOffline != updatedProfile.StrictOffline ||
+            previousProfile.History != updatedProfile.History ||
+            EngineRuntimeComposition.UsesPersistentTranslationMemory(previousProfile) !=
+                EngineRuntimeComposition.UsesPersistentTranslationMemory(updatedProfile) ||
+            !EngineRuntimeComposition.ReferencedLocalProviderIds(previousProfile)
+                .SetEquals(EngineRuntimeComposition.ReferencedLocalProviderIds(updatedProfile)))
+        {
+            return true;
+        }
+
+        return previousSettings.StrictOffline != updatedSettings.StrictOffline ||
+            previousSettings.HistoryRetention != updatedSettings.HistoryRetention ||
+            previousSettings.PerformancePreset != updatedSettings.PerformancePreset ||
+            previousSettings.ReducedMotion != updatedSettings.ReducedMotion ||
+            previousSettings.OcrBackend != updatedSettings.OcrBackend ||
+            !DictionaryEqual(
+                previousSettings.EffectiveProviderEndpoints,
+                updatedSettings.EffectiveProviderEndpoints);
+    }
+
+    private static bool DictionaryEqual(
+        IReadOnlyDictionary<string, string> left,
+        IReadOnlyDictionary<string, string> right) =>
+        left.Count == right.Count && left.All(pair =>
+            right.TryGetValue(pair.Key, out string? value) &&
+            string.Equals(pair.Value, value, StringComparison.Ordinal));
 
     private async Task<RuntimeProfileBinding> ResolveBindingAsync(
         ProfileDocument profile,
@@ -1332,47 +1445,15 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         return true;
     }
 
+    // Matching lives in CaptureTargetResolver so the profile list's "target matched" badge and this
+    // binding cannot disagree; what belongs here is only what to do when the match fails.
     private static CaptureProbeTarget ResolveTarget(
         ProfileTarget target,
-        IReadOnlyList<CaptureProbeTarget> candidates)
-    {
-        switch (target.Kind)
-        {
-            case CaptureTargetKind.Window:
-            {
-                CaptureProbeTarget[] windows = candidates
-                    .Where(candidate =>
-                        string.Equals(candidate.Kind, "Window", StringComparison.OrdinalIgnoreCase) &&
-                        candidate.Capturable && candidate.NativeHandle != 0)
-                    .ToArray();
-                string wanted = target.MachineBinding?.WindowTitle is { Length: > 0 } title
-                    ? title
-                    : target.Name;
-                CaptureProbeTarget? match =
-                    windows.FirstOrDefault(candidate => string.Equals(
-                        candidate.DisplayName, wanted, StringComparison.OrdinalIgnoreCase)) ??
-                    windows.FirstOrDefault(candidate => candidate.DisplayName.Contains(
-                        wanted, StringComparison.OrdinalIgnoreCase));
-                return match ?? throw new EngineStartException("targetNotFound", wanted);
-            }
-            case CaptureTargetKind.Display:
-            {
-                CaptureProbeTarget[] displays = candidates
-                    .Where(candidate =>
-                        (string.Equals(candidate.Kind, "Display", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(candidate.Kind, "Monitor", StringComparison.OrdinalIgnoreCase)) &&
-                        candidate.Capturable && candidate.NativeHandle != 0)
-                    .ToArray();
-                CaptureProbeTarget? match =
-                    displays.FirstOrDefault(candidate => candidate.DisplayName.Contains(
-                        target.Name, StringComparison.OrdinalIgnoreCase)) ??
-                    (displays.Length == 1 ? displays[0] : null);
-                return match ?? throw new EngineStartException("targetNotFound", target.Name);
-            }
-            default:
-                throw new EngineStartException("targetKindUnsupported", target.Kind.ToString());
-        }
-    }
+        IReadOnlyList<CaptureProbeTarget> candidates) =>
+        target.Kind is CaptureTargetKind.Window or CaptureTargetKind.Display
+            ? CaptureTargetResolver.Find(target, candidates) ?? throw new EngineStartException(
+                "targetNotFound", CaptureTargetResolver.WantedName(target))
+            : throw new EngineStartException("targetKindUnsupported", target.Kind.ToString());
 
     private static (string Health, Controls.StatusSeverity Severity) Describe(
         TargetLifecycleState state) => state switch

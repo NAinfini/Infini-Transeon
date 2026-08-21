@@ -63,8 +63,8 @@ internal static class RuntimeOcrExecutionTokenCodec
 
 public static class RuntimeCloudOcrCropRequestPayloadCodec
 {
-    public const int SchemaVersion = 1;
-    public const int FixedPayloadBytes = 160;
+    public const int SchemaVersion = 2;
+    public const int FixedPayloadBytes = 164;
     public const int MaximumMimeTypeBytes = 64;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
@@ -73,11 +73,14 @@ public static class RuntimeCloudOcrCropRequestPayloadCodec
         ArgumentNullException.ThrowIfNull(value);
         byte[] mime = StrictUtf8.GetBytes(value.MimeType);
         byte[] provider = StrictUtf8.GetBytes(value.ProviderId);
+        byte[] language = StrictUtf8.GetBytes(value.RecognitionLanguage);
         ReadOnlySpan<byte> crop = value.EncodedCrop.Span;
-        if (!IsMimeType(mime) || !IsProviderId(provider) || crop.Length > value.EncodedByteCeiling ||
-            crop.Length > RuntimeProtocol.MaxPayloadBytes - FixedPayloadBytes - mime.Length - provider.Length)
+        if (!IsMimeType(mime) || !IsProviderId(provider) || !IsRecognitionLanguage(language) ||
+            crop.Length > value.EncodedByteCeiling || crop.Length > RuntimeProtocol.MaxPayloadBytes -
+            FixedPayloadBytes - mime.Length - provider.Length - language.Length)
             throw new ArgumentException("Cloud OCR crop payload is invalid.", nameof(value));
-        byte[] payload = new byte[checked(FixedPayloadBytes + mime.Length + provider.Length + crop.Length)];
+        byte[] payload = new byte[checked(
+            FixedPayloadBytes + mime.Length + provider.Length + language.Length + crop.Length)];
         Span<byte> bytes = payload;
         BinaryPrimitives.WriteInt32LittleEndian(bytes, SchemaVersion);
         RuntimeOcrExecutionTokenCodec.Write(bytes[4..116], value.ExecutionToken);
@@ -90,9 +93,11 @@ public static class RuntimeCloudOcrCropRequestPayloadCodec
         BinaryPrimitives.WriteInt32LittleEndian(bytes[148..], crop.Length);
         bytes[152] = value.ExplicitCloudConsent ? (byte)1 : (byte)0;
         BinaryPrimitives.WriteInt32LittleEndian(bytes[156..], provider.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[160..], language.Length);
         mime.CopyTo(bytes[FixedPayloadBytes..]);
         provider.CopyTo(bytes[(FixedPayloadBytes + mime.Length)..]);
-        crop.CopyTo(bytes[(FixedPayloadBytes + mime.Length + provider.Length)..]);
+        language.CopyTo(bytes[(FixedPayloadBytes + mime.Length + provider.Length)..]);
+        crop.CopyTo(bytes[(FixedPayloadBytes + mime.Length + provider.Length + language.Length)..]);
         return payload;
     }
 
@@ -105,24 +110,30 @@ public static class RuntimeCloudOcrCropRequestPayloadCodec
         int cropBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[148..]);
         int byteCeiling = BinaryPrimitives.ReadInt32LittleEndian(payload[144..]);
         int providerBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[156..]);
+        int languageBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[160..]);
         if (mimeBytes is < 1 or > MaximumMimeTypeBytes || cropBytes < 1 ||
-            providerBytes is < 1 or > 128 ||
+            providerBytes is < 1 or > 128 || languageBytes is < 1 or > 64 ||
             byteCeiling is < 1 or > RuntimeProtocol.MaxPayloadBytes || cropBytes > byteCeiling ||
-            payload.Length != FixedPayloadBytes + mimeBytes + providerBytes + cropBytes)
+            payload.Length != FixedPayloadBytes + mimeBytes + providerBytes + languageBytes + cropBytes)
             throw new InvalidDataException("Cloud OCR crop payload lengths are invalid.");
         ReadOnlySpan<byte> mime = payload.Slice(FixedPayloadBytes, mimeBytes);
         ReadOnlySpan<byte> provider = payload.Slice(FixedPayloadBytes + mimeBytes, providerBytes);
-        if (!IsMimeType(mime) || !IsProviderId(provider))
-            throw new InvalidDataException("Cloud OCR MIME type or provider identifier is invalid.");
+        ReadOnlySpan<byte> language = payload.Slice(
+            FixedPayloadBytes + mimeBytes + providerBytes, languageBytes);
+        if (!IsMimeType(mime) || !IsProviderId(provider) || !IsRecognitionLanguage(language))
+            throw new InvalidDataException("Cloud OCR MIME type, provider identifier, or language is invalid.");
         try
         {
             return new CloudOcrCropRequest(
                 RuntimeOcrExecutionTokenCodec.Read(payload[4..116]),
                 StrictUtf8.GetString(mime),
-                payload.Slice(FixedPayloadBytes + mimeBytes + providerBytes, cropBytes),
+                payload.Slice(
+                    FixedPayloadBytes + mimeBytes + providerBytes + languageBytes,
+                    cropBytes),
                 BinaryPrimitives.ReadInt32LittleEndian(payload[136..]),
                 BinaryPrimitives.ReadInt32LittleEndian(payload[140..]),
                 explicitCloudConsent: true,
+                StrictUtf8.GetString(language),
                 BinaryPrimitives.ReadInt64LittleEndian(payload[120..]),
                 byteCeiling,
                 new DateTimeOffset(BinaryPrimitives.ReadInt64LittleEndian(payload[128..]), TimeSpan.Zero),
@@ -147,6 +158,120 @@ public static class RuntimeCloudOcrCropRequestPayloadCodec
             if (character is not (>= (byte)'a' and <= (byte)'z' or
                 >= (byte)'A' and <= (byte)'Z' or >= (byte)'0' and <= (byte)'9' or
                 (byte)'.' or (byte)'_' or (byte)'-')) return false;
+        }
+        return true;
+    }
+
+    private static bool IsRecognitionLanguage(ReadOnlySpan<byte> value)
+    {
+        if (value.Length is < 1 or > 64 || value[0] == (byte)'-' || value[^1] == (byte)'-')
+            return false;
+        bool previousHyphen = false;
+        foreach (byte character in value)
+        {
+            if (character == (byte)'-')
+            {
+                if (previousHyphen) return false;
+                previousHyphen = true;
+            }
+            else if (character is >= (byte)'a' and <= (byte)'z' or
+                >= (byte)'A' and <= (byte)'Z' or >= (byte)'0' and <= (byte)'9')
+            {
+                previousHyphen = false;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+public static class RuntimeLocalOcrCropRequestPayloadCodec
+{
+    public const int SchemaVersion = 1;
+    public const int FixedPayloadBytes = 152;
+    public const int MaximumMimeTypeBytes = 64;
+    public const int MaximumLanguageBytes = 64;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+
+    public static byte[] Encode(LocalOcrCropRequest value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        byte[] mime = StrictUtf8.GetBytes(value.MimeType);
+        byte[] language = StrictUtf8.GetBytes(value.RecognitionLanguage);
+        ReadOnlySpan<byte> crop = value.EncodedCrop.Span;
+        if (!IsMimeType(mime) || !IsLanguage(language) || crop.Length > value.EncodedByteCeiling ||
+            crop.Length > RuntimeProtocol.MaxPayloadBytes - FixedPayloadBytes - mime.Length - language.Length)
+            throw new ArgumentException("Local OCR crop payload is invalid.", nameof(value));
+        byte[] payload = new byte[checked(FixedPayloadBytes + mime.Length + language.Length + crop.Length)];
+        Span<byte> bytes = payload;
+        BinaryPrimitives.WriteInt32LittleEndian(bytes, SchemaVersion);
+        RuntimeOcrExecutionTokenCodec.Write(bytes[4..116], value.ExecutionToken);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[116..], mime.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(bytes[120..], value.DeadlineUtc.UtcTicks);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[128..], value.PixelWidth);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[132..], value.PixelHeight);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[136..], value.EncodedByteCeiling);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[140..], crop.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes[144..], language.Length);
+        mime.CopyTo(bytes[FixedPayloadBytes..]);
+        language.CopyTo(bytes[(FixedPayloadBytes + mime.Length)..]);
+        crop.CopyTo(bytes[(FixedPayloadBytes + mime.Length + language.Length)..]);
+        return payload;
+    }
+
+    public static LocalOcrCropRequest Decode(ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length < FixedPayloadBytes ||
+            BinaryPrimitives.ReadInt32LittleEndian(payload) != SchemaVersion ||
+            payload[148..152].IndexOfAnyExcept((byte)0) >= 0)
+            throw new InvalidDataException("Local OCR crop payload header is invalid.");
+        int mimeBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[116..]);
+        int cropBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[140..]);
+        int byteCeiling = BinaryPrimitives.ReadInt32LittleEndian(payload[136..]);
+        int languageBytes = BinaryPrimitives.ReadInt32LittleEndian(payload[144..]);
+        if (mimeBytes is < 1 or > MaximumMimeTypeBytes || cropBytes < 1 ||
+            languageBytes is < 1 or > MaximumLanguageBytes ||
+            byteCeiling is < 1 or > RuntimeProtocol.MaxPayloadBytes || cropBytes > byteCeiling ||
+            payload.Length != FixedPayloadBytes + mimeBytes + languageBytes + cropBytes)
+            throw new InvalidDataException("Local OCR crop payload lengths are invalid.");
+        ReadOnlySpan<byte> mime = payload.Slice(FixedPayloadBytes, mimeBytes);
+        ReadOnlySpan<byte> language = payload.Slice(FixedPayloadBytes + mimeBytes, languageBytes);
+        if (!IsMimeType(mime) || !IsLanguage(language))
+            throw new InvalidDataException("Local OCR MIME type or language is invalid.");
+        try
+        {
+            return new LocalOcrCropRequest(
+                RuntimeOcrExecutionTokenCodec.Read(payload[4..116]),
+                StrictUtf8.GetString(mime),
+                payload.Slice(FixedPayloadBytes + mimeBytes + languageBytes, cropBytes),
+                BinaryPrimitives.ReadInt32LittleEndian(payload[128..]),
+                BinaryPrimitives.ReadInt32LittleEndian(payload[132..]),
+                StrictUtf8.GetString(language),
+                byteCeiling,
+                new DateTimeOffset(
+                    BinaryPrimitives.ReadInt64LittleEndian(payload[120..]),
+                    TimeSpan.Zero));
+        }
+        catch (Exception exception) when (exception is ArgumentException or DecoderFallbackException)
+        {
+            throw new InvalidDataException("Local OCR crop payload fields are invalid.", exception);
+        }
+    }
+
+    private static bool IsMimeType(ReadOnlySpan<byte> value) =>
+        value.Length is > 0 and <= MaximumMimeTypeBytes &&
+        value.StartsWith("image/"u8) &&
+        value[6..].IndexOfAnyExceptInRange((byte)'a', (byte)'z') < 0;
+
+    private static bool IsLanguage(ReadOnlySpan<byte> value)
+    {
+        if (value.Length is < 1 or > MaximumLanguageBytes) return false;
+        foreach (byte character in value)
+        {
+            if (character < 0x20 || character == 0x7f) return false;
         }
         return true;
     }

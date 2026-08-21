@@ -66,7 +66,8 @@ public sealed class RuntimeFlowContractTests
             bytes,
             pixelWidth: 1,
             pixelHeight: 1,
-            explicitCloudConsent: true);
+            explicitCloudConsent: true,
+            recognitionLanguage: "auto");
         bytes[0] = 99;
 
         Assert.Equal(1, request.EncodedCrop.Span[0]);
@@ -76,7 +77,8 @@ public sealed class RuntimeFlowContractTests
             [1, 2, 3, 4],
             pixelWidth: 1,
             pixelHeight: 1,
-            explicitCloudConsent: false));
+            explicitCloudConsent: false,
+            recognitionLanguage: "auto"));
     }
 
     [Fact]
@@ -115,7 +117,12 @@ public sealed class RuntimeFlowContractTests
             target,
             overlayRevision: 2,
             [new OverlayRegionSnapshot(region, new OverlayPixelRect(10, 20, 300, 100), style,
-                [new OverlaySlotSnapshot(slot, 0, OverlaySlotState.Success, "你好", "primary")])]);
+                [new OverlaySlotSnapshot(
+                    slot,
+                    0,
+                    OverlaySlotState.Success,
+                    [new OverlayTextLine("你好", new OverlayPixelRect(10, 20, 300, 40))],
+                    "primary")])]);
 
         Assert.Equal(slot, state.Regions[0].OrderedSlots[0].SlotId);
         Assert.Throws<ArgumentException>(() => new OverlayDesiredState(

@@ -395,6 +395,7 @@ public sealed class EngineRuntimeTranslationRecordSink
     public async ValueTask SaveAsync(
         Guid profileId,
         TextGeneration source,
+        string regionName,
         IReadOnlyList<TranslationOutput> outputs,
         CancellationToken cancellationToken)
     {
@@ -405,7 +406,7 @@ public sealed class EngineRuntimeTranslationRecordSink
         }
         if (_inner is not null)
         {
-            await _inner.SaveAsync(profileId, source, outputs, cancellationToken)
+            await _inner.SaveAsync(profileId, source, regionName, outputs, cancellationToken)
                 .ConfigureAwait(false);
         }
     }

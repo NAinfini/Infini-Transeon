@@ -15,7 +15,6 @@ public sealed record BaiduOcrOptions(
     string ClientSecretReference,
     ProxyPolicy ProxyPolicy,
     bool IncludeLocation = true,
-    string LanguageType = "CHN_ENG",
     int MaximumRequestBytes = 4 * 1024 * 1024,
     int MaximumResponseBytes = 2 * 1024 * 1024,
     Func<DateTimeOffset>? Clock = null);
@@ -44,7 +43,6 @@ public sealed class BaiduOcrProvider : IOcrProvider, IDisposable
             throw new ArgumentException("Baidu token and OCR endpoints must use the same origin.", nameof(options));
         ArgumentException.ThrowIfNullOrWhiteSpace(options.ClientIdReference);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.ClientSecretReference);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.LanguageType);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumRequestBytes, 1024);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumResponseBytes, 1024);
         _options = options;
@@ -78,13 +76,14 @@ public sealed class BaiduOcrProvider : IOcrProvider, IDisposable
         ArgumentNullException.ThrowIfNull(request);
         if (request.EncodedCrop.IsEmpty || request.EncodedCrop.Length > _options.MaximumRequestBytes)
             throw new OcrRoutingException("ocr.baidu.requestTooLarge", "OCR crop exceeds the Baidu request limit.");
+        string languageType = CloudOcrLanguageMapper.BaiduLanguageType(request.RecognitionLanguage);
         string accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
         Uri endpoint = AddQuery(_options.OcrEndpoint, "access_token", accessToken);
         string image = Convert.ToBase64String(request.EncodedCrop.Span);
         var fields = new Dictionary<string, string>
         {
             ["image"] = image,
-            ["language_type"] = _options.LanguageType,
+            ["language_type"] = languageType,
             ["detect_direction"] = "true",
             ["probability"] = "true",
             ["vertexes_location"] = _options.IncludeLocation ? "true" : "false",

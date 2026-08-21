@@ -158,9 +158,9 @@ std::vector<std::byte> valid_overlay_command()
 {
     constexpr std::string_view label = "primary";
     constexpr std::string_view text = "translated";
-    std::vector<std::byte> payload(48U + 136U + 40U + label.size() + text.size());
+    std::vector<std::byte> payload(48U + 136U + 40U + label.size() + 24U + text.size());
     const auto bytes = std::span<std::byte>(payload);
-    write_u32(bytes, 0U, 4U);
+    write_u32(bytes, 0U, 5U);
     write_u32(bytes, 4U, 1U);
     bytes[8U] = std::byte{1};
     bytes[24U] = std::byte{2};
@@ -207,11 +207,18 @@ std::vector<std::byte> valid_overlay_command()
     bytes[slot] = std::byte{4};
     write_u32(bytes, slot + 20U, 2U);
     write_u32(bytes, slot + 24U, static_cast<std::uint32_t>(label.size()));
-    write_u32(bytes, slot + 28U, static_cast<std::uint32_t>(text.size()));
+    write_u32(bytes, slot + 28U, 1U);
     write_u32(bytes, slot + 32U, 2U);
     std::ranges::transform(label, payload.begin() + slot + 40U,
         [](const char value) { return static_cast<std::byte>(value); });
-    std::ranges::transform(text, payload.begin() + slot + 40U + label.size(),
+    const std::size_t line = slot + 40U + label.size();
+    write_u32(bytes, line, static_cast<std::uint32_t>(text.size()));
+    write_u32(bytes, line + 4U, 20U);
+    write_u32(bytes, line + 8U, 40U);
+    write_u32(bytes, line + 12U, 880U);
+    write_u32(bytes, line + 16U, 60U);
+    write_u32(bytes, line + 20U, 1U);
+    std::ranges::transform(text, payload.begin() + line + 24U,
         [](const char value) { return static_cast<std::byte>(value); });
     return payload;
 }
@@ -241,7 +248,7 @@ std::vector<std::byte> valid_processing_configuration()
     std::vector<std::byte> payload(
         72U + 80U + provider.size() + language.size() + pipeline.size());
     const auto bytes = std::span<std::byte>(payload);
-    write_u32(bytes, 0U, 3U);
+    write_u32(bytes, 0U, 4U);
     write_u32(bytes, 4U, 1U);
     write_u64(bytes, 8U, 9U);
     write_u64(bytes, 16U, 4U);
@@ -346,8 +353,9 @@ int main()
     require(!infini::runtime::manual_ocr_target_available(1U, false));
     require(!infini::runtime::manual_ocr_target_available(2U, true));
     require(!infini::runtime::manual_ocr_target_available(7U, true));
-    require(!infini::runtime::manual_ocr_allows_signature(false, false));
-    require(infini::runtime::manual_ocr_allows_signature(true, false));
+    require(!infini::runtime::ocr_signature_allows_dispatch(false, false, 2U));
+    require(infini::runtime::ocr_signature_allows_dispatch(false, false, 1U));
+    require(infini::runtime::ocr_signature_allows_dispatch(true, false, 2U));
 
     std::vector<std::byte> bytes = valid_bootstrap();
     const auto parsed = infini::runtime::parse_bootstrap(bytes);
@@ -494,7 +502,11 @@ int main()
     require(overlay->regions.front().style.no_scroll_overflow);
     require(overlay->regions.front().style.maximum_height == 180U);
     require(overlay->regions.front().ordered_slots.front().stage_index == 2U);
-    require(overlay->regions.front().ordered_slots.front().text == u"translated");
+    require(overlay->regions.front().ordered_slots.front().lines.size() == 1U);
+    require(overlay->regions.front().ordered_slots.front().lines.front().text == u"translated");
+    require(overlay->regions.front().ordered_slots.front().lines.front().bounds ==
+        infini::overlay::rect_f{20.0F, 40.0F, 880.0F, 60.0F});
+    require(overlay->regions.front().ordered_slots.front().lines.front().source_line_count == 1U);
     overlay_payload[82U] = std::byte{1};
     require(!infini::runtime::parse_overlay_desired_state(overlay_payload).has_value());
 
@@ -520,6 +532,24 @@ int main()
     require(processing->regions.size() == 1U);
     require(processing->regions.front().ocr_provider_id == "ocr.windows.media");
     require(processing->regions.front().recognition_language == "ja-JP");
+    require(processing->regions.front().ocr_backend ==
+        infini::runtime::ProcessingRegion::OcrBackend::windows);
+    processing_payload[72U + 57U] = std::byte{1};
+    const auto local_processing = infini::runtime::parse_processing_configuration(
+        processing_payload);
+    require(local_processing.has_value());
+    require(local_processing->regions.front().ocr_backend ==
+        infini::runtime::ProcessingRegion::OcrBackend::local);
+    processing_payload[72U + 57U] = std::byte{2};
+    require(!infini::runtime::parse_processing_configuration(
+        processing_payload).has_value());
+    write_u64(processing_payload, 72U + 72U, 4U);
+    require(infini::runtime::parse_processing_configuration(
+        processing_payload).has_value());
+    processing_payload[72U + 57U] = std::byte{3};
+    require(!infini::runtime::parse_processing_configuration(
+        processing_payload).has_value());
+    processing_payload = valid_processing_configuration();
     processing_payload[65U] = std::byte{1};
     require(!infini::runtime::parse_processing_configuration(
         processing_payload).has_value());
@@ -566,6 +596,7 @@ int main()
     crop.token.attempt = 1U;
     crop.token.result_sequence = 1U;
     crop.provider_id = "ocr.google-vision";
+    crop.recognition_language = "ja-JP";
     crop.mime_type = "image/png";
     crop.encoded_crop = {std::byte{0x89}, std::byte{'P'}, std::byte{'N'}, std::byte{'G'}};
     crop.pixel_width = 320U;
@@ -575,12 +606,40 @@ int main()
     crop.encoded_byte_ceiling = 1024U;
     const auto encoded_crop = infini::runtime::encode_cloud_ocr_crop_request(crop);
     require(encoded_crop.has_value());
-    require(read_u32(*encoded_crop, 0U) == 1U);
+    require(read_u32(*encoded_crop, 0U) == 2U);
     require((*encoded_crop)[37U] == std::byte{1});
     require(read_u64(*encoded_crop, 72U) == 5U);
     require(read_u64(*encoded_crop, 120U) == 9U);
     require(read_u32(*encoded_crop, 148U) == 4U);
-    require(encoded_crop->size() == 160U + 9U + 17U + 4U);
+    require(read_u32(*encoded_crop, 160U) == 5U);
+    require(encoded_crop->size() == 164U + 9U + 17U + 5U + 4U);
+    crop.recognition_language = "ja--JP";
+    require(!infini::runtime::encode_cloud_ocr_crop_request(crop).has_value());
+    crop.recognition_language = "auto";
+    const auto encoded_auto_crop = infini::runtime::encode_cloud_ocr_crop_request(crop);
+    require(encoded_auto_crop.has_value());
+    require(read_u32(*encoded_auto_crop, 160U) == 4U);
+
+    infini::runtime::LocalOcrCropEvent local_crop{};
+    local_crop.token = crop.token;
+    local_crop.mime_type = "image/png";
+    local_crop.recognition_language = "ja-JP";
+    local_crop.encoded_crop = {
+        std::byte{0x89}, std::byte{'P'}, std::byte{'N'}, std::byte{'G'}};
+    local_crop.pixel_width = 320U;
+    local_crop.pixel_height = 120U;
+    local_crop.deadline_utc_ticks = 638'900'000'000'000'000ULL;
+    local_crop.encoded_byte_ceiling = 1024U;
+    const auto encoded_local_crop =
+        infini::runtime::encode_local_ocr_crop_request(local_crop);
+    require(encoded_local_crop.has_value());
+    require(read_u32(*encoded_local_crop, 0U) == 1U);
+    require(read_u64(*encoded_local_crop, 72U) == 5U);
+    require(read_u32(*encoded_local_crop, 140U) == 4U);
+    require(read_u32(*encoded_local_crop, 144U) == 5U);
+    require(encoded_local_crop->size() == 152U + 9U + 5U + 4U);
+    local_crop.recognition_language = "auto";
+    require(!infini::runtime::encode_local_ocr_crop_request(local_crop).has_value());
 
     return EXIT_SUCCESS;
 }

@@ -9,11 +9,23 @@
             IsLoading="True"
             EmptyGlyph="&#xE7C4;">
             <controls:PageShell.HeaderCommands>
-                <Button
-                    x:Name="StartButton"
-                    x:Uid="WorkspaceStartButton"
-                    Click="OnStartClick"
-                    Style="{StaticResource AccentButtonStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
+                    <!-- A disabled button with the reason hidden in a tooltip reads as a broken
+                         application: the user sees only that they cannot proceed. The outstanding
+                         steps are named beside it so the next action is always on screen. -->
+                    <TextBlock
+                        x:Name="StartBlockedText"
+                        VerticalAlignment="Center"
+                        TextWrapping="Wrap"
+                        MaxWidth="360"
+                        Visibility="Collapsed"
+                        Style="{StaticResource CaptionTextStyle}" />
+                    <Button
+                        x:Name="StartButton"
+                        x:Uid="WorkspaceStartButton"
+                        Click="OnStartClick"
+                        Style="{StaticResource AccentButtonStyle}" />
+                </StackPanel>
             </controls:PageShell.HeaderCommands>
             <controls:PageShell.PageContent>
                 <Grid ColumnSpacing="{StaticResource SpaceXL}">

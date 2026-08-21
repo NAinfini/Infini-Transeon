@@ -15,10 +15,10 @@ public sealed class FakeProfileService : IProfileService
 
     private readonly List<ProfileCard> _profiles =
     [
-        new(EldenRingId, "Elden Ring — JP main story", "ELDEN RING™ (window)", "3840×2160 · 150%", "日本語 → 简体中文", 6, 2, "Running", StatusSeverity.Success, "Pause"),
-        new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"), "Persona 5 Royal", "P5R.exe (window)", "2560×1440 · 100%", "日本語 → English", 12, 4, "Ready — target matched", StatusSeverity.Info, "Start"),
-        new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003"), "Steam Deck stream", "Display 2 (full display)", "1920×1080 · 100%", "한국어 → 简体中文", 3, 1, "Target missing", StatusSeverity.Warning, "Locate target"),
-        new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000004"), "Visual novel batch", "NEKOPARA vol.4 (window)", "1920×1080 · 125%", "日本語 → 简体中文", 2, 3, "Provider unhealthy", StatusSeverity.Critical, "Open diagnostics"),
+        new(EldenRingId, "Elden Ring — JP main story", "ELDEN RING™ (window)", "3840×2160 · 150%", "日本語 → 简体中文", 6, 2, ProfileTargetMatchState.Matched, "Running", StatusSeverity.Success, "Pause"),
+        new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"), "Persona 5 Royal", "P5R.exe (window)", "2560×1440 · 100%", "日本語 → English", 12, 4, ProfileTargetMatchState.Matched, "Ready — target matched", StatusSeverity.Success, "Start"),
+        new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003"), "Steam Deck stream", "Display 2 (full display)", "1920×1080 · 100%", "한국어 → 简体中文", 3, 1, ProfileTargetMatchState.Missing, "Target missing", StatusSeverity.Warning, "Locate target"),
+        new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000004"), "Visual novel batch", "NEKOPARA vol.4 (window)", "1920×1080 · 125%", "日本語 → 简体中文", 2, 3, ProfileTargetMatchState.Matched, "Provider unhealthy", StatusSeverity.Critical, "Open diagnostics"),
     ];
 
     public Task<IReadOnlyList<ProfileCard>> GetProfilesAsync(CancellationToken cancellationToken = default) =>
@@ -35,7 +35,7 @@ public sealed class FakeProfileService : IProfileService
         return Task.FromResult(model);
     }
 
-    public Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+    public Task<IReadOnlyList<string>> GetRequiredProviderIdsAsync(
         Guid profileId,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>(
@@ -49,7 +49,8 @@ public sealed class FakeProfileService : IProfileService
         Guid id = profile.ProfileId == Guid.Empty ? Guid.NewGuid() : profile.ProfileId;
         var card = new ProfileCard(id, profile.Name, profile.TargetName, profile.Resolution,
             $"{profile.SourceLanguage} → {profile.TargetLanguage}", profile.Regions.Count,
-            string.IsNullOrWhiteSpace(profile.TranslationProviderId) ? 0 : 1, "Ready", StatusSeverity.Info, "Start");
+            string.IsNullOrWhiteSpace(profile.TranslationProviderId) ? 0 : 1,
+            ProfileTargetMatchState.Matched, "Ready", StatusSeverity.Success, "Start");
         _profiles.RemoveAll(existing => existing.ProfileId == id);
         _profiles.Insert(0, card);
         return Task.FromResult(id);
@@ -88,6 +89,8 @@ public sealed class FakeRuntimeControlService : IRuntimeControlService
     public bool IsPaused { get; private set; }
 
     public bool IsOverlayVisible { get; private set; } = true;
+
+    public int SettingsApplyCount { get; private set; }
 
     public event EventHandler<EngineRuntimeStatusChange>? StatusChanged;
 
@@ -146,6 +149,17 @@ public sealed class FakeRuntimeControlService : IRuntimeControlService
         return Task.FromResult(
             Status == EngineRuntimeStatus.Running
                 ? ProfileRuntimeApplyResult.HotApplied
+                : ProfileRuntimeApplyResult.SavedOnly);
+    }
+
+    public Task<ProfileRuntimeApplyResult> ApplySettingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        SettingsApplyCount++;
+        return Task.FromResult(
+            Status == EngineRuntimeStatus.Running
+                ? ProfileRuntimeApplyResult.Restarted
                 : ProfileRuntimeApplyResult.SavedOnly);
     }
 
@@ -262,6 +276,8 @@ public sealed class FakeWorkbenchService : IWorkbenchService
 
 public sealed class FakeHistoryService : IHistoryService
 {
+    private Guid? _selectedProfileId;
+    private ProfileHistoryConfiguration? _configuration;
     private static readonly IReadOnlyList<HistoryEvent> Seed =
     [
         new("14:32:07", "力なき者よ、なぜ来た。", "Dialogue box",
@@ -286,6 +302,31 @@ public sealed class FakeHistoryService : IHistoryService
 
     public void SelectProfile(Guid? profileId)
     {
+        if (profileId == Guid.Empty)
+            throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
+        _selectedProfileId = profileId;
+        _configuration = profileId is Guid selected
+            ? new ProfileHistoryConfiguration(
+                selected,
+                Enabled: true,
+                MaxAgeDays: 30,
+                MaxBytes: 500L * 1024 * 1024)
+            : null;
+    }
+
+    public Task<ProfileHistoryConfiguration?> GetProfileConfigurationAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(_configuration);
+
+    public Task UpdateProfileConfigurationAsync(
+        ProfileHistoryConfiguration configuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (_selectedProfileId != configuration.ProfileId)
+            throw new InvalidOperationException("History configuration does not match the selected profile.");
+        _configuration = configuration;
+        return Task.CompletedTask;
     }
 
     public Task SaveCorrectionAsync(
@@ -297,20 +338,20 @@ public sealed class FakeHistoryService : IHistoryService
 
 public sealed class FakeDiagnosticsService : IDiagnosticsService
 {
-    private static readonly IReadOnlyList<DiagnosticEvent> Seed =
+    // Categories, message keys and error codes are spelled exactly as the real status log writes
+    // them, so the fake exercises the same presenter lookups the real feed does. Times are anchored
+    // to process start rather than a literal date — a frozen date would render as an "activity" feed
+    // of events from whenever this seed was written — and captured once so repeated calls agree.
+    private static readonly IReadOnlyList<DiagnosticEvent> Seed = BuildSeed(DateTimeOffset.UtcNow);
+
+    private static IReadOnlyList<DiagnosticEvent> BuildSeed(DateTimeOffset now) =>
     [
-        new("14:29:41", "Persona 5 Royal · HUD region", "OCR interval degraded 200 ms → 500 ms",
-            "Scanning continues at a reduced rate; overlay stays current.",
-            "Recovers automatically when GPU budget frees; lock the region to prevent auto-changes.",
-            StatusSeverity.Warning),
-        new("14:12:03", "Visual novel batch · Channel 2", "Provider rate limited (HTTP 429)",
-            "Channel 2 slot shows failed state; Channel 1 continues.",
-            "Retry now, or raise the per-minute budget in channel settings.",
-            StatusSeverity.Critical),
-        new("13:58:44", "System", "EngineHost reconnected (revision 7)",
-            "All targets resumed with the previous capability budget.",
-            "No action needed.",
-            StatusSeverity.Success),
+        new(now.AddMinutes(-2), "runtime.performance", "runtime.budget.updated",
+            "status.runtime.performance.budget", StatusSeverity.Warning),
+        new(now.AddMinutes(-14), "runtime.pipeline", "provider.http429",
+            "status.runtime.pipeline.failure", StatusSeverity.Critical),
+        new(now.AddMinutes(-31), "runtime.engine", "engine.status.running",
+            "status.runtime.engine.lifecycle", StatusSeverity.Success),
     ];
 
     public Task<IReadOnlyList<DiagnosticEvent>> GetEventsAsync(CancellationToken cancellationToken = default) =>

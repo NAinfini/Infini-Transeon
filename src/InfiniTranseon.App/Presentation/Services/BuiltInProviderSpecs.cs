@@ -26,12 +26,12 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 EngineRuntimeComposition.DeepLDefinition.Id,
                 "DeepL",
-                "NMT · cloud",
+                "ProviderKindNmtCloud",
                 EngineRuntimeComposition.DeepLDefinition.CredentialReferences[0],
                 DeclarativeRestProvider.CreateBinding(
                     EngineRuntimeComposition.DeepLDefinition,
                     EngineRuntimeComposition.DeepLDefinition.CredentialReferences[0]),
-                "API key stored in Windows Credential Manager"),
+                "ProviderDetailDeepL"),
             ProviderKind.Translation,
             "deepl-v2",
             credentials => new DeclarativeRestProvider(
@@ -43,19 +43,19 @@ internal static class BuiltInProviderSpecs
                 credentials)),
         DeclarativeRestTranslation(
             EngineRuntimeComposition.DeepLFreeDefinition,
-            "NMT · cloud",
+            "ProviderKindNmtCloud",
             "deepl-v2-free",
-            "DeepL API Free key (ends with :fx) · free keys are rejected by the Pro endpoint"),
+            "ProviderDetailDeepLFree"),
         Translation(
             new CatalogProvider(
                 EngineRuntimeComposition.NiuTransDefinition.Id,
                 "NiuTrans",
-                "NMT · cloud · China",
+                "ProviderKindNmtCloudChina",
                 EngineRuntimeComposition.NiuTransDefinition.CredentialReferences[0],
                 DeclarativeRestProvider.CreateBinding(
                     EngineRuntimeComposition.NiuTransDefinition,
                     EngineRuntimeComposition.NiuTransDefinition.CredentialReferences[0]),
-                "Text translation · automatic source detection · optional console glossary and memory"),
+                "ProviderDetailNiuTrans"),
             ProviderKind.Translation,
             "niutrans-text",
             credentials => new DeclarativeRestProvider(
@@ -69,7 +69,7 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 EngineRuntimeComposition.YandexDefinition.Id,
                 "Yandex Cloud Translate",
-                "NMT · cloud",
+                "ProviderKindNmtCloud",
                 EngineRuntimeComposition.YandexDefinition.CredentialReferences.Select(reference =>
                     new CatalogCredential(
                         reference,
@@ -80,7 +80,7 @@ internal static class BuiltInProviderSpecs
                             EngineRuntimeComposition.YandexDefinition,
                             reference)))
                     .ToArray(),
-                "Translate v2 · automatic source detection · glossary support"),
+                "ProviderDetailYandex"),
             ProviderKind.Translation,
             "translate-v2",
             credentials => new DeclarativeRestProvider(
@@ -94,7 +94,7 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "translation.baidu",
                 "Baidu Translate",
-                "NMT · cloud · China",
+                "ProviderKindNmtCloudChina",
                 [
                     new(
                         EngineRuntimeComposition.BaiduTranslationOptions.AppIdReference,
@@ -109,7 +109,7 @@ internal static class BuiltInProviderSpecs
                             EngineRuntimeComposition.BaiduTranslationOptions,
                             "secret")),
                 ],
-                "General text translation · credentials in Windows Credential Manager"),
+                "ProviderDetailBaidu"),
             ProviderKind.Translation,
             "baidu-general",
             credentials => new BaiduTranslationProvider(
@@ -123,7 +123,7 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "translation.alibaba",
                 "Alibaba Cloud Translation",
-                "NMT · cloud · China",
+                "ProviderKindNmtCloudChina",
                 [
                     new(
                         EngineRuntimeComposition.AlibabaTranslationOptions.AccessKeyIdReference,
@@ -138,7 +138,7 @@ internal static class BuiltInProviderSpecs
                             EngineRuntimeComposition.AlibabaTranslationOptions,
                             "access-key-secret")),
                 ],
-                "TranslateGeneral · optional game context · RAM credentials recommended"),
+                "ProviderDetailAlibaba"),
             ProviderKind.Translation,
             "translate-general",
             credentials => new AlibabaTranslationProvider(
@@ -152,11 +152,11 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "translation.azure-ai",
                 "Azure AI Translator",
-                "NMT · cloud",
+                "ProviderKindNmtCloud",
                 EngineRuntimeComposition.AzureTranslationOptions.CredentialReference,
                 AzureTranslatorProvider.CreateCredentialBinding(
                     EngineRuntimeComposition.AzureTranslationOptions),
-                "Translator v3 global endpoint · API key in Windows Credential Manager"),
+                "ProviderDetailAzureTranslator"),
             ProviderKind.Translation,
             "translator-v3",
             credentials => new AzureTranslatorProvider(
@@ -170,7 +170,7 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "translation.youdao",
                 "Youdao Zhiyun",
-                "NMT · cloud · China",
+                "ProviderKindNmtCloudChina",
                 [
                     new(
                         EngineRuntimeComposition.YoudaoTranslationOptions.AppKeyReference,
@@ -185,7 +185,7 @@ internal static class BuiltInProviderSpecs
                             EngineRuntimeComposition.YoudaoTranslationOptions,
                             "app-secret")),
                 ],
-                "Text translation v3 · game domain · source-language auto detection"),
+                "ProviderDetailYoudao"),
             ProviderKind.Translation,
             "text-v3-game",
             credentials => new YoudaoTranslationProvider(
@@ -199,11 +199,11 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "translation.google-cloud",
                 "Google Cloud Translation",
-                "NMT · cloud",
+                "ProviderKindNmtCloud",
                 EngineRuntimeComposition.GoogleTranslationTokenOptions.CredentialReference,
                 GoogleServiceAccountTokenSource.CreateCredentialBinding(
                     EngineRuntimeComposition.GoogleTranslationTokenOptions),
-                "Translation v3 · service-account JSON · project ID read from the credential"),
+                "ProviderDetailGoogleCloud"),
             ProviderKind.Translation,
             "translate-v3",
             credentials => new GoogleCloudTranslationProvider(
@@ -222,32 +222,32 @@ internal static class BuiltInProviderSpecs
         OpenAiCompatible(
             EngineRuntimeComposition.OpenAiOptions,
             "OpenAI compatible",
-            "LLM · cloud",
-            "OpenAI endpoint · streaming · key in Windows Credential Manager"),
+            "ProviderKindLlmCloud",
+            "ProviderDetailOpenAi"),
         OpenAiCompatible(
             EngineRuntimeComposition.DeepSeekOptions,
             "DeepSeek",
-            "LLM · cloud · China",
-            "OpenAI-compatible streaming · game context enabled"),
+            "ProviderKindLlmCloudChina",
+            "ProviderDetailDeepSeek"),
         OpenAiCompatible(
             EngineRuntimeComposition.QwenOptions,
             "Qwen / Model Studio",
-            "LLM · cloud · China",
-            "Alibaba Model Studio · OpenAI-compatible streaming"),
+            "ProviderKindLlmCloudChina",
+            "ProviderDetailQwen"),
         OpenAiCompatible(
             EngineRuntimeComposition.QianfanOptions,
             "Baidu Qianfan",
-            "LLM · cloud · China",
-            "ERNIE · OpenAI-compatible streaming"),
+            "ProviderKindLlmCloudChina",
+            "ProviderDetailQianfan"),
         Translation(
             new CatalogProvider(
                 "llm.anthropic",
                 "Anthropic Claude",
-                "LLM · cloud",
+                "ProviderKindLlmCloud",
                 EngineRuntimeComposition.AnthropicOptions.CredentialReference,
                 AnthropicTranslationProvider.CreateCredentialBinding(
                     EngineRuntimeComposition.AnthropicOptions),
-                "Claude Messages API · streaming · game context enabled"),
+                "ProviderDetailAnthropic"),
             ProviderKind.LargeLanguageModel,
             EngineRuntimeComposition.AnthropicOptions.Model,
             credentials => new AnthropicTranslationProvider(
@@ -261,11 +261,11 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "llm.gemini",
                 "Google Gemini",
-                "LLM · cloud",
+                "ProviderKindLlmCloud",
                 EngineRuntimeComposition.GeminiOptions.CredentialReference,
                 GeminiTranslationProvider.CreateCredentialBinding(
                     EngineRuntimeComposition.GeminiOptions),
-                "Gemini streaming API · game context enabled"),
+                "ProviderDetailGemini"),
             ProviderKind.LargeLanguageModel,
             EngineRuntimeComposition.GeminiDefaultModel,
             credentials => new GeminiTranslationProvider(
@@ -280,11 +280,11 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "ocr.google-cloud-vision",
                 "Google Cloud Vision",
-                "OCR · cloud",
+                "ProviderKindOcrCloud",
                 EngineRuntimeComposition.GoogleVisionOptions.CredentialReference,
                 GoogleVisionOcrProvider.CreateCredentialBinding(
                     EngineRuntimeComposition.GoogleVisionOptions),
-                "Cloud OCR · explicit per-region consent required")
+                "ProviderDetailGoogleVisionOcr")
             {
                 Capability = CatalogProviderCapability.Ocr,
             },
@@ -299,7 +299,7 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "ocr.baidu",
                 "Baidu OCR",
-                "OCR · cloud · China",
+                "ProviderKindOcrCloudChina",
                 [
                     new(
                         EngineRuntimeComposition.BaiduOcrOptions.ClientIdReference,
@@ -314,7 +314,7 @@ internal static class BuiltInProviderSpecs
                             EngineRuntimeComposition.BaiduOcrOptions,
                             "client-secret")),
                 ],
-                "Baidu general OCR · explicit per-region consent required")
+                "ProviderDetailBaiduOcr")
             {
                 Capability = CatalogProviderCapability.Ocr,
             },
@@ -329,7 +329,7 @@ internal static class BuiltInProviderSpecs
             new CatalogProvider(
                 "ocr.tencent-cloud",
                 "Tencent Cloud OCR",
-                "OCR · cloud · China",
+                "ProviderKindOcrCloudChina",
                 [
                     new(
                         EngineRuntimeComposition.TencentOcrOptions.SecretIdReference,
@@ -344,7 +344,7 @@ internal static class BuiltInProviderSpecs
                             EngineRuntimeComposition.TencentOcrOptions,
                             "secret-key")),
                 ],
-                "Tencent GeneralBasicOCR · explicit per-region consent required")
+                "ProviderDetailTencentOcr")
             {
                 Capability = CatalogProviderCapability.Ocr,
             },
@@ -388,21 +388,21 @@ internal static class BuiltInProviderSpecs
     /// registration, with one catalog credential per declared credential reference.</summary>
     private static BuiltInProviderSpec DeclarativeRestTranslation(
         DeclarativeRestAdapterDefinition definition,
-        string kind,
+        string kindResourceKey,
         string modelId,
-        string detail) =>
+        string detailResourceKey) =>
         Translation(
             new CatalogProvider(
                 definition.Id,
                 definition.DisplayName,
-                kind,
+                kindResourceKey,
                 definition.CredentialReferences
                     .Select(reference => new CatalogCredential(
                         reference,
                         "API key",
                         DeclarativeRestProvider.CreateBinding(definition, reference)))
                     .ToArray(),
-                detail),
+                detailResourceKey),
             ProviderKind.Translation,
             modelId,
             credentials => new DeclarativeRestProvider(
@@ -416,16 +416,16 @@ internal static class BuiltInProviderSpecs
     private static BuiltInProviderSpec OpenAiCompatible(
         OpenAiCompatibleOptions options,
         string displayName,
-        string kind,
-        string detail) =>
+        string kindResourceKey,
+        string detailResourceKey) =>
         Translation(
             new CatalogProvider(
                 options.ProviderId,
                 displayName,
-                kind,
+                kindResourceKey,
                 options.CredentialReference,
                 OpenAiCompatibleProvider.CreateCredentialBinding(options),
-                detail),
+                detailResourceKey),
             ProviderKind.LargeLanguageModel,
             options.Model,
             credentials => new OpenAiCompatibleProvider(
@@ -462,9 +462,9 @@ internal static class BuiltInProviderSpecs
         var catalog = new CatalogProvider(
             "ocr.azure-ai-vision",
             "Azure AI Vision OCR",
-            "OCR · cloud",
+            "ProviderKindOcrCloud",
             [credential],
-            "Image Analysis 4.0 Read · resource endpoint and explicit per-region consent required")
+            "ProviderDetailAzureVisionOcr")
         {
             Capability = CatalogProviderCapability.Ocr,
             RequiresEndpoint = true,

@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Ocr;
@@ -102,8 +102,75 @@ public sealed class RuntimeTranslationPipelineTests
         Assert.True(sink.States.Last().OverlayRevision > sink.States.First().OverlayRevision);
         Assert.Single(records.Items);
         Assert.Equal("攻撃:100", records.Items[0].Source.SourceText);
+        Assert.Equal("Dialogue", records.Items[0].RegionName);
         Assert.Contains(records.Items[0].Outputs, item =>
             item.StreamCompleted && item.Text == "译:攻撃:100");
+    }
+
+    [Fact]
+    public async Task ProductionStabilizationAdmitsAnUnchangedSubtitleAfterNativeConfirmation()
+    {
+        const string providerId = "test.provider";
+        using var providers = new OnlineProviderService(
+            new ProviderRegistry(
+            [
+                new ProviderRegistration(
+                    new ProviderDescriptor(providerId, ProviderKind.Translation, false,
+                        true, true, false),
+                    () => new PrefixProvider("译:")),
+            ]),
+            new ProviderServiceLimits());
+        var sink = new RecordingOverlaySink();
+        var records = new RecordingTranslationRecordSink();
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(2026, 8, 12, 12, 0, 0, TimeSpan.Zero));
+        await using var pipeline = new RuntimeTranslationPipeline(
+            new TranslationOrchestrator(new TranslationChannelRunner(providers)),
+            sink,
+            new OcrTextGenerationGate(new TextStabilizerOptions(
+                StableFrameCount: 2,
+                MinimumDelay: TimeSpan.FromMilliseconds(150),
+                MaximumWait: TimeSpan.FromSeconds(2))),
+            (_, _) => ValueTask.CompletedTask,
+            records,
+            clock);
+        RuntimeTranslationTarget registration = Target(providerId);
+        pipeline.Register(registration);
+        OcrResultSnapshot first = RuntimeOcrResultPayloadCodec.Decode(
+            RuntimeOcrResultPayloadCodec.Encode(Result(registration, "静かな夜だ")));
+
+        await pipeline.EnqueueAsync(first, TestContext.Current.CancellationToken);
+        await pipeline.DrainAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(records.Items);
+        TimeSpan nativeCadence = Assert.Single(
+            registration.ProfileTarget.Regions).RecognitionInterval;
+        Assert.Equal(TimeSpan.FromMilliseconds(250), nativeCadence);
+        clock.Advance(nativeCadence);
+        SourceGenerationToken source = first.ExecutionToken.Source;
+        var confirmationSource = new SourceGenerationToken(
+            source.RuntimeEpoch,
+            source.TargetInstanceId,
+            source.Area,
+            source.TextTrackId,
+            source.SourceGeneration + 1,
+            source.ProfileRevision);
+
+        OcrResultSnapshot confirmation = RuntimeOcrResultPayloadCodec.Decode(
+            RuntimeOcrResultPayloadCodec.Encode(first with
+            {
+                ExecutionToken = new OcrExecutionToken(
+                    confirmationSource, Guid.NewGuid(), 1, 1),
+            }));
+        await pipeline.EnqueueAsync(
+            confirmation, TestContext.Current.CancellationToken);
+        await pipeline.DrainAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(records.Items);
+        OverlaySlotSnapshot translated = Assert.Single(
+            sink.States.Last().Regions.Single().OrderedSlots);
+        Assert.Equal(OverlaySlotState.Success, translated.State);
+        Assert.Equal("译:静かな夜だ", translated.Text);
     }
 
     [Fact]
@@ -603,14 +670,21 @@ public sealed class RuntimeTranslationPipelineTests
         public bool ShouldPauseOptionalRefinement(Guid candidate) => candidate == regionId;
     }
 
+    private sealed class ManualTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+
+        public void Advance(TimeSpan duration) => now += duration;
+    }
+
     private sealed class RecordingTranslationRecordSink :
         IRuntimeTranslationRecordSink,
         IRuntimeTranslationSessionSink
     {
         private readonly object _gate = new();
-        private readonly List<(Guid ProfileId, TextGeneration Source,
+        private readonly List<(Guid ProfileId, TextGeneration Source, string RegionName,
             IReadOnlyList<TranslationOutput> Outputs)> _items = [];
-        public IReadOnlyList<(Guid ProfileId, TextGeneration Source,
+        public IReadOnlyList<(Guid ProfileId, TextGeneration Source, string RegionName,
             IReadOnlyList<TranslationOutput> Outputs)> Items
         {
             get { lock (_gate) return _items.ToArray(); }
@@ -620,11 +694,12 @@ public sealed class RuntimeTranslationPipelineTests
         public ValueTask SaveAsync(
             Guid profileId,
             TextGeneration source,
+            string regionName,
             IReadOnlyList<TranslationOutput> outputs,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            lock (_gate) _items.Add((profileId, source, outputs));
+            lock (_gate) _items.Add((profileId, source, regionName, outputs));
             return ValueTask.CompletedTask;
         }
 

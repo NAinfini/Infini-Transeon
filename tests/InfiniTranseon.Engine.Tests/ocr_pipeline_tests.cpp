@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <infini/ocr/ocr_engine.hpp>
 #include <infini/ocr/cloud_crop_encoder.hpp>
@@ -56,6 +57,10 @@ int main()
     }};
     const bgra_image reduced = downscale_bgra(crop, 1U);
     require(reduced.width == 1U && reduced.height == 1U);
+    bgra_image unchanged = crop;
+    const std::byte* const unchanged_pixels = unchanged.pixels.data();
+    const bgra_image reused = downscale_bgra(std::move(unchanged), 2U);
+    require(reused.pixels.data() == unchanged_pixels);
     const cloud_crop_encode_result encoded = encode_png(reduced, 1U * 1024U * 1024U);
     require(encoded.status == cloud_crop_encode_status::succeeded);
     require(encoded.bytes.size() > 8U);

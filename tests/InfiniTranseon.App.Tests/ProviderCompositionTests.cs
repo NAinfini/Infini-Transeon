@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Core.Privacy;
 
@@ -5,6 +6,37 @@ namespace InfiniTranseon.App.Tests;
 
 public sealed class ProviderCompositionTests
 {
+    // A catalog entry names its taxonomy, description and unavailable state by resource key. A key
+    // that is not declared throws only when a user opens the providers page in that language, so the
+    // whole catalog is checked against both tables here instead.
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("zh-CN")]
+    public void Every_catalog_resource_key_is_declared(string culture)
+    {
+        HashSet<string> declared = XDocument.Load(AppSourcePaths.ResourcesFile(culture)).Root!
+            .Elements("data")
+            .Select(data => (string)data.Attribute("name")!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        List<string> missing =
+        [
+            .. ProviderCatalog.Default
+                .SelectMany(provider => new[]
+                {
+                    provider.KindResourceKey,
+                    provider.DetailResourceKey,
+                    provider.UnavailableStateResourceKey,
+                })
+                .Where(key => key is not null)
+                .Select(key => key!)
+                .Distinct(StringComparer.Ordinal)
+                .Where(key => !declared.Contains(key)),
+        ];
+
+        Assert.True(missing.Count == 0, $"Missing in {culture}: [{string.Join(", ", missing)}].");
+    }
+
     [Fact]
     public void SetupCatalogOffersAllOnlineTranslatorsButNoOcrProviders()
     {
@@ -30,7 +62,7 @@ public sealed class ProviderCompositionTests
         Assert.Contains(choices, provider => provider.DisplayName == "NiuTrans");
         Assert.Contains(choices, provider => provider.DisplayName == "Yandex Cloud Translate");
         Assert.Contains(choices, provider => provider.DisplayName == "Google Cloud Translation");
-        Assert.DoesNotContain(choices, provider => provider.Kind.StartsWith("OCR", StringComparison.Ordinal));
+        Assert.DoesNotContain(choices, provider => provider.Capability == CatalogProviderCapability.Ocr);
     }
 
     [Fact]
@@ -57,6 +89,36 @@ public sealed class ProviderCompositionTests
         Assert.All(ids, id => Assert.Contains(
             ProviderCatalog.Default,
             provider => provider.Id == id));
+    }
+
+    [Fact]
+    public void StrictOfflineRuntimeCompositionRegistersOnlyLocalProviders()
+    {
+        var local = new Core.Translation.ProviderRegistration(
+            new Core.Translation.ProviderDescriptor(
+                "translation.local.test",
+                Contracts.Translation.ProviderKind.Translation,
+                RequiresNetwork: false,
+                SupportsStreaming: false,
+                SupportsContext: false,
+                SupportsGlossary: false),
+            () => throw new InvalidOperationException("Factory must not run during composition."));
+
+        Core.Translation.ProviderRegistry registry =
+            EngineRuntimeComposition.BuildProviderRegistry(
+                new EmptyCredentialStore(),
+                additionalRegistrations: [local],
+                strictOffline: true);
+        IReadOnlyList<Core.Ocr.OcrProviderRegistration> cloudOcr =
+            EngineRuntimeComposition.BuildCloudOcrRegistrations(
+                new EmptyCredentialStore(),
+                AzureVisionEndpoint(),
+                strictOffline: true);
+
+        Core.Translation.ProviderDescriptor descriptor = Assert.Single(registry.Descriptors);
+        Assert.Equal("translation.local.test", descriptor.Id);
+        Assert.False(descriptor.RequiresNetwork);
+        Assert.Empty(cloudOcr);
     }
 
     [Fact]
@@ -160,6 +222,14 @@ public sealed class ProviderCompositionTests
             Core.Ocr.GoogleVisionOcrProvider.CreateCredentialBinding(
                 EngineRuntimeComposition.GoogleVisionOptions),
             catalog.Binding);
+    }
+
+    [Fact]
+    public void BaiduOcrCompositionUsesTheAccurateEndpointForAutomaticDetection()
+    {
+        Assert.Equal(
+            "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate",
+            EngineRuntimeComposition.BaiduOcrOptions.OcrEndpoint.AbsoluteUri.TrimEnd('/'));
     }
 
     [Fact]

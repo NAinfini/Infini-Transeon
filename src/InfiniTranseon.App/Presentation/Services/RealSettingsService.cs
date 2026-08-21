@@ -6,6 +6,8 @@ using CoreHotkeyTargetReference = InfiniTranseon.Core.Settings.HotkeyTargetRefer
 using CoreOcrBackend = InfiniTranseon.Core.Settings.OcrBackendPreference;
 using CorePerformancePreset = InfiniTranseon.Core.Scheduling.PerformancePreset;
 using CoreThemePreference = InfiniTranseon.Core.Settings.ThemePreference;
+using LocalModelRuntimeAvailability =
+    InfiniTranseon.Core.Translation.Local.LocalModelRuntimeAvailability;
 
 namespace InfiniTranseon.App.Presentation.Services;
 
@@ -18,72 +20,89 @@ public sealed class RealSettingsService : ISettingsService
 {
     private readonly CoreSettingsRepository _coreRepository;
     private readonly ISecretReferenceService _secrets;
+    private readonly ResourceTextLookup _text;
     private readonly IReadOnlyList<CatalogProvider> _providers;
     private readonly CustomRestAdapterStore? _customAdapters;
     private readonly LocalModelManagementService? _localModels;
     private readonly OcrBackendPreferenceSource? _ocrBackend;
+    private readonly IOcrLanguageAvailability? _ocrLanguages;
 
     public RealSettingsService(
         CoreSettingsRepository coreRepository,
         ISecretReferenceService secrets,
+        ResourceTextLookup text,
         CustomRestAdapterStore? customAdapters = null)
         : this(
             coreRepository,
             secrets,
+            text,
             ProviderCatalog.Default,
             customAdapters,
             localModels: null,
-            ocrBackend: null)
+            ocrBackend: null,
+            ocrLanguages: null)
     {
     }
 
     public RealSettingsService(
         CoreSettingsRepository coreRepository,
         ISecretReferenceService secrets,
+        ResourceTextLookup text,
         CustomRestAdapterStore customAdapters,
         LocalModelManagementService localModels,
-        OcrBackendPreferenceSource? ocrBackend = null)
+        OcrBackendPreferenceSource? ocrBackend = null,
+        IOcrLanguageAvailability? ocrLanguages = null)
         : this(
             coreRepository,
             secrets,
+            text,
             ProviderCatalog.Default,
             customAdapters,
             localModels,
-            ocrBackend)
+            ocrBackend,
+            ocrLanguages)
     {
     }
 
     public RealSettingsService(
         CoreSettingsRepository coreRepository,
         ISecretReferenceService secrets,
+        ResourceTextLookup text,
         IReadOnlyList<CatalogProvider> providers)
         : this(
             coreRepository,
             secrets,
+            text,
             providers,
             customAdapters: null,
             localModels: null,
-            ocrBackend: null)
+            ocrBackend: null,
+            ocrLanguages: null)
     {
     }
 
     private RealSettingsService(
         CoreSettingsRepository coreRepository,
         ISecretReferenceService secrets,
+        ResourceTextLookup text,
         IReadOnlyList<CatalogProvider> providers,
         CustomRestAdapterStore? customAdapters,
         LocalModelManagementService? localModels,
-        OcrBackendPreferenceSource? ocrBackend)
+        OcrBackendPreferenceSource? ocrBackend,
+        IOcrLanguageAvailability? ocrLanguages)
     {
         ArgumentNullException.ThrowIfNull(coreRepository);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(providers);
         _coreRepository = coreRepository;
         _secrets = secrets;
+        _text = text;
         _providers = providers;
         _customAdapters = customAdapters;
         _localModels = localModels;
         _ocrBackend = ocrBackend;
+        _ocrLanguages = ocrLanguages;
     }
 
     public async Task<ApplicationSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
@@ -150,7 +169,7 @@ public sealed class RealSettingsService : ISettingsService
         foreach (CatalogProvider provider in CurrentProviders().Where(provider =>
             _localModels is null ||
             !provider.Id.StartsWith(
-                "translation.local.",
+                EngineRuntimeComposition.LocalTranslationProviderIdPrefix,
                 StringComparison.OrdinalIgnoreCase)))
         {
             ProviderCredentialField[] credentialFields = provider.Credentials
@@ -172,34 +191,44 @@ public sealed class RealSettingsService : ISettingsService
                     provider.Id,
                     out string? configuredEndpoint) &&
                 !string.IsNullOrWhiteSpace(configuredEndpoint);
-            string stateText = !provider.IsSelectable
-                ? provider.UnavailableStateText ?? "Unavailable"
-                : !hasEndpoint ? "Endpoint missing"
-                : !provider.RequiresCredential ? "Available (offline)"
-                : present ? "Connected"
-                : "Credential missing";
+            string stateResourceKey = !provider.IsSelectable
+                ? provider.UnavailableStateResourceKey ?? "ProviderStateUnavailable"
+                : !hasEndpoint ? "ProviderStateEndpointMissing"
+                : !provider.RequiresCredential ? "ProviderStateAvailableOffline"
+                : present ? "ProviderStateConnected"
+                : "ProviderStateCredentialMissing";
             rows.Add(new ProviderRow(
                 provider.DisplayName,
-                provider.Kind,
-                stateText,
+                _text(provider.KindResourceKey),
+                _text(stateResourceKey),
                 !hasEndpoint
                     ? Controls.StatusSeverity.Warning
                     : ProviderCatalog.SeverityFor(provider, present),
-                provider.Detail)
+                Text(provider.DetailResourceKey, provider.DetailArguments))
             {
                 Id = provider.Id,
                 IsSelectable = provider.IsSelectable,
                 IsTranslationProvider =
                     provider.Capability == CatalogProviderCapability.Translation,
+                IsOcrProvider = provider.Capability == CatalogProviderCapability.Ocr,
                 IsCustom = provider.IsCustom,
                 IsLocalModel = provider.Id.StartsWith(
-                    "translation.local.", StringComparison.OrdinalIgnoreCase),
+                    EngineRuntimeComposition.LocalTranslationProviderIdPrefix,
+                    StringComparison.OrdinalIgnoreCase),
                 CanDownloadModel = false,
                 RequiresEndpoint = provider.RequiresEndpoint,
                 Endpoint = settings.EffectiveProviderEndpoints.GetValueOrDefault(provider.Id),
                 EndpointPlaceholder = provider.EndpointPlaceholder,
                 Credentials = credentialFields,
             });
+        }
+
+        // Outside the catalog branch: Windows recognition is the default OCR path and is present
+        // whether or not a model catalog is. Leaving it out made the local section read as "this
+        // machine can read nothing" on a machine that reads several languages already.
+        if (_ocrLanguages is not null)
+        {
+            rows.Add(ToWindowsRecognizerRow());
         }
 
         if (_localModels is not null)
@@ -246,13 +275,25 @@ public sealed class RealSettingsService : ISettingsService
         return _providers.Concat(_customAdapters.GetCatalogProviders()).ToArray();
     }
 
-    private static ProviderRow ToDisconnectedRow(CatalogProvider provider) =>
+    /// <summary>Resolves a catalog entry's description, formatting in the machine data an entry may
+    /// carry (a REST adapter's method and host) so the surrounding words remain translatable.</summary>
+    private string Text(string resourceKey, IReadOnlyList<object?> arguments) =>
+        arguments.Count == 0
+            ? _text(resourceKey)
+            : string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                _text(resourceKey),
+                [.. arguments]);
+
+    private ProviderRow ToDisconnectedRow(CatalogProvider provider) =>
         new(
             provider.DisplayName,
-            provider.Kind,
-            provider.RequiresCredential ? "Credential missing" : "Available",
+            _text(provider.KindResourceKey),
+            _text(provider.RequiresCredential
+                ? "ProviderStateCredentialMissing"
+                : "ProviderStateAvailable"),
             provider.RequiresCredential ? Controls.StatusSeverity.Warning : Controls.StatusSeverity.Neutral,
-            provider.Detail)
+            Text(provider.DetailResourceKey, provider.DetailArguments))
         {
             Id = provider.Id,
             IsSelectable = provider.IsSelectable,
@@ -266,7 +307,40 @@ public sealed class RealSettingsService : ISettingsService
                 .ToArray(),
         };
 
-    private static IEnumerable<ProviderRow> ToLocalModelRows(
+    /// <summary>
+    /// Windows recognition as a local package the user already has. It is not downloadable and not
+    /// removable, so the row carries neither action; what it does carry is the list of languages this
+    /// machine can actually read today, which is the one thing about it that varies per machine and
+    /// the reason the PP-OCR packages below it exist at all.
+    /// </summary>
+    private ProviderRow ToWindowsRecognizerRow()
+    {
+        IReadOnlyList<string> tags = _ocrLanguages!.WindowsRecognizerTags;
+        bool hasRecognizer = tags.Count > 0;
+        return new ProviderRow(
+            _text("ProviderWindowsOcrName"),
+            _text("ProviderKindOcrLocal"),
+            _text(hasRecognizer
+                ? "ProviderStateWindowsOcrBuiltIn"
+                : "ProviderStateWindowsOcrNoLanguages"),
+            hasRecognizer ? Controls.StatusSeverity.Success : Controls.StatusSeverity.Warning,
+            hasRecognizer
+                ? string.Format(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    _text("ProviderDetailWindowsOcr"),
+                    LanguageNames(tags, _text("UiLanguageTag")))
+                : _text("ProviderDetailWindowsOcrNoLanguages"))
+        {
+            Id = "ocr.windows",
+            IsSelectable = false,
+            IsOcrProvider = true,
+            IsLocalModel = true,
+            CanDownloadModel = false,
+            CanRemoveModel = false,
+        };
+    }
+
+    private IEnumerable<ProviderRow> ToLocalModelRows(
         LocalModelCatalogView catalog,
         bool strictOffline)
     {
@@ -274,19 +348,21 @@ public sealed class RealSettingsService : ISettingsService
             catalog.Packages.Count == 0 ||
             catalog.Problem is not null)
         {
+            // catalog.Problem is the verifier's own diagnostic text. It stays verbatim: replacing it
+            // with a translated summary would drop the only description of what failed.
             yield return new ProviderRow(
-                "Local model catalog",
-                "NMT · local",
-                catalog.State switch
+                _text("ProviderLocalCatalogName"),
+                _text("ProviderKindNmtLocal"),
+                _text(catalog.State switch
                 {
-                    LocalModelCatalogState.Invalid => "Catalog verification failed",
-                    LocalModelCatalogState.Missing => "Package catalog not published",
-                    _ => "No model packages published",
-                },
+                    LocalModelCatalogState.Invalid => "ProviderStateCatalogInvalid",
+                    LocalModelCatalogState.Missing => "ProviderStateCatalogMissing",
+                    _ => "ProviderStateCatalogEmpty",
+                }),
                 catalog.State == LocalModelCatalogState.Invalid
                     ? Controls.StatusSeverity.Critical
                     : Controls.StatusSeverity.Neutral,
-                catalog.Problem ?? "No local model package is currently available.")
+                catalog.Problem ?? _text("ProviderDetailLocalCatalogEmpty"))
             {
                 Id = "translation.local.catalog",
                 IsSelectable = false,
@@ -299,19 +375,33 @@ public sealed class RealSettingsService : ISettingsService
 
         foreach (LocalModelPackageView model in catalog.Packages)
         {
-            bool installed = model.State != LocalModelInstallState.NotInstalled;
-            yield return new ProviderRow(
+            yield return ToLocalModelRow(model, strictOffline);
+        }
+    }
+
+    internal ProviderRow ToLocalModelRow(
+        LocalModelPackageView model,
+        bool strictOffline)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        bool installed = model.State != LocalModelInstallState.NotInstalled;
+        bool isOcr = string.Equals(
+            model.Runtime,
+            LocalModelRuntimeAvailability.PpOcrOnnxRuntime,
+            StringComparison.Ordinal);
+        return new ProviderRow(
                 model.DisplayName,
-                "NMT · local",
-                model.State switch
+                _text(isOcr ? "ProviderKindOcrLocal" : "ProviderKindNmtLocal"),
+                _text(model.State switch
                 {
-                    LocalModelInstallState.Installed => "Installed · ready",
-                    LocalModelInstallState.RuntimeUnavailable => "Installed · runtime unavailable",
-                    LocalModelInstallState.Corrupt => "Installed package is corrupt",
-                    LocalModelInstallState.Uncatalogued => "Installed · absent from signed catalog",
-                    _ when strictOffline => "Not installed · strict-offline mode blocks download",
-                    _ => "Not installed · download only on request",
-                },
+                    LocalModelInstallState.Installed => "ProviderStateModelReady",
+                    LocalModelInstallState.RuntimeUnavailable =>
+                        "ProviderStateModelRuntimeUnavailable",
+                    LocalModelInstallState.Corrupt => "ProviderStateModelCorrupt",
+                    LocalModelInstallState.Uncatalogued => "ProviderStateModelUncatalogued",
+                    _ when strictOffline => "ProviderStateModelBlockedByStrictOffline",
+                    _ => "ProviderStateModelNotInstalled",
+                }),
                 model.State switch
                 {
                     LocalModelInstallState.Installed => Controls.StatusSeverity.Success,
@@ -323,9 +413,12 @@ public sealed class RealSettingsService : ISettingsService
                 },
                 ModelDetail(model))
             {
-                Id = $"translation.local.{model.ModelId}",
-                IsSelectable = model.State == LocalModelInstallState.Installed,
-                IsTranslationProvider = true,
+                Id = isOcr
+                    ? $"ocr.local.{model.ModelId}"
+                    : EngineRuntimeComposition.LocalTranslationProviderId(model.ModelId),
+                IsSelectable = !isOcr && model.State == LocalModelInstallState.Installed,
+                IsTranslationProvider = !isOcr,
+                IsOcrProvider = isOcr,
                 IsLocalModel = true,
                 CanDownloadModel =
                     model.State == LocalModelInstallState.NotInstalled &&
@@ -336,38 +429,52 @@ public sealed class RealSettingsService : ISettingsService
                 ModelLicense = model.LicenseSpdx,
                 ModelRuntime = model.Runtime,
                 ModelPackageDirectory = model.PackageDirectory,
-                ModelDownloadSize = FormatBytes(model.DownloadBytes),
+                ModelDownloadSize = ByteSizeText.Format(model.DownloadBytes),
             };
-        }
     }
 
-    private static string ModelDetail(LocalModelPackageView model)
+    private string ModelDetail(LocalModelPackageView model)
     {
         if (model.State == LocalModelInstallState.Uncatalogued)
         {
-            return "This application-managed package is no longer listed in the signed catalog. " +
-                "It cannot be selected, but it can still be removed.";
+            return _text("ProviderDetailModelUncatalogued");
         }
+        // The catalog declares coverage in BCP-47, which is the right form to sign and the wrong form
+        // to read: a row that otherwise speaks the user's language listed "zh-Hans, zh-Hant".
+        string uiLanguage = _text("UiLanguageTag");
         string languages = model.SourceLanguages.Count == 0 &&
             model.TargetLanguages.Count == 0
-                ? "language coverage declared by package"
-                : $"{string.Join(", ", model.SourceLanguages)} → " +
-                    string.Join(", ", model.TargetLanguages);
-        return $"{FormatBytes(model.DownloadBytes)} · {model.LicenseSpdx} · " +
-            $"{model.Runtime} · {languages}";
+                ? _text("ProviderDetailModelLanguagesUndeclared")
+                : $"{LanguageNames(model.SourceLanguages, uiLanguage)} → " +
+                    LanguageNames(model.TargetLanguages, uiLanguage);
+        return string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            _text("ProviderDetailModelSummary"),
+            ByteSizeText.Format(model.DownloadBytes),
+            model.LicenseSpdx,
+            model.Runtime,
+            languages);
     }
 
-    private static string FormatBytes(long bytes)
+    /// <summary>
+    /// Names a list of BCP-47 tags in the user's language. A catalog package declares "en" while
+    /// Windows holds "en-US", so the tag is resolved on language plus script rather than by equality
+    /// — but only when exactly one catalog language fits. Bare "zh" fits both zh-Hans and zh-Hant,
+    /// and naming one of them would be a guess about which script the package can read.
+    ///
+    /// Names repeat where tags do not: a machine with the en-US and en-GB recognizers installed can
+    /// read English, once. What the row answers is which languages are readable, not how many
+    /// regional recognizers back each one.
+    /// </summary>
+    private static string LanguageNames(IReadOnlyList<string> tags, string uiLanguage)
     {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double value = bytes;
-        int unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
+        string[] catalogCodes = [.. LanguageCatalog.CreateSourceOptions(uiLanguage).Select(o => o.Code)];
+        return string.Join(", ", tags.Select(tag =>
         {
-            value /= 1024;
-            unit++;
-        }
-        return $"{value:0.#} {units[unit]}";
+            string[] fits = [.. catalogCodes.Where(code =>
+                WindowsOcrLanguageAvailability.Matches(code, tag))];
+            return LanguageCatalog.DisplayNameFor(fits.Length == 1 ? fits[0] : tag, uiLanguage);
+        }).Distinct(StringComparer.CurrentCulture));
     }
 
     private static AppPerformancePreset FromCorePreset(CorePerformancePreset preset) => preset switch

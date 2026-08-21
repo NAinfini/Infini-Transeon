@@ -44,6 +44,10 @@ struct cloud_crop_encode_result final
     const bgra_image& source,
     std::uint32_t maximum_long_edge);
 
+[[nodiscard]] bgra_image downscale_bgra(
+    bgra_image&& source,
+    std::uint32_t maximum_long_edge);
+
 [[nodiscard]] bool mask_bgra_regions(
     bgra_image& image,
     std::span<const normalized_mask_rect> regions) noexcept;

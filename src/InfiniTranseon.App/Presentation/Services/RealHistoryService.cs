@@ -6,9 +6,8 @@ using InfiniTranseon.Core.Translation;
 namespace InfiniTranseon.App.Presentation.Services;
 
 /// <summary>
-/// Real history service backed by the Core <see cref="HistoryRepository"/>. History is privacy-off by
-/// default; the retention setting decides whether the repository is enabled. When retention is Off, or
-/// no profile exists, or the runtime has not yet recorded anything, the result is empty by design.
+/// Real history service backed by the Core <see cref="HistoryRepository"/>. The application setting is
+/// the global privacy switch; each profile must also opt in and owns its own time and byte limits.
 /// </summary>
 public sealed class RealHistoryService : IHistoryService
 {
@@ -16,16 +15,23 @@ public sealed class RealHistoryService : IHistoryService
     private readonly AppDataOptions _options;
     private readonly ProfileRepository _profiles;
     private readonly ISettingsService _settings;
+    private readonly IRuntimeControlService _runtime;
     private Guid? _selectedProfileId;
 
-    public RealHistoryService(AppDataOptions options, ProfileRepository profiles, ISettingsService settings)
+    public RealHistoryService(
+        AppDataOptions options,
+        ProfileRepository profiles,
+        ISettingsService settings,
+        IRuntimeControlService runtime)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(profiles);
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(runtime);
         _options = options;
         _profiles = profiles;
         _settings = settings;
+        _runtime = runtime;
     }
 
     public void SelectProfile(Guid? profileId)
@@ -35,11 +41,58 @@ public sealed class RealHistoryService : IHistoryService
         _selectedProfileId = profileId;
     }
 
+    public async Task<ProfileHistoryConfiguration?> GetProfileConfigurationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_selectedProfileId is not Guid profileId) return null;
+        ProfileDocument? profile = await _profiles
+            .LoadAsync(profileId, cancellationToken)
+            .ConfigureAwait(false);
+        return profile is null
+            ? null
+            : new ProfileHistoryConfiguration(
+                profile.ProfileId,
+                profile.History.Enabled,
+                profile.History.MaxAgeDays,
+                profile.History.MaxBytes);
+    }
+
+    public async Task UpdateProfileConfigurationAsync(
+        ProfileHistoryConfiguration configuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (_selectedProfileId is not Guid selected || selected != configuration.ProfileId)
+            throw new InvalidOperationException("History configuration does not match the selected profile.");
+        if (configuration.MaxAgeDays is < 1 or > 365_000 ||
+            configuration.MaxBytes is < 1024 or > 1_099_511_627_776)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(configuration),
+                "History retention must use a positive bounded age and 1 KiB to 1 TiB.");
+        }
+
+        ProfileDocument profile = await _profiles
+            .LoadAsync(selected, cancellationToken)
+            .ConfigureAwait(false) ??
+            throw new KeyNotFoundException("The selected history profile no longer exists.");
+        ProfileDocument updated = profile with
+        {
+            History = new ProfileHistorySettings
+            {
+                Enabled = configuration.Enabled,
+                MaxAgeDays = configuration.MaxAgeDays,
+                MaxBytes = configuration.MaxBytes,
+            },
+        };
+        await _profiles.SaveAsync(updated, cancellationToken).ConfigureAwait(false);
+        await _runtime.ApplyProfileAsync(updated.ProfileId, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<HistoryEvent>> GetEventsAsync(CancellationToken cancellationToken = default)
     {
         ApplicationSettings settings = await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
-        HistoryOptions historyOptions = ToHistoryOptions(settings.HistoryRetention);
-        if (!historyOptions.Enabled)
+        if (settings.HistoryRetention == HistoryRetention.Off)
         {
             return [];
         }
@@ -52,10 +105,12 @@ public sealed class RealHistoryService : IHistoryService
             return [];
         }
 
-        var repository = new HistoryRepository(_options.DatabasePath, historyOptions);
         var events = new List<HistoryEvent>();
-        foreach (ProfileDocument profile in profiles)
+        foreach (ProfileDocument profile in profiles.Where(profile => profile.History.Enabled))
         {
+            var repository = new HistoryRepository(
+                _options.DatabasePath,
+                CreateHistoryOptions(profile, settings.HistoryRetention));
             HistoryPage page = await repository
                 .ReadPageAsync(profile.ProfileId, PageSize, cursor: null, cancellationToken)
                 .ConfigureAwait(false);
@@ -103,12 +158,20 @@ public sealed class RealHistoryService : IHistoryService
         return profile is null ? [] : [profile];
     }
 
-    private static HistoryOptions ToHistoryOptions(HistoryRetention retention) => retention switch
+    internal static HistoryOptions CreateHistoryOptions(
+        ProfileDocument profile,
+        HistoryRetention retention)
     {
-        HistoryRetention.Days30 => new HistoryOptions(Enabled: true, Retention: TimeSpan.FromDays(30)),
-        HistoryRetention.Days90 => new HistoryOptions(Enabled: true, Retention: TimeSpan.FromDays(90)),
-        _ => new HistoryOptions(Enabled: false),
-    };
+        ArgumentNullException.ThrowIfNull(profile);
+        return retention == HistoryRetention.Off || !profile.History.Enabled
+            ? new HistoryOptions(Enabled: false)
+            : new HistoryOptions(
+                Enabled: true,
+                Retention: TimeSpan.FromDays(Math.Min(
+                    profile.History.MaxAgeDays,
+                    retention == HistoryRetention.Days90 ? 90 : 30)),
+                MaximumBytes: profile.History.MaxBytes);
+    }
 
     private static HistoryEvent ToEvent(HistoryRecord record, string profileName)
     {
@@ -124,7 +187,7 @@ public sealed class RealHistoryService : IHistoryService
         return new HistoryEvent(
             record.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss"),
             record.SourceText,
-            "—",
+            record.RegionName,
             channels,
             record.ProfileId,
             record.SourceEventId,

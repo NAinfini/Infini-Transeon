@@ -105,6 +105,9 @@ public sealed class LocalizationParityTests
     // ("SetupStep1Caption.Text") as a path with '/'. The dotted spelling that works in x:Uid markup
     // raises NAMED_RESOURCE_NOT_FOUND at runtime, and it did: the setup wizard threw the moment it
     // loaded. A typo has the same effect, so every literal lookup is checked against the resw here.
+    //
+    // Services below the WinRT boundary take an injected ResourceTextLookup instead of a loader, and
+    // spell it `_text`; those keys are the same resw names and need the same guard.
     [Fact]
     public void Every_literal_resource_lookup_resolves()
     {
@@ -114,7 +117,7 @@ public sealed class LocalizationParityTests
         foreach (string file in AppSourcePaths.AllCSharpFiles())
         {
             string source = File.ReadAllText(file);
-            foreach (Match match in Regex.Matches(source, @"GetString\(""([^""]+)""\)"))
+            foreach (Match match in Regex.Matches(source, @"(?:GetString|_text)\(""([^""]+)""\)"))
             {
                 string key = match.Groups[1].Value;
                 if (key.Contains('.', StringComparison.Ordinal))
@@ -124,6 +127,38 @@ public sealed class LocalizationParityTests
                 else if (!resources.ContainsKey(key.Replace('/', '.')))
                 {
                     failures.Add($"{Path.GetFileName(file)}: '{key}' is not declared in {BaseCulture}.");
+                }
+            }
+        }
+
+        Assert.Empty(failures);
+    }
+
+    // x:Uid="Foo" makes MRT set properties from entries named "Foo.<Property>". A bare "Foo" entry is
+    // invisible to markup: the control keeps its unset property, renders empty, and still reserves its
+    // layout space — which is exactly how the workspace section pages grew a blank band above their
+    // controls. Nothing throws, so only a structural check can catch it.
+    [Fact]
+    public void Every_markup_uid_has_a_property_entry()
+    {
+        HashSet<string> declaredUids = LoadResources(BaseCulture)
+            .Keys
+            .Where(key => key.IndexOf('.', StringComparison.Ordinal) > 0)
+            .Select(key => key[..key.IndexOf('.', StringComparison.Ordinal)])
+            .ToHashSet(StringComparer.Ordinal);
+
+        var failures = new List<string>();
+        foreach (string file in AppSourcePaths.AllXamlFiles())
+        {
+            string markup = File.ReadAllText(file);
+            foreach (Match match in Regex.Matches(markup, @"x:Uid=""([^""]+)"""))
+            {
+                string uid = match.Groups[1].Value;
+                if (!declaredUids.Contains(uid))
+                {
+                    failures.Add(
+                        $"{Path.GetFileName(file)}: x:Uid='{uid}' has no '{uid}.<Property>' entry in " +
+                        $"{BaseCulture}.");
                 }
             }
         }

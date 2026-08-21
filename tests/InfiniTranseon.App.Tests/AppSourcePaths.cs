@@ -48,6 +48,18 @@ internal static class AppSourcePaths
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
 
+    /// <summary>Every authored C# file under src/. Some invariants span projects: the status log is
+    /// written by both the App and the Core runtime, so its vocabulary cannot be checked from the
+    /// App project alone.</summary>
+    public static IReadOnlyList<string> AllSourceTreeCSharpFiles() =>
+        Directory.GetFiles(
+                Directory.GetParent(ProjectDirectory.Value)!.FullName,
+                "*.cs",
+                SearchOption.AllDirectories)
+            .Where(IsAuthoredSource)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
     /// <summary>Every XAML file shipped by the App project, for repository-wide XAML invariants.</summary>
     public static IReadOnlyList<string> AllXamlFiles() =>
         Directory.GetFiles(ProjectDirectory.Value, "*.xaml", SearchOption.AllDirectories)

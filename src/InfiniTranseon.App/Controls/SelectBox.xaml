@@ -1,0 +1,35 @@
+<UserControl
+    x:Class="InfiniTranseon.App.Controls.SelectBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <StackPanel Spacing="{StaticResource SpaceXS}">
+        <TextBlock
+            x:Name="HeaderText"
+            Style="{StaticResource CaptionTextStyle}"
+            Visibility="Collapsed" />
+        <DropDownButton
+            x:Name="Toggle"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch">
+            <TextBlock x:Name="ValueText" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+            <DropDownButton.Flyout>
+                <Flyout x:Name="OptionsFlyout" Placement="Bottom" Opening="OnOpening">
+                    <Flyout.FlyoutPresenterStyle>
+                        <Style TargetType="FlyoutPresenter">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+                            <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
+                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                        </Style>
+                    </Flyout.FlyoutPresenterStyle>
+                    <ListView
+                        x:Name="OptionList"
+                        MaxHeight="360"
+                        SelectionMode="Single"
+                        SelectionChanged="OnOptionSelected" />
+                </Flyout>
+            </DropDownButton.Flyout>
+        </DropDownButton>
+    </StackPanel>
+</UserControl>

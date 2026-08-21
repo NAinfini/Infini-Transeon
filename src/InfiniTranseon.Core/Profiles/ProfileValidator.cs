@@ -26,7 +26,8 @@ public sealed class ProfileValidator
     public ProfileValidationResult Validate(
         ProfileDocument source,
         RuntimeCapabilities capabilities,
-        IReadOnlySet<string> knownProviderIds)
+        IReadOnlySet<string> knownProviderIds,
+        IReadOnlySet<string>? knownCloudOcrProviderIds = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(capabilities);
@@ -44,7 +45,8 @@ public sealed class ProfileValidator
             Error("profile.context.recentLineCountInvalid", "$.context.recentLineCount");
         }
         if (document.History.Enabled &&
-            (document.History.MaxAgeDays <= 0 || document.History.MaxBytes <= 0))
+            (document.History.MaxAgeDays is < 1 or > 365_000 ||
+             document.History.MaxBytes is < 1024 or > 1_099_511_627_776))
         {
             Error("profile.history.retentionInvalid", "$.history");
         }
@@ -181,6 +183,16 @@ public sealed class ProfileValidator
                     Error("profile.region.intervalInvalid", regionPath + ".recognitionInterval");
                 }
                 RequireText(region.Ocr.ProviderId, "profile.ocr.providerRequired", regionPath + ".ocr.providerId");
+                if (!IsLanguageTag(region.Ocr.RecognitionLanguage))
+                {
+                    Error("profile.ocr.languageInvalid", regionPath + ".ocr.recognitionLanguage");
+                }
+                if (region.Ocr.UseCloudOcr &&
+                    knownCloudOcrProviderIds is not null &&
+                    !knownCloudOcrProviderIds.Contains(region.Ocr.ProviderId))
+                {
+                    Error("profile.ocr.providerUnknown", regionPath + ".ocr.providerId");
+                }
                 if (!double.IsFinite(region.Ocr.DetectionScale) || region.Ocr.DetectionScale is < 0.1 or > 1)
                 {
                     Error("profile.ocr.detectionScaleInvalid", regionPath + ".ocr.detectionScale");
@@ -352,6 +364,29 @@ public sealed class ProfileValidator
         void RequireText(string value, string code, string path)
         {
             if (string.IsNullOrWhiteSpace(value)) Error(code, path);
+        }
+
+        static bool IsLanguageTag(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length > 128 ||
+                value[0] == '-' || value[^1] == '-')
+            {
+                return false;
+            }
+
+            bool previousHyphen = false;
+            foreach (char character in value)
+            {
+                if (character == '-')
+                {
+                    if (previousHyphen) return false;
+                    previousHyphen = true;
+                    continue;
+                }
+                if (!char.IsAsciiLetterOrDigit(character)) return false;
+                previousHyphen = false;
+            }
+            return true;
         }
 
         void Error(string code, string path) =>

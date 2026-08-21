@@ -20,6 +20,13 @@ public enum RuntimeLineBreakMode : byte
     PerBox = 4,
 }
 
+public enum RuntimeOcrBackend : byte
+{
+    Windows = 0,
+    Local = 1,
+    Cloud = 2,
+}
+
 public sealed record RuntimeProcessingRegion
 {
     public RuntimeProcessingRegion(
@@ -30,7 +37,7 @@ public sealed record RuntimeProcessingRegion
         int recognitionIntervalMilliseconds,
         bool lockDegradation,
         bool detectOrientation,
-        bool useCloudOcr,
+        RuntimeOcrBackend ocrBackend,
         long cloudConsentPolicyRevision,
         double detectionScale,
         RuntimeLineBreakMode lineBreakMode,
@@ -40,15 +47,21 @@ public sealed record RuntimeProcessingRegion
     {
         ArgumentNullException.ThrowIfNull(regionId);
         ArgumentNullException.ThrowIfNull(bounds);
-        if (!Enum.IsDefined(priority) || !Enum.IsDefined(areaMode) || !Enum.IsDefined(lineBreakMode))
+        if (!Enum.IsDefined(priority) || !Enum.IsDefined(areaMode) ||
+            !Enum.IsDefined(lineBreakMode) || !Enum.IsDefined(ocrBackend))
             throw new ArgumentOutOfRangeException(nameof(priority));
         if (recognitionIntervalMilliseconds is < 16 or > 3_600_000)
             throw new ArgumentOutOfRangeException(nameof(recognitionIntervalMilliseconds));
         if (!double.IsFinite(detectionScale) || detectionScale is < 0.1 or > 4)
             throw new ArgumentOutOfRangeException(nameof(detectionScale));
         if (cloudConsentPolicyRevision < 0 ||
-            useCloudOcr != (cloudConsentPolicyRevision > 0))
+            (ocrBackend == RuntimeOcrBackend.Cloud) != (cloudConsentPolicyRevision > 0))
             throw new ArgumentOutOfRangeException(nameof(cloudConsentPolicyRevision));
+        if (ocrBackend == RuntimeOcrBackend.Local &&
+            string.Equals(recognitionLanguage, "auto", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                "Local OCR requires an explicit recognition language.",
+                nameof(recognitionLanguage));
         RuntimeProcessingConfigurationPayloadCodec.ValidateConfigurationText(
             ocrProviderId, 128, nameof(ocrProviderId));
         RuntimeProcessingConfigurationPayloadCodec.ValidateConfigurationText(
@@ -63,7 +76,7 @@ public sealed record RuntimeProcessingRegion
         RecognitionIntervalMilliseconds = recognitionIntervalMilliseconds;
         LockDegradation = lockDegradation;
         DetectOrientation = detectOrientation;
-        UseCloudOcr = useCloudOcr;
+        OcrBackend = ocrBackend;
         CloudConsentPolicyRevision = cloudConsentPolicyRevision;
         DetectionScale = detectionScale;
         LineBreakMode = lineBreakMode;
@@ -79,7 +92,8 @@ public sealed record RuntimeProcessingRegion
     public int RecognitionIntervalMilliseconds { get; }
     public bool LockDegradation { get; }
     public bool DetectOrientation { get; }
-    public bool UseCloudOcr { get; }
+    public RuntimeOcrBackend OcrBackend { get; }
+    public bool UseCloudOcr => OcrBackend == RuntimeOcrBackend.Cloud;
     public long CloudConsentPolicyRevision { get; }
     public double DetectionScale { get; }
     public RuntimeLineBreakMode LineBreakMode { get; }
@@ -175,7 +189,7 @@ public sealed record RuntimeProcessingConfigurationAcknowledgement
 
 public static class RuntimeProcessingConfigurationPayloadCodec
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
     public const int FixedPayloadBytes = 72;
     public const int FixedRegionBytes = 80;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
@@ -215,9 +229,10 @@ public static class RuntimeProcessingConfigurationPayloadCodec
             bytes[offset + 48] = (byte)region.Priority;
             bytes[offset + 49] = (byte)region.AreaMode;
             bytes[offset + 50] = region.LockDegradation ? (byte)1 : (byte)0;
-            bytes[offset + 51] = (byte)((region.DetectOrientation ? 1 : 0) | (region.UseCloudOcr ? 2 : 0));
+            bytes[offset + 51] = region.DetectOrientation ? (byte)1 : (byte)0;
             BinaryPrimitives.WriteInt32LittleEndian(bytes[(offset + 52)..], region.RecognitionIntervalMilliseconds);
             bytes[offset + 56] = (byte)region.LineBreakMode;
+            bytes[offset + 57] = (byte)region.OcrBackend;
             BinaryPrimitives.WriteUInt16LittleEndian(bytes[(offset + 58)..], checked((ushort)entry.Provider.Length));
             BinaryPrimitives.WriteUInt16LittleEndian(bytes[(offset + 60)..], checked((ushort)entry.Language.Length));
             BinaryPrimitives.WriteUInt16LittleEndian(bytes[(offset + 62)..], checked((ushort)entry.Pipeline.Length));
@@ -253,7 +268,7 @@ public static class RuntimeProcessingConfigurationPayloadCodec
                 int pipelineBytes = BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 62)..]);
                 int variableBytes = checked(providerBytes + languageBytes + pipelineBytes);
                 Require(payload, offset + FixedRegionBytes, variableBytes);
-                if (payload[offset + 50] > 1 || (payload[offset + 51] & ~3) != 0 || payload[offset + 57] != 0)
+                if (payload[offset + 50] > 1 || payload[offset + 51] > 1)
                     throw new InvalidDataException("Processing region flags are invalid.");
                 int textOffset = offset + FixedRegionBytes;
                 string provider = StrictUtf8.GetString(payload.Slice(textOffset, providerBytes));
@@ -272,8 +287,8 @@ public static class RuntimeProcessingConfigurationPayloadCodec
                     (CaptureAreaKind)payload[offset + 49],
                     BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 52)..]),
                     payload[offset + 50] == 1,
-                    (payload[offset + 51] & 1) != 0,
-                    (payload[offset + 51] & 2) != 0,
+                    payload[offset + 51] == 1,
+                    (RuntimeOcrBackend)payload[offset + 57],
                     BinaryPrimitives.ReadInt64LittleEndian(payload[(offset + 72)..]),
                     BinaryPrimitives.ReadDoubleLittleEndian(payload[(offset + 64)..]),
                     (RuntimeLineBreakMode)payload[offset + 56],

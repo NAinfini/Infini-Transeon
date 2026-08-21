@@ -153,6 +153,9 @@ FORM: Global provider workspace in the approved native Fluent direction.
                                 Minimum="0"
                                 Maximum="100"
                                 Value="{x:Bind ViewModel.ModelOperationPercent, Mode=OneWay}" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.ModelOperationDetail, Mode=OneWay}"
+                                Style="{StaticResource CaptionTextStyle}" />
                         </StackPanel>
                         <Button
                             x:Uid="CancelLocalModelOperationButton"

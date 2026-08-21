@@ -1,4 +1,5 @@
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Core.Ocr;
 using InfiniTranseon.Core.Scheduling;
 using InfiniTranseon.Core.Settings;
@@ -29,6 +30,11 @@ public sealed record EngineRuntimeBackendOptions(
     public PerformanceRuntimeSettings? PerformanceSettings { get; init; }
 
     public bool ReducedMotion { get; init; }
+
+    public Func<IOcrProbe>? LocalOcrProbeFactory { get; init; }
+
+    public Func<string, RuntimeOcrBackend> OcrBackendResolver { get; init; } =
+        _ => RuntimeOcrBackend.Windows;
 }
 
 /// <summary>
@@ -48,101 +54,191 @@ public static class EngineRuntimeBackendAssembler
             memory: options.TranslationMemory,
             corrections: options.Corrections));
 
-        return (session, publisher, cancellationToken) =>
+        return async (session, publisher, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
+            IOcrProbe? localOcrProbe = options.LocalOcrProbeFactory?.Invoke();
+            CloudOcrRouter? cloudOcrRouter = null;
             RuntimePerformanceController? performanceController = null;
-            if (options.PerformanceSettings is { } performanceSettings &&
-                session.MonitoringProcessId > 0 &&
-                RuntimePerformanceFactory.CreatePolicies(
-                    options.ProfileBinding.Profile).Length > 0)
+            PausableRuntimeTranslationPipeline? pipeline = null;
+            RuntimeBackendCoordinator? coordinator = null;
+            try
             {
-                PerformanceThresholds thresholds = performanceSettings.Preset ==
-                    PerformancePreset.Custom
-                    ? performanceSettings.CustomThresholds!
-                    : PerformanceThresholds.ForPreset(performanceSettings.Preset);
-                var performanceSource = new ProcessPerformanceSnapshotSource(
-                    [session.MonitoringProcessId],
-                    checked(thresholds.MaximumWorkingSetBytes * 2));
-                performanceController = RuntimePerformanceFactory.Create(
-                    session,
-                    options.ProfileBinding.Profile,
-                    options.ProfileBinding.ProfileRevision,
-                    performanceSettings,
-                    performanceSource,
-                    (change, _) =>
+                if (options.PerformanceSettings is { } performanceSettings &&
+                    session.MonitoringProcessId > 0 &&
+                    RuntimePerformanceFactory.CreatePolicies(
+                        options.ProfileBinding.Profile).Length > 0)
+                {
+                    PerformanceThresholds thresholds = performanceSettings.Preset ==
+                        PerformancePreset.Custom
+                        ? performanceSettings.CustomThresholds!
+                        : PerformanceThresholds.ForPreset(performanceSettings.Preset);
+                    var performanceSource = new ProcessPerformanceSnapshotSource(
+                        [session.MonitoringProcessId],
+                        checked(thresholds.MaximumWorkingSetBytes * 2));
+                    performanceController = RuntimePerformanceFactory.Create(
+                        session,
+                        options.ProfileBinding.Profile,
+                        options.ProfileBinding.ProfileRevision,
+                        performanceSettings,
+                        performanceSource,
+                        (change, _) =>
+                        {
+                            publisher.PublishDiagnostic(new EngineDiagnostic(
+                                change.CauseCode,
+                                $"{change.Kind}; level {change.BeforeLevel} → {change.AfterLevel}; " +
+                                $"{change.Changes.Count} region change(s)",
+                                change.Kind == DegradationEventKind.Recovered
+                                    ? RuntimeDiagnosticSeverity.Information
+                                    : RuntimeDiagnosticSeverity.Warning,
+                                DateTimeOffset.UtcNow));
+                            return ValueTask.CompletedTask;
+                        },
+                        options.CommandTimeout);
+                }
+                cloudOcrRouter = new CloudOcrRouter(options.CloudOcrProviders);
+                HashSet<TargetInstanceId> boundTargets = options.ProfileBinding.Targets
+                    .Select(target => target.TargetInstanceId)
+                    .ToHashSet();
+                var cloudOcr = new RuntimeCloudOcrDispatcher(
+                    cloudOcrRouter,
+                    new RuntimeEngineHostOcrResultSink(session, options.CommandTimeout),
+                    targetInstanceId => !boundTargets.Contains(targetInstanceId) ||
+                        options.ProfileBinding.Profile.StrictOffline);
+                var localOcr = localOcrProbe is null
+                    ? null
+                    : new RuntimeLocalOcrDispatcher(
+                        localOcrProbe,
+                        new RuntimeEngineHostOcrResultSink(session, options.CommandTimeout));
+                var overlayGate = new VisibilityGatingOverlaySink(
+                    new RuntimeEngineHostOverlaySink(session, options.CommandTimeout));
+                var records = new EngineRuntimeTranslationRecordSink(publisher, options.HistorySink);
+                pipeline = new PausableRuntimeTranslationPipeline(
+                    new RuntimeTranslationPipeline(
+                        orchestrator,
+                        overlayGate,
+                        new OcrTextGenerationGate(options.Stabilizer),
+                        (failure, _) =>
+                        {
+                            publisher.PublishDiagnostic(new EngineDiagnostic(
+                                failure.ErrorCode,
+                                failure.Exception.Message,
+                                RuntimeDiagnosticSeverity.Error,
+                                DateTimeOffset.UtcNow));
+                            return ValueTask.CompletedTask;
+                        },
+                        records,
+                        degradationPolicy: performanceController?.DegradationPolicy),
+                    publisher);
+                coordinator = new RuntimeBackendCoordinator(
+                    session: session,
+                    profiles: [options.ProfileBinding],
+                    pipeline: pipeline,
+                    cloudOcr: cloudOcr.DispatchAsync,
+                    targetLifecycle: (lifecycle, _) =>
                     {
-                        publisher.PublishDiagnostic(new EngineDiagnostic(
-                            change.CauseCode,
-                            $"{change.Kind}; level {change.BeforeLevel} → {change.AfterLevel}; " +
-                            $"{change.Changes.Count} region change(s)",
-                            change.Kind == DegradationEventKind.Recovered
-                                ? RuntimeDiagnosticSeverity.Information
-                                : RuntimeDiagnosticSeverity.Warning,
-                            DateTimeOffset.UtcNow));
+                        publisher.PublishTargetLifecycle(lifecycle);
                         return ValueTask.CompletedTask;
                     },
-                    options.CommandTimeout);
-            }
-            var cloudOcrRouter = new CloudOcrRouter(options.CloudOcrProviders);
-            HashSet<TargetInstanceId> boundTargets = options.ProfileBinding.Targets
-                .Select(target => target.TargetInstanceId)
-                .ToHashSet();
-            var cloudOcr = new RuntimeCloudOcrDispatcher(
-                cloudOcrRouter,
-                new RuntimeEngineHostOcrResultSink(session, options.CommandTimeout),
-                targetInstanceId => !boundTargets.Contains(targetInstanceId) ||
-                    options.ProfileBinding.Profile.StrictOffline);
-            var overlayGate = new VisibilityGatingOverlaySink(
-                new RuntimeEngineHostOverlaySink(session, options.CommandTimeout));
-            var records = new EngineRuntimeTranslationRecordSink(publisher, options.HistorySink);
-            var pipeline = new PausableRuntimeTranslationPipeline(
-                new RuntimeTranslationPipeline(
-                    orchestrator,
+                    commandTimeout: options.CommandTimeout,
+                    performanceControllers: performanceController is null
+                        ? []
+                        : [performanceController],
+                    reducedMotion: options.ReducedMotion,
+                    budgetSnapshot: (snapshot, _) =>
+                    {
+                        publisher.PublishBudget(snapshot);
+                        return ValueTask.CompletedTask;
+                    },
+                    localOcr: localOcr is null ? null : localOcr.DispatchAsync,
+                    ocrBackendResolver: options.OcrBackendResolver);
+                var control = new DefaultEngineRuntimeControl(
+                    pipeline,
                     overlayGate,
-                    new OcrTextGenerationGate(options.Stabilizer),
-                    (failure, _) =>
+                    session,
+                    options.CommandTimeout,
+                    coordinator);
+                return new EngineRuntimeBackendSession(
+                    new ResourceOwningRuntimeBackend(
+                        coordinator,
+                        localOcrProbe is IDisposable disposableProbe
+                            ? new OwnedResources(cloudOcrRouter, disposableProbe)
+                            : cloudOcrRouter),
+                    control);
+            }
+            catch (Exception constructionFailure)
+            {
+                List<Exception>? cleanupFailures = null;
+                if (coordinator is not null)
+                {
+                    try
                     {
-                        publisher.PublishDiagnostic(new EngineDiagnostic(
-                            failure.ErrorCode,
-                            failure.Exception.Message,
-                            RuntimeDiagnosticSeverity.Error,
-                            DateTimeOffset.UtcNow));
-                        return ValueTask.CompletedTask;
-                    },
-                    records,
-                    degradationPolicy: performanceController?.DegradationPolicy),
-                publisher);
-            var coordinator = new RuntimeBackendCoordinator(
-                session: session,
-                profiles: [options.ProfileBinding],
-                pipeline: pipeline,
-                cloudOcr: cloudOcr.DispatchAsync,
-                targetLifecycle: (lifecycle, _) =>
+                        await coordinator.DisposeAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception exception)
+                    {
+                        (cleanupFailures ??= []).Add(exception);
+                    }
+                }
+                else
                 {
-                    publisher.PublishTargetLifecycle(lifecycle);
-                    return ValueTask.CompletedTask;
-                },
-                commandTimeout: options.CommandTimeout,
-                performanceControllers: performanceController is null
-                    ? []
-                    : [performanceController],
-                reducedMotion: options.ReducedMotion,
-                budgetSnapshot: (snapshot, _) =>
+                    if (pipeline is not null)
+                    {
+                        try
+                        {
+                            await pipeline.DisposeAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception exception)
+                        {
+                            (cleanupFailures ??= []).Add(exception);
+                        }
+                    }
+                    if (performanceController is not null)
+                    {
+                        try
+                        {
+                            await performanceController.DisposeAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception exception)
+                        {
+                            (cleanupFailures ??= []).Add(exception);
+                        }
+                    }
+                }
+
+                try
                 {
-                    publisher.PublishBudget(snapshot);
-                    return ValueTask.CompletedTask;
-                });
-            var control = new DefaultEngineRuntimeControl(
-                pipeline,
-                overlayGate,
-                session,
-                options.CommandTimeout,
-                coordinator);
-            return ValueTask.FromResult(new EngineRuntimeBackendSession(
-                new ResourceOwningRuntimeBackend(coordinator, cloudOcrRouter),
-                control));
+                    if (localOcrProbe is IDisposable disposableProbe)
+                    {
+                        if (cloudOcrRouter is null) disposableProbe.Dispose();
+                        else new OwnedResources(cloudOcrRouter, disposableProbe).Dispose();
+                    }
+                    else cloudOcrRouter?.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    (cleanupFailures ??= []).Add(exception);
+                }
+
+                if (cleanupFailures is not null)
+                    throw new AggregateException([constructionFailure, .. cleanupFailures]);
+                throw;
+            }
         };
+    }
+
+    private sealed class OwnedResources(params IDisposable[] resources) : IDisposable
+    {
+        public void Dispose()
+        {
+            List<Exception>? failures = null;
+            for (int index = resources.Length - 1; index >= 0; index--)
+            {
+                try { resources[index].Dispose(); }
+                catch (Exception exception) { (failures ??= []).Add(exception); }
+            }
+            if (failures is not null) throw new AggregateException(failures);
+        }
     }
 
     private sealed class ResourceOwningRuntimeBackend(

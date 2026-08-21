@@ -94,6 +94,44 @@ public sealed class AppUpdateServiceTests
     }
 
     [Fact]
+    public async Task EnablingOfflineModeAfterACompletedCheckBlocksTheApprovedDownload()
+    {
+        byte[] installer = Encoding.UTF8.GetBytes("unused");
+        var core = new StubReleaseUpdateClient(installer);
+        var settings = new StubSettingsService(strictOffline: false);
+        string root = CreateTemporaryDirectory();
+        try
+        {
+            var service = new RealAppUpdateService(
+                core,
+                settings,
+                new StoppedRuntimeControlService(),
+                new AppDataOptions(root),
+                new Version(1, 0, 0));
+
+            await service.CheckAsync(
+                explicitUserAction: true,
+                mainUiVisible: true,
+                TestContext.Current.CancellationToken);
+            Assert.Equal(AppUpdateStatus.Available, service.Snapshot.Status);
+
+            settings.StrictOffline = true;
+            await service.DownloadInstallerAsync(
+                userApproved: true,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(AppUpdateStatus.DisabledByOfflineMode, service.Snapshot.Status);
+            Assert.Equal("update.strictOffline", service.Snapshot.ErrorCode);
+            Assert.Equal(0, core.DownloadCount);
+            Assert.False(Directory.Exists(new AppDataOptions(root).UpdateDownloadDirectory));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task DownloadRequiresBothAnAvailableUpdateAndExplicitApproval()
     {
         byte[] installer = Encoding.UTF8.GetBytes("signed msi fixture");
@@ -140,6 +178,7 @@ public sealed class AppUpdateServiceTests
     private sealed class StubReleaseUpdateClient(byte[] installer) : IReleaseUpdateClient
     {
         public int CheckCount { get; private set; }
+        public int DownloadCount { get; private set; }
 
         public ValueTask<UpdateMetadata?> CheckAsync(
             UpdateCheckContext context,
@@ -175,6 +214,7 @@ public sealed class AppUpdateServiceTests
         {
             if (!userApproved)
                 throw new UpdatePolicyException("update.approvalRequired", "Approval required.");
+            DownloadCount++;
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             await File.WriteAllBytesAsync(destinationPath, installer, cancellationToken);
             return destinationPath;
@@ -183,10 +223,12 @@ public sealed class AppUpdateServiceTests
 
     private sealed class StubSettingsService(bool strictOffline) : ISettingsService
     {
+        public bool StrictOffline { get; set; } = strictOffline;
+
         public Task<ApplicationSettings> GetSettingsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new ApplicationSettings(
                 UiThemePreference.System,
-                strictOffline,
+                StrictOffline,
                 HistoryRetention.Off,
                 "en-US"));
 

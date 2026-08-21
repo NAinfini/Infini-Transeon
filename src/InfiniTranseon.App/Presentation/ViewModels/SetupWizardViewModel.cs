@@ -41,6 +41,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
     private readonly ISecretReferenceService _secrets;
     private readonly IProfileService _profileService;
     private readonly Dictionary<Guid, DesktopRegionState> _desktopRegionStates = [];
+    private readonly Dictionary<Guid, Guid> _profileTargetIdsByCaptureTargetId = [];
     private Guid _editingProfileId;
     private bool _isSynchronizingDesktopRegion;
 
@@ -65,6 +66,8 @@ public sealed partial class SetupWizardViewModel : ObservableObject
         _secrets = secrets;
         _profileService = profileService;
         Regions.CollectionChanged += OnRegionsCollectionChanged;
+        MissingTargets.CollectionChanged += (_, _) =>
+            OnPropertyChanged(nameof(HasMissingTargets));
         BackCommand = new RelayCommand(GoBack, () => CanGoBack);
         NextCommand = new RelayCommand(GoNext, () => CanGoNext);
         SaveCommand = new AsyncRelayCommand(
@@ -208,9 +211,23 @@ public sealed partial class SetupWizardViewModel : ObservableObject
     [ObservableProperty]
     public partial TimeSpan TranslationTestLatency { get; set; }
 
+    /// <summary>
+    /// Raised once <see cref="Targets"/> has been re-probed and the previous choice restored by id.
+    /// A list control that mirrors the selection has to be told, because replacing every row drops
+    /// whatever the control itself had selected.
+    /// </summary>
+    public event EventHandler? TargetsReloaded;
+
     public ObservableCollection<CaptureProbeTarget> Targets { get; } = [];
 
     public ObservableCollection<CaptureProbeTarget> SelectedTargets { get; } = [];
+
+    /// <summary>Saved targets that are not currently capturable. They remain selected until the
+    /// user explicitly rebinds or removes them, so simply opening and saving an existing profile
+    /// can never delete an offline game window.</summary>
+    public ObservableCollection<CaptureProbeTarget> MissingTargets { get; } = [];
+
+    public bool HasMissingTargets => MissingTargets.Count > 0;
 
     public ObservableCollection<ProviderRow> Providers { get; } = [];
 
@@ -369,6 +386,8 @@ public sealed partial class SetupWizardViewModel : ObservableObject
         SourceLanguage = model.SourceLanguage;
         TargetLanguage = model.TargetLanguage;
         _desktopRegionStates.Clear();
+        _profileTargetIdsByCaptureTargetId.Clear();
+        MissingTargets.Clear();
         foreach (ProfileCaptureTargetDraft captureTarget in model.EffectiveCaptureTargets)
         {
             if (captureTarget.DesktopRegion is { } region)
@@ -381,21 +400,57 @@ public sealed partial class SetupWizardViewModel : ObservableObject
                     region.Height);
             }
         }
-        CaptureProbeTarget[] selectedTargets = model.EffectiveCaptureTargets
-            .Select(captureTarget =>
-                Targets.FirstOrDefault(target => target.TargetId.Value == captureTarget.TargetId) ??
-                Targets.FirstOrDefault(target => string.Equals(
-                    target.DisplayName,
+        var selectedTargets = new List<CaptureProbeTarget>();
+        foreach (ProfileCaptureTargetDraft captureTarget in model.EffectiveCaptureTargets)
+        {
+            CaptureProbeTarget? target = Targets.FirstOrDefault(candidate =>
+                    candidate.TargetId.Value == captureTarget.TargetId) ??
+                Targets.FirstOrDefault(candidate => string.Equals(
+                    candidate.DisplayName,
                     captureTarget.Name.Replace(" — fixed area", string.Empty),
-                    StringComparison.OrdinalIgnoreCase)))
-            .Where(target => target is not null)
-            .Cast<CaptureProbeTarget>()
-            .DistinctBy(target => target.TargetId.Value)
-            .ToArray();
+                    StringComparison.OrdinalIgnoreCase));
+            // Two saved targets cannot both bind to one live window. Keep the second one visible as
+            // missing and require an explicit rebind instead of letting DistinctBy erase it.
+            if (target is not null &&
+                _profileTargetIdsByCaptureTargetId.ContainsKey(target.TargetId.Value))
+            {
+                target = null;
+            }
+            if (target is null)
+            {
+                target = new CaptureProbeTarget(
+                    new CaptureTargetId(captureTarget.TargetId),
+                    captureTarget.Name,
+                    string.Equals(
+                        captureTarget.Kind,
+                        "DesktopFixedRegion",
+                        StringComparison.OrdinalIgnoreCase)
+                            ? "Display"
+                            : captureTarget.Kind,
+                    0,
+                    0,
+                    96,
+                    Capturable: false,
+                    ErrorCode: "profile.target.missing");
+                Targets.Add(target);
+                MissingTargets.Add(target);
+            }
+            Guid liveTargetId = target.TargetId.Value;
+            if (liveTargetId != captureTarget.TargetId &&
+                _desktopRegionStates.Remove(
+                    captureTarget.TargetId,
+                    out DesktopRegionState desktopRegionState))
+            {
+                _desktopRegionStates[liveTargetId] = desktopRegionState;
+            }
+            _profileTargetIdsByCaptureTargetId[target.TargetId.Value] = captureTarget.TargetId;
+            selectedTargets.Add(target);
+        }
         SelectedTarget = null;
-        SetSelectedTargets(selectedTargets.Length > 0
-            ? selectedTargets
-            : Targets.Take(1));
+        // A saved target that is no longer on screen leaves the profile with nothing selected. The
+        // step gate then asks for a target, which is the truth; substituting whatever window happens
+        // to be listed first would silently retarget the profile.
+        SetSelectedTargets(selectedTargets);
         SelectedProvider = Providers.FirstOrDefault(provider =>
             Matches(provider, model.TranslationProviderId))
             ?? Providers.FirstOrDefault();
@@ -448,17 +503,90 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             .Where(target => Targets.Contains(target))
             .DistinctBy(target => target.TargetId.Value)
             .ToArray();
+        CaptureProbeTarget? added = selected
+            .Where(target => !SelectedTargets.Contains(target))
+            .LastOrDefault();
         SelectedTargets.Clear();
         foreach (CaptureProbeTarget target in selected)
         {
             SelectedTargets.Add(target);
         }
 
-        if (SelectedTarget is null || !SelectedTargets.Contains(SelectedTarget))
+        // The preview, the region canvas and the OCR test all work on this one. Following the target
+        // just added is what the user means by clicking it: leaving the preview on an earlier pick
+        // showed pixels from a target they were no longer looking at.
+        if (added is not null || SelectedTarget is null || !SelectedTargets.Contains(SelectedTarget))
+        {
+            SelectedTarget = added ?? SelectedTargets.FirstOrDefault();
+        }
+        NotifyTargetSelectionChanged();
+    }
+
+    public IReadOnlyList<CaptureProbeTarget> GetAvailableRebindTargets(
+        CaptureProbeTarget missingTarget)
+    {
+        ArgumentNullException.ThrowIfNull(missingTarget);
+        if (!MissingTargets.Contains(missingTarget)) return [];
+        return Targets.Where(target =>
+                target.Capturable &&
+                !MissingTargets.Contains(target) &&
+                !SelectedTargets.Contains(target) &&
+                !_profileTargetIdsByCaptureTargetId.ContainsKey(target.TargetId.Value))
+            .ToArray();
+    }
+
+    /// <summary>Moves one saved target's stable identity to a live capture target. The persistence
+    /// layer then finds the original target by that identity and preserves every region-level
+    /// setting while changing only the capture binding.</summary>
+    public bool RebindMissingTarget(
+        CaptureProbeTarget missingTarget,
+        CaptureProbeTarget replacement)
+    {
+        ArgumentNullException.ThrowIfNull(missingTarget);
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (!MissingTargets.Contains(missingTarget) ||
+            !replacement.Capturable ||
+            !Targets.Contains(replacement) ||
+            SelectedTargets.Contains(replacement) ||
+            _profileTargetIdsByCaptureTargetId.ContainsKey(replacement.TargetId.Value) ||
+            !_profileTargetIdsByCaptureTargetId.Remove(
+                missingTarget.TargetId.Value,
+                out Guid stableTargetId))
+        {
+            return false;
+        }
+
+        if (_desktopRegionStates.Remove(missingTarget.TargetId.Value, out DesktopRegionState state))
+        {
+            _desktopRegionStates[replacement.TargetId.Value] = state;
+        }
+        int selectedIndex = SelectedTargets.IndexOf(missingTarget);
+        if (selectedIndex >= 0) SelectedTargets.RemoveAt(selectedIndex);
+        SelectedTargets.Insert(
+            Math.Clamp(selectedIndex, 0, SelectedTargets.Count),
+            replacement);
+        MissingTargets.Remove(missingTarget);
+        Targets.Remove(missingTarget);
+        _profileTargetIdsByCaptureTargetId[replacement.TargetId.Value] = stableTargetId;
+        SelectedTarget = replacement;
+        NotifyTargetSelectionChanged();
+        return true;
+    }
+
+    public bool RemoveMissingTarget(CaptureProbeTarget missingTarget)
+    {
+        ArgumentNullException.ThrowIfNull(missingTarget);
+        if (!MissingTargets.Remove(missingTarget)) return false;
+        SelectedTargets.Remove(missingTarget);
+        Targets.Remove(missingTarget);
+        _profileTargetIdsByCaptureTargetId.Remove(missingTarget.TargetId.Value);
+        _desktopRegionStates.Remove(missingTarget.TargetId.Value);
+        if (ReferenceEquals(SelectedTarget, missingTarget))
         {
             SelectedTarget = SelectedTargets.FirstOrDefault();
         }
         NotifyTargetSelectionChanged();
+        return true;
     }
 
     /// <summary>Writes the entered secret straight to the credential store for the selected provider.</summary>
@@ -575,10 +703,18 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             Guid[] selectedTargetIds = SelectedTargets
                 .Select(target => target.TargetId.Value)
                 .ToArray();
+            CaptureProbeTarget[] missingTargets = MissingTargets.ToArray();
             Targets.Clear();
             foreach (CaptureProbeTarget target in probe.Targets)
             {
                 Targets.Add(target);
+            }
+            foreach (CaptureProbeTarget target in missingTargets)
+            {
+                if (Targets.All(candidate => candidate.TargetId.Value != target.TargetId.Value))
+                {
+                    Targets.Add(target);
+                }
             }
 
             IReadOnlyList<ProviderRow> providers =
@@ -594,12 +730,11 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             CaptureProbeTarget[] restoredTargets = Targets
                 .Where(target => selectedTargetIds.Contains(target.TargetId.Value))
                 .ToArray();
-            SetSelectedTargets(restoredTargets.Length > 0
-                ? restoredTargets
-                : Targets.Take(1));
+            SetSelectedTargets(restoredTargets);
             SelectedProvider = Providers.FirstOrDefault(provider =>
                 Matches(provider, selectedProviderId))
                 ?? Providers.FirstOrDefault();
+            TargetsReloaded?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -919,7 +1054,9 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             ? new OverlayPixelRect((int)state.X, (int)state.Y, (int)state.Width, (int)state.Height)
             : null;
         return new ProfileCaptureTargetDraft(
-            target.TargetId.Value,
+            _profileTargetIdsByCaptureTargetId.GetValueOrDefault(
+                target.TargetId.Value,
+                target.TargetId.Value),
             target.DisplayName,
             region is null ? NormalizeTargetKind(target.Kind) : "DesktopFixedRegion",
             $"{target.PixelWidth}×{target.PixelHeight} · {target.Dpi}dpi",

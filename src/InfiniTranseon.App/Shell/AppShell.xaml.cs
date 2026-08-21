@@ -1,5 +1,6 @@
 using InfiniTranseon.App.Presentation;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -21,9 +22,8 @@ public sealed partial class AppShell : Window
     private const double DefaultWindowHeightEpx = 800;
     private const double MinimumWindowWidthEpx = 960;
     private const double MinimumWindowHeightEpx = 600;
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private readonly IAppUpdateService _updateService;
     private readonly IRuntimeControlService _runtime;
     private readonly AppNavigationState _navigation;
@@ -84,6 +84,41 @@ public sealed partial class AppShell : Window
         Closed += OnClosed;
         RefreshUpdateNotice();
         RefreshRuntimeStatus();
+    }
+
+    /// <summary>
+    /// The route on screen right now, so a replacement shell can resume it instead of dropping the
+    /// user back on the home page.
+    /// </summary>
+    internal AppNavigationRequest DescribeCurrentRoute()
+    {
+        string tag = (Nav.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
+        if (_currentProfileId != Guid.Empty && WorkspaceSectionFor(tag) is WorkspaceSection section)
+        {
+            return new AppNavigationRequest(null, _currentProfileId, section);
+        }
+
+        return new AppNavigationRequest(
+            tag switch
+            {
+                "activity" => GlobalDestination.Activity,
+                "providers" => GlobalDestination.Providers,
+                "settings" => GlobalDestination.Settings,
+                _ => GlobalDestination.Home,
+            },
+            Guid.Empty,
+            null);
+    }
+
+    /// <summary>
+    /// Closes this window for real, rather than hiding it to the notification area the way an
+    /// ordinary close does. Used only when <see cref="App.ReloadShellForLanguageChangeAsync"/> swaps in a
+    /// shell built against the new language; the application state behind it is left running.
+    /// </summary>
+    internal void CloseForShellReplacement()
+    {
+        _allowExit = true;
+        Close();
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
@@ -174,9 +209,9 @@ public sealed partial class AppShell : Window
                 "app.closeToTray.failed",
                 "status.app.closeToTray.failed",
                 StatusEventSeverity.Error,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["error"] = exception.Message,
+                    ["failureType"] = StatusArgument.Id(exception.GetType().Name),
                 }));
         }
         finally
@@ -211,8 +246,7 @@ public sealed partial class AppShell : Window
             App.RecordActivationEvent(
                 "app.activation.rejected",
                 StatusEventSeverity.Error,
-                activation.ErrorCode ?? "activation.unknown",
-                activation.ErrorDetail ?? string.Empty);
+                activation.ErrorCode ?? "activation.unknown");
             return;
         }
 
@@ -232,7 +266,7 @@ public sealed partial class AppShell : Window
                 "app.activation.startFailed",
                 StatusEventSeverity.Error,
                 "activation.start.failed",
-                exception.Message);
+                exception.GetType().Name);
         }
     }
 
@@ -325,10 +359,15 @@ public sealed partial class AppShell : Window
         RuntimeStatusText.Text = target is null
             ? status
             : $"{target.ProfileName} · {status}";
+        AutomationProperties.SetName(RuntimeStatusPill, RuntimeStatusText.Text);
+        // The label follows the fill too: left on body-text colour it sat unreadably dark on the
+        // accent pill, while the glyph beside it had already switched.
         RuntimeStatusPill.Background = (Brush)Application.Current.Resources[
             active ? "AccentDefault" : "SurfaceSunken"];
         RuntimeStatusGlyph.Foreground = (Brush)Application.Current.Resources[
-            active ? "AccentText" : "TextFillColorTertiaryBrush"];
+            active ? "AccentDefaultText" : "TextFillColorTertiaryBrush"];
+        RuntimeStatusText.Foreground = (Brush)Application.Current.Resources[
+            active ? "AccentDefaultText" : "TextFillColorPrimaryBrush"];
         RuntimeStatusGlyph.Glyph = _runtime.Status switch
         {
             EngineRuntimeStatus.Running when _runtime.IsPaused => "",
@@ -422,6 +461,26 @@ public sealed partial class AppShell : Window
                 return;
             }
 
+            if (request.IsProfileSetup)
+            {
+                _currentProfileId = Guid.Empty;
+                SetWorkspaceNavigation(false);
+                _suppressNavigationSelection = true;
+                try
+                {
+                    Nav.SelectedItem = null;
+                }
+                finally
+                {
+                    _suppressNavigationSelection = false;
+                }
+                ContentFrame.Navigate(
+                    typeof(Features.SetupWizard.SetupWizardPage),
+                    request.ProfileId,
+                    new EntranceNavigationTransitionInfo());
+                return;
+            }
+
             if (request.IsWorkspace)
             {
                 _currentProfileId = request.ProfileId;
@@ -474,9 +533,10 @@ public sealed partial class AppShell : Window
             }
         });
 
-    // NavigationView owns the back affordance: enabling the button also enables its built-in Alt+Left
-    // and mouse back-button gestures, so the shell only has to keep IsBackEnabled in sync and restore
-    // the pane selection for the entry the frame returned to.
+    // The back button is collapsed: every destination is one click away in the pane, so a header
+    // button that spends most of its life greyed out only takes space from the page. NavigationView
+    // still routes Alt+Left and the mouse back button here while IsBackEnabled is true, so the shell
+    // keeps that flag in sync and restores the pane selection for the entry the frame returned to.
     private void OnNavBackRequested(NavigationView sender, NavigationViewBackRequestedEventArgs args)
     {
         if (ContentFrame.CanGoBack)

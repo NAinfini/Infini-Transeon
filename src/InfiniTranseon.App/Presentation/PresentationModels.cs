@@ -1,4 +1,4 @@
-using InfiniTranseon.App.Controls;
+﻿using InfiniTranseon.App.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Profiles;
@@ -12,6 +12,24 @@ namespace InfiniTranseon.App.Presentation;
 // WinUI x:Bind XAML compiler emits get+set accessors in XamlTypeInfo for every bound member of an
 // x:DataType; init-only setters fail CS8852 there. Positional construction, `with`, and record value
 // equality are all preserved by initializing each settable property from its positional parameter.
+/// <summary>
+/// Whether the profile's capture target is something this machine is showing right now. Stored
+/// configuration cannot answer this on its own: a window title recorded last week names nothing until
+/// that game is running again. The badge on the card and the readiness checklist in the workspace are
+/// both this one fact, so neither infers it from the other's wording.
+/// </summary>
+public enum ProfileTargetMatchState
+{
+    /// <summary>The profile has no capture target yet.</summary>
+    NotConfigured,
+
+    /// <summary>Every capture target the profile names was found.</summary>
+    Matched,
+
+    /// <summary>At least one capture target names something this machine is not showing.</summary>
+    Missing,
+}
+
 public sealed record ProfileCard(
     Guid ProfileId,
     string Name,
@@ -20,10 +38,17 @@ public sealed record ProfileCard(
     string Languages,
     int RegionCount,
     int ChannelCount,
+    ProfileTargetMatchState MatchState,
     string MatchStateText,
     StatusSeverity MatchSeverity,
     string PrimaryAction,
-    bool IsPinned = false)
+    bool IsPinned = false,
+    // Identity of the live target the card's first profile target currently resolves to, so the
+    // card can show a frame of it. Zero while nothing on this machine matches, which is the same
+    // condition MatchState reports as Missing.
+    Guid TargetProbeId = default,
+    ulong TargetNativeHandle = 0,
+    string TargetProbeKind = "")
 {
     public Guid ProfileId { get; set; } = ProfileId;
     public string Name { get; set; } = Name;
@@ -32,10 +57,14 @@ public sealed record ProfileCard(
     public string Languages { get; set; } = Languages;
     public int RegionCount { get; set; } = RegionCount;
     public int ChannelCount { get; set; } = ChannelCount;
+    public ProfileTargetMatchState MatchState { get; set; } = MatchState;
     public string MatchStateText { get; set; } = MatchStateText;
     public StatusSeverity MatchSeverity { get; set; } = MatchSeverity;
     public string PrimaryAction { get; set; } = PrimaryAction;
     public bool IsPinned { get; set; } = IsPinned;
+    public Guid TargetProbeId { get; set; } = TargetProbeId;
+    public ulong TargetNativeHandle { get; set; } = TargetNativeHandle;
+    public string TargetProbeKind { get; set; } = TargetProbeKind;
 }
 
 public sealed record HomeActivityItem(
@@ -260,6 +289,12 @@ public sealed record RunningTarget(
     string LatencyP95,
     string ActiveRegions);
 
+public sealed record ProfileHistoryConfiguration(
+    Guid ProfileId,
+    bool Enabled,
+    int MaxAgeDays,
+    long MaxBytes);
+
 public sealed record HistoryEvent(
     string Timestamp,
     string SourceText,
@@ -318,6 +353,7 @@ public sealed record ProviderRow(
     public string Id { get; set; } = Name;
     public bool IsSelectable { get; set; } = true;
     public bool IsTranslationProvider { get; set; } = true;
+    public bool IsOcrProvider { get; set; }
     public bool IsCustom { get; set; }
     public bool IsLocalModel { get; set; }
     public bool CanDownloadModel { get; set; }
@@ -399,21 +435,19 @@ public sealed partial class HotkeyEditorRow : ObservableObject
         new(Action, Gesture, Enabled, Scope, SpecificTargets));
 }
 
+/// <summary>
+/// One persisted status-log entry, still in the log's own machine vocabulary. Localization is the
+/// page's job because the resource loader follows the user's language, and the log does not: pre-
+/// rendering prose here would freeze an event into whatever language was active when it was read.
+/// <see cref="StatusEventPresenter"/> turns <see cref="Category"/> and <see cref="MessageKey"/> into
+/// resource keys; <see cref="ErrorCode"/> stays verbatim as the diagnosable detail.
+/// </summary>
 public sealed record DiagnosticEvent(
-    string Timestamp,
-    string Scope,
-    string Title,
-    string CurrentBehavior,
-    string RecoveryAction,
-    StatusSeverity Severity)
-{
-    public string Timestamp { get; set; } = Timestamp;
-    public string Scope { get; set; } = Scope;
-    public string Title { get; set; } = Title;
-    public string CurrentBehavior { get; set; } = CurrentBehavior;
-    public string RecoveryAction { get; set; } = RecoveryAction;
-    public StatusSeverity Severity { get; set; } = Severity;
-}
+    DateTimeOffset OccurredAtUtc,
+    string Category,
+    string ErrorCode,
+    string MessageKey,
+    StatusSeverity Severity);
 
 public sealed record GlossaryEntry(
     string SourceTerm,

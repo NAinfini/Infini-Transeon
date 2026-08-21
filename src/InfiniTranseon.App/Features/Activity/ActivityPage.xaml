@@ -42,21 +42,26 @@ FORM: Global activity workspace in the approved native Fluent direction.
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="220" />
                             </Grid.ColumnDefinitions>
+                            <!-- Bottom-aligned rather than stretched: the filter beside it carries a
+                                 header, so the row is taller than a text box, and a stretched search
+                                 box grew to match it and read as a mis-sized control. -->
                             <AutoSuggestBox
                                 x:Name="ActivitySearchBox"
                                 x:Uid="ActivitySearchBox"
+                                VerticalAlignment="Bottom"
                                 QueryIcon="Find"
                                 TextChanged="OnFilterChanged" />
-                            <ComboBox
+                            <controls:SelectBox
                                 x:Name="ActivityKindFilter"
                                 x:Uid="ActivityKindFilter"
                                 Grid.Column="1"
+                                SelectedIndex="0"
                                 SelectionChanged="OnKindFilterChanged">
-                                <ComboBoxItem x:Uid="ActivityKindAll" Tag="all" />
-                                <ComboBoxItem x:Uid="ActivityKindOcr" Tag="ocr" />
-                                <ComboBoxItem x:Uid="ActivityKindTranslation" Tag="translation" />
-                                <ComboBoxItem x:Uid="ActivityKindDiagnostic" Tag="diagnostic" />
-                            </ComboBox>
+                                <ListViewItem x:Uid="ActivityKindAll" Tag="all" />
+                                <ListViewItem x:Uid="ActivityKindOcr" Tag="ocr" />
+                                <ListViewItem x:Uid="ActivityKindTranslation" Tag="translation" />
+                                <ListViewItem x:Uid="ActivityKindDiagnostic" Tag="diagnostic" />
+                            </controls:SelectBox>
                         </Grid>
 
                         <controls:EmptyState
@@ -73,14 +78,20 @@ FORM: Global activity workspace in the approved native Fluent direction.
                                     <Border Style="{StaticResource CardBorderStyle}">
                                         <Grid ColumnSpacing="{StaticResource SpaceL}">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="112" />
+                                                <!-- Sized to the timestamp rather than to a fixed
+                                                     width: a short date is four characters in one
+                                                     locale and eighteen in another, and 112px cut
+                                                     "2026/8/17 9:47" in half. The bound keeps a long
+                                                     scope name from starving the message column. -->
+                                                <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="{StaticResource SpaceXS}">
+                                            <StackPanel MaxWidth="200" Spacing="{StaticResource SpaceXS}">
                                                 <TextBlock
                                                     Text="{x:Bind Time}"
-                                                    Style="{StaticResource MetricTextStyle}" />
+                                                    Style="{StaticResource MetricTextStyle}"
+                                                    TextWrapping="NoWrap" />
                                                 <TextBlock
                                                     Text="{x:Bind Scope}"
                                                     Style="{StaticResource CaptionTextStyle}"
@@ -97,11 +108,20 @@ FORM: Global activity workspace in the approved native Fluent direction.
                                                     Style="{StaticResource CaptionTextStyle}"
                                                     TextWrapping="Wrap" />
                                             </StackPanel>
-                                            <controls:StatusBadge
+                                            <StackPanel
                                                 Grid.Column="2"
-                                                Text="{x:Bind KindLabel}"
-                                                Severity="{x:Bind Severity}"
-                                                VerticalAlignment="Top" />
+                                                Spacing="{StaticResource SpaceXS}"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top">
+                                                <controls:StatusBadge
+                                                    Text="{x:Bind KindLabel}"
+                                                    Severity="{x:Bind Severity}" />
+                                                <TextBlock
+                                                    Text="{x:Bind RepeatText}"
+                                                    Visibility="{x:Bind RepeatVisibility}"
+                                                    Style="{StaticResource CaptionTextStyle}"
+                                                    HorizontalAlignment="Right" />
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

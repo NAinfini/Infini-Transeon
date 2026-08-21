@@ -72,7 +72,13 @@
     <StaticResource x:Key="SurfaceSunken" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
     <StaticResource x:Key="SurfaceStroke" ResourceKey="CardStrokeColorDefaultBrush" />
     <StaticResource x:Key="AccentDefault" ResourceKey="AccentFillColorDefaultBrush" />
+    <!--
+        Two different jobs, so two tokens: AccentText tints content that sits on an ordinary
+        surface, while AccentDefaultText is the foreground for content drawn on top of the
+        AccentDefault fill. Using the tint on an accent fill leaves the content unreadable.
+    -->
     <StaticResource x:Key="AccentText" ResourceKey="AccentTextFillColorPrimaryBrush" />
+    <StaticResource x:Key="AccentDefaultText" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">

@@ -60,6 +60,10 @@
   <data name="InstallLocalModelConfirm" xml:space="preserve"><value>Download and install</value></data>
   <data name="InstallLocalModelCancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="LocalModelInstalledTitle" xml:space="preserve"><value>Model package installed</value></data>
+  <data name="LocalModelInstallFailedTitle" xml:space="preserve"><value>Model package could not be installed</value></data>
+  <!-- {0} model name, {1} download size. Offered in the translator dropdown so an offline translator
+       is discoverable from the channel that would use it, not only from the settings page. -->
+  <data name="ChannelsInstallableProviderOption" xml:space="preserve"><value>{0} (offline, download {1})</value></data>
   <data name="RemoveLocalModelTitle" xml:space="preserve"><value>Remove local model?</value></data>
   <data name="RemoveLocalModelBody" xml:space="preserve"><value>Remove {0} from {1}? The package files will be deleted from application-managed storage.</value></data>
   <data name="RemoveLocalModelConfirm" xml:space="preserve"><value>Remove</value></data>
@@ -135,17 +139,38 @@
   <data name="WorkbenchZoomFitButton.Label" xml:space="preserve"><value>Fit preview</value></data>
   <data name="WorkbenchRegionEnabledToggle.Header" xml:space="preserve"><value>Region enabled</value></data>
   <data name="WorkbenchContextRoleBox.Header" xml:space="preserve"><value>Context role</value></data>
-  <data name="WorkbenchPriorityHint.Text" xml:space="preserve"><value>P0 updates immediately; P1–P3 allow progressively slower scheduling when the system is busy. Lock degradation if this region must never slow down.</value></data>
+  <data name="RegionPriorityHighest.Content" xml:space="preserve">
+    <value>Highest — never slowed down</value>
+  </data>
+  <data name="RegionPriorityHigh.Content" xml:space="preserve">
+    <value>High — never slowed down</value>
+  </data>
+  <data name="RegionPriorityNormal.Content" xml:space="preserve">
+    <value>Normal — may update less often when busy</value>
+  </data>
+  <data name="RegionPriorityLow.Content" xml:space="preserve">
+    <value>Low — may update less often when busy</value>
+  </data>
+  <data name="WorkbenchPriorityHint.Text" xml:space="preserve"><value>When the machine is under load, only Normal and Low regions update less often. Highest and High keep their configured interval.</value></data>
+  <!-- Badge vocabulary for the region list: the selector above spells out the consequence because
+       that is where the user chooses; the list column only has to identify the level. -->
+  <data name="RegionPriorityBadgeHighest" xml:space="preserve"><value>Highest</value></data>
+  <data name="RegionPriorityBadgeHigh" xml:space="preserve"><value>High</value></data>
+  <data name="RegionPriorityBadgeNormal" xml:space="preserve"><value>Normal</value></data>
+  <data name="RegionPriorityBadgeLow" xml:space="preserve"><value>Low</value></data>
   <data name="WorkbenchRoleNone.Content" xml:space="preserve"><value>No context role</value></data>
   <data name="WorkbenchRoleSpeaker.Content" xml:space="preserve"><value>Speaker name</value></data>
   <data name="WorkbenchRoleScene.Content" xml:space="preserve"><value>Scene or location</value></data>
   <data name="WorkbenchRoleDialogue.Content" xml:space="preserve"><value>Dialogue</value></data>
   <data name="WorkbenchContextRoleHint.Text" xml:space="preserve"><value>Speaker and scene regions provide context to other translation regions; dialogue is translated as the main line.</value></data>
   <data name="WorkbenchOcrProviderBox.Header" xml:space="preserve"><value>OCR provider</value></data>
+  <data name="WorkbenchOcrProviderBox.PlaceholderText" xml:space="preserve"><value>Search configured cloud OCR services</value></data>
+  <data name="WorkbenchOcrCatalogErrorTitle" xml:space="preserve"><value>OCR services could not be loaded</value></data>
   <data name="WorkbenchRecognitionLanguageBox.Header" xml:space="preserve"><value>Recognition language</value></data>
+  <data name="WorkbenchRecognitionLanguageBox.PlaceholderText" xml:space="preserve"><value>Search languages</value></data>
   <data name="WorkbenchDetectOrientationToggle.Header" xml:space="preserve"><value>Detect text orientation</value></data>
   <data name="WorkbenchCloudOcrToggle.Header" xml:space="preserve"><value>Use cloud OCR for this region</value></data>
-  <data name="WorkbenchTranslationEnabledToggle.Header" xml:space="preserve"><value>Translate recognized text</value></data>
+  <data name="WorkbenchTranslationEnabledToggle.Header" xml:space="preserve"><value>Translate this region</value></data>
   <data name="WorkbenchLineBreakModeBox.Header" xml:space="preserve"><value>Line-break policy</value></data>
   <data name="LineBreakPreserve.Content" xml:space="preserve"><value>Preserve detected lines</value></data>
   <data name="LineBreakJoin.Content" xml:space="preserve"><value>Join as one paragraph</value></data>
@@ -217,7 +242,7 @@
   <data name="ChannelsEmptyNoRegionTitle" xml:space="preserve"><value>No region selected</value></data>
   <data name="ChannelsEmptyNoRegionBody" xml:space="preserve"><value>Choose a target and a region above to edit its translation channels.</value></data>
   <data name="ChannelsEmptyDisabledTitle" xml:space="preserve"><value>Translation is off for this region</value></data>
-  <data name="ChannelsEmptyDisabledBody" xml:space="preserve"><value>Turn on "Translate recognized text" to configure translation channels.</value></data>
+  <data name="ChannelsEmptyDisabledBody" xml:space="preserve"><value>Turn on "Translate this region" above to configure translation channels.</value></data>
   <data name="ChannelsEmptyNoChannelsTitle" xml:space="preserve"><value>No translation channels yet</value></data>
   <data name="ChannelsEmptyNoChannelsBody" xml:space="preserve"><value>Add a channel to translate this region with a provider and optional refiners.</value></data>
   <data name="ChannelsProviderUnavailableBadge" xml:space="preserve"><value>Provider unavailable — choose another to continue</value></data>
@@ -266,13 +291,11 @@
   <data name="ThemeDark.Content" xml:space="preserve"><value>Dark</value></data>
   <data name="LanguageSettingLabel.Text" xml:space="preserve"><value>Display language</value></data>
   <data name="LanguageSettingHint.Text" xml:space="preserve"><value>Number and date formats follow the system by default</value></data>
-  <data name="LanguageRestartBar.Title" xml:space="preserve"><value>Display language changed</value></data>
-  <data name="LanguageRestartBar.Message" xml:space="preserve"><value>Pages that are already open keep the previous language. Restart the app to apply it everywhere.</value></data>
   <data name="PrivacyHeader.Text" xml:space="preserve"><value>Privacy &amp; history</value></data>
   <data name="OfflineModeLabel.Text" xml:space="preserve"><value>Strict offline mode</value></data>
   <data name="OfflineModeHint.Text" xml:space="preserve"><value>Disables cloud providers, model downloads, and update checks; only local OCR and local models keep working.</value></data>
   <data name="HistoryRetentionLabel.Text" xml:space="preserve"><value>History retention</value></data>
-  <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>Text-only history, separate opt-in per profile</value></data>
+  <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>Global text-history limit; every profile must opt in separately</value></data>
   <data name="HistoryOff.Content" xml:space="preserve"><value>Off</value></data>
   <data name="History30Days.Content" xml:space="preserve"><value>30 days</value></data>
   <data name="History90Days.Content" xml:space="preserve"><value>90 days</value></data>
@@ -310,12 +333,29 @@
 
   <data name="SetupWizardTitle.Text" xml:space="preserve"><value>New profile</value></data>
   <data name="SetupWizardSubtitle.Text" xml:space="preserve"><value>Four guided steps — capture targets, languages and services, regions, then test and save.</value></data>
+  <data name="SetupEditTitle" xml:space="preserve"><value>Manage profile</value></data>
+  <data name="SetupEditSubtitle" xml:space="preserve"><value>Add, remove, or rebind capture targets without losing their region settings.</value></data>
   <data name="SetupStep1Caption.Text" xml:space="preserve"><value>Capture targets</value></data>
   <data name="SetupStep2Caption.Text" xml:space="preserve"><value>Languages &amp; services</value></data>
   <data name="SetupStep3Caption.Text" xml:space="preserve"><value>Regions</value></data>
   <data name="SetupStep4Caption.Text" xml:space="preserve"><value>Test &amp; save</value></data>
   <data name="SetupStep1Heading.Text" xml:space="preserve"><value>Choose capture targets</value></data>
-  <data name="SetupStep1Body.Text" xml:space="preserve"><value>Pick the windows, displays, or desktop regions to translate. Each target keeps its real resolution and scaling; a ninth target stays in the draft as disabled with a reason.</value></data>
+  <data name="SetupStep1Body.Text" xml:space="preserve"><value>Check windows, displays, or desktop regions to add them; uncheck one to remove it. Each target keeps its real resolution and scaling.</value></data>
+  <data name="SetupMissingTargetsBar.Title" xml:space="preserve"><value>One or more saved targets are offline</value></data>
+  <data name="SetupMissingTargetsBar.Message" xml:space="preserve"><value>They remain in this profile. Rebind each one to a live window or explicitly remove it before saving.</value></data>
+  <data name="SetupMissingTargetSelector.Header" xml:space="preserve"><value>Saved target</value></data>
+  <data name="SetupRebindTargetButton.Content" xml:space="preserve"><value>Rebind</value></data>
+  <data name="SetupRemoveTargetButton.Content" xml:space="preserve"><value>Remove</value></data>
+  <data name="SetupRebindNoTargetTitle" xml:space="preserve"><value>No available capture target</value></data>
+  <data name="SetupRebindNoTargetMessage" xml:space="preserve"><value>Open the game window or connect the display, then reopen target management.</value></data>
+  <data name="SetupRebindTargetSelectorHeader" xml:space="preserve"><value>New capture target</value></data>
+  <data name="SetupRebindTargetTitle" xml:space="preserve"><value>Rebind “{0}”</value></data>
+  <data name="SetupRebindTargetConfirm" xml:space="preserve"><value>Rebind</value></data>
+  <data name="SetupRebindTargetCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="SetupRemoveTargetTitle" xml:space="preserve"><value>Remove saved target?</value></data>
+  <data name="SetupRemoveTargetMessage" xml:space="preserve"><value>“{0}” and its region settings will be removed from this profile when you save.</value></data>
+  <data name="SetupRemoveTargetConfirm" xml:space="preserve"><value>Remove</value></data>
+  <data name="SetupRemoveTargetCancel" xml:space="preserve"><value>Keep target</value></data>
   <data name="SetupStep2Heading.Text" xml:space="preserve"><value>Languages &amp; services</value></data>
   <data name="SetupStep3Heading.Text" xml:space="preserve"><value>Regions</value></data>
   <data name="SetupStep4Heading.Text" xml:space="preserve"><value>Test &amp; save</value></data>
@@ -340,6 +380,19 @@
   <data name="HistoryEmptyBody.Text" xml:space="preserve"><value>Translated events for the active profile will appear here once capture runs.</value></data>
   <data name="HistoryDisabledBar.Title" xml:space="preserve"><value>History is off</value></data>
   <data name="HistoryDisabledBar.Message" xml:space="preserve"><value>History retention is set to Off, so no translation events are being recorded. Enable it in Settings to keep a text-only history.</value></data>
+  <data name="ProfileHistoryDisabledBar.Title" xml:space="preserve"><value>History is off for this profile</value></data>
+  <data name="ProfileHistoryDisabledBar.Message" xml:space="preserve"><value>This profile will not record source text or translations until you enable it below. Existing records are kept.</value></data>
+  <data name="ProfileHistorySettingsTitle.Text" xml:space="preserve"><value>History for this profile</value></data>
+  <data name="ProfileHistorySettingsHint.Text" xml:space="preserve"><value>Store recognized source text and translations only; screenshots are never included. The global retention setting remains the upper limit.</value></data>
+  <data name="ProfileHistoryEnabledToggle.OnContent" xml:space="preserve"><value>On</value></data>
+  <data name="ProfileHistoryEnabledToggle.OffContent" xml:space="preserve"><value>Off</value></data>
+  <data name="ProfileHistoryEnabledToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Save history for this profile</value></data>
+  <data name="HistoryAgeDaysBox.Header" xml:space="preserve"><value>Retention (days)</value></data>
+  <data name="HistoryAgeDaysBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Profile history retention in days</value></data>
+  <data name="HistoryMaximumMegabytesBox.Header" xml:space="preserve"><value>Maximum storage (MB)</value></data>
+  <data name="HistoryMaximumMegabytesBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Profile history maximum storage in megabytes</value></data>
+  <data name="SaveProfileHistoryButton.Content" xml:space="preserve"><value>Save history settings</value></data>
+  <data name="SaveProfileHistoryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Save profile history settings</value></data>
 
 
   <data name="GlossaryNoProfileTitle.Text" xml:space="preserve"><value>No profile selected</value></data>
@@ -495,7 +548,7 @@
   <data name="PerformanceBalanced.Content" xml:space="preserve"><value>Balanced</value></data>
   <data name="PerformanceHigh.Content" xml:space="preserve"><value>Performance</value></data>
   <data name="OcrBackendLabel.Text" xml:space="preserve"><value>Text recognition engine</value></data>
-  <data name="OcrBackendHint.Text" xml:space="preserve"><value>Automatic uses the Windows recognizer for the languages this PC can already read, and the downloaded models for the rest. The downloaded models are fetched and kept up to date on their own; offline mode stops that.</value></data>
+  <data name="OcrBackendHint.Text" xml:space="preserve"><value>Automatic uses the Windows recognizer for languages this PC can already read, and only OCR models you explicitly install for the rest. Every model download and update requires your confirmation.</value></data>
   <data name="OcrBackendAutomatic.Content" xml:space="preserve"><value>Automatic</value></data>
   <data name="OcrBackendWindows.Content" xml:space="preserve"><value>Windows</value></data>
   <data name="OcrBackendLocal.Content" xml:space="preserve"><value>Downloaded models</value></data>
@@ -542,7 +595,7 @@
   <data name="WorkspaceStartButton.Content" xml:space="preserve"><value>Start</value></data>
   <data name="WorkspaceReadinessHeader.Text" xml:space="preserve"><value>Readiness</value></data>
   <data name="WorkspaceTargetsHeader.Text" xml:space="preserve"><value>Capture targets</value></data>
-  <data name="WorkspaceEditCaptureButton.Content" xml:space="preserve"><value>Edit capture</value></data>
+  <data name="WorkspaceEditCaptureButton.Content" xml:space="preserve"><value>Manage targets</value></data>
   <data name="WorkspaceProfileMissing" xml:space="preserve"><value>This profile no longer exists. Return Home and choose another profile.</value></data>
   <data name="WorkspaceOverviewSubtitle" xml:space="preserve"><value>Review readiness, capture targets, and runtime controls before playing.</value></data>
   <data name="WorkspaceTargetReady" xml:space="preserve"><value>Capture target: {0}</value></data>
@@ -554,6 +607,24 @@
   <data name="HomeStartUnavailable" xml:space="preserve"><value>The engine cannot start this profile right now: {0}</value></data>
   <data name="HomePinUnavailable" xml:space="preserve"><value>Settings could not be loaded, so pinning cannot be saved.</value></data>
   <data name="HomeProfileFileType" xml:space="preserve"><value>Infini-Transeon profile</value></data>
+  <!-- Profile card vocabulary. RealProfileService resolves these while building a card, so a card
+       carries finished text and the pages that show one stay free of formatting rules.
+       {0} target name, {1} target kind, {2} how many further targets the profile also captures. -->
+  <data name="ProfileTargetDescription" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="ProfileTargetDescriptionMore" xml:space="preserve"><value>{0} ({1}) +{2}</value></data>
+  <data name="ProfileTargetNone" xml:space="preserve"><value>No capture target</value></data>
+  <data name="ProfileTargetKindWindow" xml:space="preserve"><value>window</value></data>
+  <data name="ProfileTargetKindDisplay" xml:space="preserve"><value>display</value></data>
+  <data name="ProfileTargetKindDesktopRegion" xml:space="preserve"><value>screen area</value></data>
+  <data name="ProfileLanguagePair" xml:space="preserve"><value>{0} → {1}</value></data>
+  <data name="ProfileMatchStateMatched" xml:space="preserve"><value>Target found</value></data>
+  <data name="ProfileMatchStateMissing" xml:space="preserve"><value>Target not running</value></data>
+  <data name="ProfileMatchStateNotConfigured" xml:space="preserve"><value>No target set</value></data>
+  <data name="ProfileActionStart" xml:space="preserve"><value>Start</value></data>
+  <!-- Not prose: the BCP-47 tag of the language this table is written in. LanguageCatalog holds the
+       language names in both languages and must be told which set to use; the resource table in
+       effect is the only thing that always agrees with the words around the name on screen. -->
+  <data name="UiLanguageTag" xml:space="preserve"><value>en-US</value></data>
   <data name="HomeExportProfileMenuItem.Text" xml:space="preserve"><value>Export…</value></data>
   <data name="HomeDeleteProfileMenuItem.Text" xml:space="preserve"><value>Delete…</value></data>
   <data name="HomeDeleteProfileTitle" xml:space="preserve"><value>Delete this profile?</value></data>
@@ -593,7 +664,12 @@
   <data name="WorkspaceCredentialsReady" xml:space="preserve"><value>Credentials ready: {0}</value></data>
   <data name="WorkspaceCredentialsNotReady" xml:space="preserve"><value>No credential stored for {0} — open Providers and enter the key</value></data>
   <data name="WorkspaceCredentialsNoProvider" xml:space="preserve"><value>No translator is assigned to any channel yet</value></data>
-  <data name="WorkspaceStartBlocked" xml:space="preserve"><value>Complete the readiness checklist before starting.</value></data>
+  <data name="WorkspaceStartBlocked" xml:space="preserve"><value>Not ready yet — still needed: {0}</value></data>
+  <data name="WorkspaceStepTarget" xml:space="preserve"><value>a window to capture</value></data>
+  <data name="WorkspaceStepLanguage" xml:space="preserve"><value>the languages to read and write</value></data>
+  <data name="WorkspaceStepRegions" xml:space="preserve"><value>at least one region and translator</value></data>
+  <data name="WorkspaceStepCredentials" xml:space="preserve"><value>an API key for the chosen service</value></data>
+  <data name="ListSeparator" xml:space="preserve"><value>, </value></data>
   <data name="WorkspaceStartUnavailable" xml:space="preserve"><value>The engine cannot start this profile right now: {0}</value></data>
   <data name="TrayTooltip" xml:space="preserve"><value>Infini-Transeon game translation</value></data>
   <data name="TrayPauseAll" xml:space="preserve"><value>Pause all</value></data>
@@ -610,12 +686,6 @@
   <data name="CloseToTrayCancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="HomeProfileMoreButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>More profile actions</value></data>
   <data name="HomeTogglePinMenuItem.Text" xml:space="preserve"><value>Pin or unpin profile</value></data>
-  <data name="WorkspaceCaptureTitle" xml:space="preserve"><value>Capture &amp; regions</value></data>
-  <data name="WorkspaceCaptureSubtitle" xml:space="preserve"><value>Choose a target, draw normalized translation regions, and tune OCR and line layout.</value></data>
-  <data name="WorkspaceChannelsTitle" xml:space="preserve"><value>Translation channels</value></data>
-  <data name="WorkspaceChannelsSubtitle" xml:space="preserve"><value>Assign one to four stable result slots and optional sequential LLM refinements per region.</value></data>
-  <data name="WorkspaceOverlayTitle" xml:space="preserve"><value>Overlay style</value></data>
-  <data name="WorkspaceOverlaySubtitle" xml:space="preserve"><value>Choose how each region covers, offsets, or presents translated text against the game.</value></data>
   <data name="BudgetPreviewSummary" xml:space="preserve"><value>{0}/{1} slots · up to {2} requests per recognized line</value></data>
   <data name="BudgetPreviewHint.Text" xml:space="preserve"><value>Parallel slots increase coverage, cost, latency, and overlay space. Refinements run sequentially inside their slot.</value></data>
   <data name="ActivityTitle" xml:space="preserve"><value>Activity</value></data>
@@ -640,9 +710,151 @@
   <data name="ActivityKindDiagnosticLabel" xml:space="preserve"><value>Diagnostic</value></data>
   <data name="ActivityOcrTitle" xml:space="preserve"><value>Text recognized</value></data>
   <data name="ActivityOcrDetail" xml:space="preserve"><value>{0} line(s) · model {1}</value></data>
-  <data name="ActivityTranslationDetail" xml:space="preserve"><value>{0} · {1:0} ms · {2}</value></data>
+  <data name="ActivityTranslationDetail" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
+  <data name="ActivityTranslationFailureDetail" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
   <data name="ActivityCacheHit" xml:space="preserve"><value>cache hit</value></data>
   <data name="ActivityCacheMiss" xml:space="preserve"><value>live request</value></data>
+  <data name="ActivityScopeUserRegion" xml:space="preserve"><value>Custom region</value></data>
+  <data name="ActivityScopeFullTarget" xml:space="preserve"><value>Whole screen</value></data>
+  <data name="ActivityScopeRemainingArea" xml:space="preserve"><value>Remaining screen</value></data>
+  <data name="ActivityStageInitial" xml:space="preserve"><value>First pass</value></data>
+  <data name="ActivityStageFallback" xml:space="preserve"><value>Fallback</value></data>
+  <data name="ActivityStageRefinement" xml:space="preserve"><value>Refinement</value></data>
+  <data name="ActivityLatencyMilliseconds" xml:space="preserve"><value>{0:0} ms</value></data>
+  <data name="ActivityLatencySeconds" xml:space="preserve"><value>{0:0.0} s</value></data>
+  <data name="ActivityLocalProviderName" xml:space="preserve"><value>Local model {0}</value></data>
+  <data name="ActivityRepeatCount" xml:space="preserve"><value>×{0}</value></data>
+  <!-- Status-log vocabulary (StatusEventPresenter). Categories name the subsystem that emitted an
+       event; messages say what happened. The event's error code is shown verbatim beside them and
+       is deliberately not translated. -->
+  <data name="StatusCategoryUnknown" xml:space="preserve"><value>Other</value></data>
+  <data name="StatusCategoryAppStartup" xml:space="preserve"><value>Startup</value></data>
+  <data name="StatusCategoryAppLifecycle" xml:space="preserve"><value>Application</value></data>
+  <data name="StatusCategoryAppActivation" xml:space="preserve"><value>Activation</value></data>
+  <data name="StatusCategoryAppModel" xml:space="preserve"><value>Local models</value></data>
+  <data name="StatusCategoryAppUpdate" xml:space="preserve"><value>Updates</value></data>
+  <data name="StatusCategoryHotkey" xml:space="preserve"><value>Hotkeys</value></data>
+  <data name="StatusCategoryTray" xml:space="preserve"><value>Notification area</value></data>
+  <data name="StatusCategoryRuntimeControl" xml:space="preserve"><value>Runtime control</value></data>
+  <data name="StatusCategoryRuntimeTranslationGroup" xml:space="preserve"><value>Translation groups</value></data>
+  <data name="StatusCategoryRuntimeConfiguration" xml:space="preserve"><value>Configuration</value></data>
+  <data name="StatusCategoryRuntimeEngine" xml:space="preserve"><value>Engine</value></data>
+  <data name="StatusCategoryRuntimeCapture" xml:space="preserve"><value>Capture</value></data>
+  <data name="StatusCategoryRuntimePerformance" xml:space="preserve"><value>Performance</value></data>
+  <data name="StatusCategoryRuntimeDiagnostic" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="StatusCategoryRuntimeState" xml:space="preserve"><value>Runtime state</value></data>
+  <data name="StatusCategoryRuntimePipeline" xml:space="preserve"><value>Pipeline</value></data>
+  <data name="StatusMessageUnknown" xml:space="preserve"><value>Unrecognized status event</value></data>
+  <data name="StatusMessageCaptureBorderlessAuthorization" xml:space="preserve"><value>Borderless capture authorization checked</value></data>
+  <data name="StatusMessageAppSingleInstanceRedirectTimedOut" xml:space="preserve"><value>Handing off to the running instance timed out</value></data>
+  <data name="StatusMessageAppShutdownRequested" xml:space="preserve"><value>Shutdown requested</value></data>
+  <data name="StatusMessageAppCloseToTrayFailed" xml:space="preserve"><value>Minimizing to the notification area failed</value></data>
+  <data name="StatusMessageAppActivationUnroutable" xml:space="preserve"><value>A deep link arrived with no window to route it to</value></data>
+  <data name="StatusMessageAppActivationRejected" xml:space="preserve"><value>The activation request was rejected</value></data>
+  <data name="StatusMessageAppActivationStartFailed" xml:space="preserve"><value>Starting translation from the activation request failed</value></data>
+  <data name="StatusMessageAppModel" xml:space="preserve"><value>Local model package activity</value></data>
+  <data name="StatusMessageAppUpdate" xml:space="preserve"><value>Application update activity</value></data>
+  <data name="StatusMessageHotkeyInitializationFailed" xml:space="preserve"><value>Global hotkeys could not be registered</value></data>
+  <data name="StatusMessageHotkeyExecuted" xml:space="preserve"><value>Hotkey executed</value></data>
+  <data name="StatusMessageHotkeyNoMatchingTarget" xml:space="preserve"><value>Hotkey matched no active target</value></data>
+  <data name="StatusMessageHotkeyFailed" xml:space="preserve"><value>Hotkey action failed</value></data>
+  <data name="StatusMessageTrayOperationFailed" xml:space="preserve"><value>A notification-area action failed</value></data>
+  <data name="StatusMessageRuntimeControlPause" xml:space="preserve"><value>Translation paused or resumed</value></data>
+  <data name="StatusMessageRuntimeControlOverlay" xml:space="preserve"><value>Overlay shown or hidden</value></data>
+  <data name="StatusMessageRuntimeControlManualOcr" xml:space="preserve"><value>Manual recognition scheduled</value></data>
+  <data name="StatusMessageRuntimeControlManualOcrRejected" xml:space="preserve"><value>Manual recognition was rejected</value></data>
+  <data name="StatusMessageRuntimeControlManualOcrFailed" xml:space="preserve"><value>Manual recognition failed</value></data>
+  <data name="StatusMessageRuntimeControlNoMatchingTarget" xml:space="preserve"><value>The command matched no active target</value></data>
+  <data name="StatusMessageRuntimeControlScopedApplied" xml:space="preserve"><value>Command applied to the selected targets</value></data>
+  <data name="StatusMessageRuntimeTranslationGroup" xml:space="preserve"><value>Translation group changed</value></data>
+  <data name="StatusMessageRuntimeConfigurationHotApplied" xml:space="preserve"><value>Configuration applied without a restart</value></data>
+  <data name="StatusMessageRuntimeConfigurationRestartFallback" xml:space="preserve"><value>Configuration needed an engine restart</value></data>
+  <data name="StatusMessageRuntimeEngineLifecycle" xml:space="preserve"><value>Engine state changed</value></data>
+  <data name="StatusMessageRuntimeCaptureLifecycle" xml:space="preserve"><value>Capture target state changed</value></data>
+  <data name="StatusMessageRuntimePipelineFailure" xml:space="preserve"><value>The translation pipeline failed</value></data>
+  <data name="StatusMessageRuntimePerformanceBudget" xml:space="preserve"><value>Performance budget updated</value></data>
+  <data name="StatusMessageRuntimePerformanceDegradation" xml:space="preserve"><value>Quality was reduced to keep up</value></data>
+  <data name="StatusMessageRuntimeDiagnostic" xml:space="preserve"><value>The engine raised a diagnostic</value></data>
+  <data name="StatusMessageRuntimeStateAdmissionRejected" xml:space="preserve"><value>A stale result was discarded</value></data>
+  <!-- Engine diagnostic vocabulary. The engine states a machine error code; the sentence a user
+       reads is authored here (see RuntimeDiagnosticPresenter) rather than sent up from the engine. -->
+  <data name="RuntimeDiagnosticCategoryPipeline" xml:space="preserve"><value>Translation pipeline</value></data>
+  <data name="RuntimeDiagnosticCategoryPerformance" xml:space="preserve"><value>Performance</value></data>
+  <data name="RuntimeDiagnosticCategoryEngine" xml:space="preserve"><value>Engine</value></data>
+  <data name="RuntimeDiagnosticCategoryUnknown" xml:space="preserve"><value>Runtime</value></data>
+  <data name="RuntimeDiagnosticUnknown" xml:space="preserve"><value>The engine reported a problem this version does not recognize</value></data>
+  <data name="RuntimeDiagnosticTargetBinding" xml:space="preserve"><value>The capture target is no longer bound, so this result was dropped. Start the profile again.</value></data>
+  <data name="RuntimeDiagnosticStaleSource" xml:space="preserve"><value>A result arrived after its settings changed and was discarded</value></data>
+  <data name="RuntimeDiagnosticRegionBinding" xml:space="preserve"><value>A region no longer matches the running profile, so its text was skipped</value></data>
+  <data name="RuntimeDiagnosticOcrPostProcessingFailed" xml:space="preserve"><value>Recognized text could not be cleaned up and was skipped</value></data>
+  <data name="RuntimeDiagnosticChannelsInvalid" xml:space="preserve"><value>A region has no usable translation channel. Check its channels.</value></data>
+  <data name="RuntimeDiagnosticOverlayFailed" xml:space="preserve"><value>The overlay could not be updated; what you see on screen may be out of date</value></data>
+  <data name="RuntimeDiagnosticTranslationFailed" xml:space="preserve"><value>Translation failed for one region. Check the provider and its key.</value></data>
+  <data name="RuntimeDiagnosticEngineRestarting" xml:space="preserve"><value>The engine stopped unexpectedly and is restarting</value></data>
+  <data name="RuntimeDiagnosticEngineRestartFailed" xml:space="preserve"><value>The engine could not be restarted. Stop and start the profile again.</value></data>
+  <data name="RuntimeDiagnosticEngineStopTeardownFailed" xml:space="preserve"><value>The engine stopped, but not every resource was released cleanly</value></data>
+  <data name="RuntimeDiagnosticPerformanceDegraded" xml:space="preserve"><value>Quality was reduced to keep translation up with the screen</value></data>
+  <data name="RuntimeDiagnosticPerformanceRecovered" xml:space="preserve"><value>Full quality has been restored</value></data>
+  <!-- Provider catalog vocabulary. A catalog entry names its taxonomy, description and state by
+       resource key (see ProviderCatalog); RealSettingsService resolves them when it builds a row. -->
+  <data name="ProviderKindNmtCloud" xml:space="preserve"><value>NMT · cloud</value></data>
+  <data name="ProviderKindNmtCloudChina" xml:space="preserve"><value>NMT · cloud · China</value></data>
+  <data name="ProviderKindNmtLocal" xml:space="preserve"><value>NMT · local</value></data>
+  <data name="ProviderKindLlmCloud" xml:space="preserve"><value>LLM · cloud</value></data>
+  <data name="ProviderKindLlmCloudChina" xml:space="preserve"><value>LLM · cloud · China</value></data>
+  <data name="ProviderKindOcrCloud" xml:space="preserve"><value>OCR · cloud</value></data>
+  <data name="ProviderKindOcrCloudChina" xml:space="preserve"><value>OCR · cloud · China</value></data>
+  <data name="ProviderKindOcrLocal" xml:space="preserve"><value>OCR · local</value></data>
+  <data name="ProviderKindRestCustom" xml:space="preserve"><value>REST · custom</value></data>
+  <data name="ProviderStateUnavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="ProviderStateAvailable" xml:space="preserve"><value>Available</value></data>
+  <data name="ProviderStateAvailableOffline" xml:space="preserve"><value>Available (offline)</value></data>
+  <data name="ProviderStateConnected" xml:space="preserve"><value>Connected</value></data>
+  <data name="ProviderStateCredentialMissing" xml:space="preserve"><value>Credential missing</value></data>
+  <data name="ProviderStateEndpointMissing" xml:space="preserve"><value>Endpoint missing</value></data>
+  <data name="ProviderStateCatalogInvalid" xml:space="preserve"><value>Catalog verification failed</value></data>
+  <data name="ProviderStateCatalogMissing" xml:space="preserve"><value>Package catalog not published</value></data>
+  <data name="ProviderStateCatalogEmpty" xml:space="preserve"><value>No model packages published</value></data>
+  <data name="ProviderStateModelReady" xml:space="preserve"><value>Installed · ready</value></data>
+  <data name="ProviderStateModelRuntimeUnavailable" xml:space="preserve"><value>Installed · runtime unavailable</value></data>
+  <data name="ProviderStateModelCorrupt" xml:space="preserve"><value>Installed package is corrupt</value></data>
+  <data name="ProviderStateModelUncatalogued" xml:space="preserve"><value>Installed · absent from signed catalog</value></data>
+  <data name="ProviderStateModelBlockedByStrictOffline" xml:space="preserve"><value>Not installed · strict-offline mode blocks download</value></data>
+  <data name="ProviderStateModelNotInstalled" xml:space="preserve"><value>Not installed · download only on request</value></data>
+  <data name="ProviderLocalCatalogName" xml:space="preserve"><value>Local model catalog</value></data>
+  <data name="ProviderDetailDeepL" xml:space="preserve"><value>API key stored in Windows Credential Manager</value></data>
+  <data name="ProviderDetailDeepLFree" xml:space="preserve"><value>DeepL API Free key (ends with :fx) · free keys are rejected by the Pro endpoint</value></data>
+  <data name="ProviderDetailNiuTrans" xml:space="preserve"><value>Text translation · automatic source detection · optional console glossary and memory</value></data>
+  <data name="ProviderDetailYandex" xml:space="preserve"><value>Translate v2 · automatic source detection · glossary support</value></data>
+  <data name="ProviderDetailBaidu" xml:space="preserve"><value>General text translation · credentials in Windows Credential Manager</value></data>
+  <data name="ProviderDetailAlibaba" xml:space="preserve"><value>TranslateGeneral · optional game context · RAM credentials recommended</value></data>
+  <data name="ProviderDetailAzureTranslator" xml:space="preserve"><value>Translator v3 global endpoint · API key in Windows Credential Manager</value></data>
+  <data name="ProviderDetailYoudao" xml:space="preserve"><value>Text translation v3 · game domain · source-language auto detection</value></data>
+  <data name="ProviderDetailGoogleCloud" xml:space="preserve"><value>Translation v3 · service-account JSON · project ID read from the credential</value></data>
+  <data name="ProviderDetailOpenAi" xml:space="preserve"><value>OpenAI endpoint · streaming · key in Windows Credential Manager</value></data>
+  <data name="ProviderDetailDeepSeek" xml:space="preserve"><value>OpenAI-compatible streaming · game context enabled</value></data>
+  <data name="ProviderDetailQwen" xml:space="preserve"><value>Alibaba Model Studio · OpenAI-compatible streaming</value></data>
+  <data name="ProviderDetailQianfan" xml:space="preserve"><value>ERNIE · OpenAI-compatible streaming</value></data>
+  <data name="ProviderDetailAnthropic" xml:space="preserve"><value>Claude Messages API · streaming · game context enabled</value></data>
+  <data name="ProviderDetailGemini" xml:space="preserve"><value>Gemini streaming API · game context enabled</value></data>
+  <data name="ProviderDetailAzureVisionOcr" xml:space="preserve"><value>Image Analysis 4.0 Read · resource endpoint and explicit per-region consent required</value></data>
+  <data name="ProviderDetailGoogleVisionOcr" xml:space="preserve"><value>Cloud OCR · explicit per-region consent required</value></data>
+  <data name="ProviderDetailBaiduOcr" xml:space="preserve"><value>Baidu general OCR · explicit per-region consent required</value></data>
+  <data name="ProviderDetailTencentOcr" xml:space="preserve"><value>Tencent GeneralBasicOCR · explicit per-region consent required</value></data>
+  <data name="ProviderDetailLocalCatalogEmpty" xml:space="preserve"><value>No local model package is currently available.</value></data>
+  <data name="ProviderDetailModelUncatalogued" xml:space="preserve"><value>This application-managed package is no longer listed in the signed catalog. It cannot be selected, but it can still be removed.</value></data>
+  <data name="ProviderDetailModelLanguagesUndeclared" xml:space="preserve"><value>language coverage declared by package</value></data>
+  <!-- Windows recognition listed among the local packages: nothing to download, nothing to remove. -->
+  <data name="ProviderWindowsOcrName" xml:space="preserve"><value>Windows text recognition</value></data>
+  <data name="ProviderStateWindowsOcrBuiltIn" xml:space="preserve"><value>Provided by Windows · no download</value></data>
+  <data name="ProviderStateWindowsOcrNoLanguages" xml:space="preserve"><value>Provided by Windows · no language installed</value></data>
+  <!-- {0} the languages Windows currently holds a recognizer for -->
+  <data name="ProviderDetailWindowsOcr" xml:space="preserve"><value>Default OCR backend · reads {0}</value></data>
+  <data name="ProviderDetailWindowsOcrNoLanguages" xml:space="preserve"><value>Windows holds no recognizer on this machine. Add a language in Windows settings, or install a PP-OCR package below.</value></data>
+  <!-- {0} download size · {1} SPDX license · {2} runtime · {3} language coverage -->
+  <data name="ProviderDetailModelSummary" xml:space="preserve"><value>{0} · {1} · {2} · {3}</value></data>
+  <!-- {0} HTTP method · {1} endpoint host -->
+  <data name="ProviderDetailCustomRest" xml:space="preserve"><value>{0} · {1}</value></data>
   <data name="ProvidersTitle" xml:space="preserve"><value>Providers &amp; models</value></data>
   <data name="ProvidersSubtitle" xml:space="preserve"><value>Configure cloud translation, cloud OCR, local models, and custom REST adapters.</value></data>
   <data name="ProvidersOfflineModeBar.Title" xml:space="preserve"><value>Strict offline mode is active</value></data>
@@ -734,8 +946,8 @@
   <data name="GameContextSavedMessage" xml:space="preserve"><value>The running profile receives the updated context through profile apply.</value></data>
   <data name="GameContextSaveFailedTitle" xml:space="preserve"><value>Game context was not saved</value></data>
   <data name="EditTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Edit glossary term</value></data>
-  <data name="ChannelsTranslationGroupSelector.Header" xml:space="preserve"><value>Translator group</value></data>
-  <data name="ChannelsTranslationGroupNameBox.Header" xml:space="preserve"><value>Group name</value></data>
+  <data name="ChannelsTranslationGroupSelector.Header" xml:space="preserve"><value>Translator group to edit</value></data>
+  <data name="ChannelsTranslationGroupNameBox.Header" xml:space="preserve"><value>Rename the selected group to</value></data>
   <data name="ChannelsTranslationGroupAddButton.Content" xml:space="preserve"><value>Copy group</value></data>
   <data name="ChannelsTranslationGroupRenameButton.Content" xml:space="preserve"><value>Rename</value></data>
   <data name="ChannelsTranslationGroupDeleteButton.Content" xml:space="preserve"><value>Delete</value></data>

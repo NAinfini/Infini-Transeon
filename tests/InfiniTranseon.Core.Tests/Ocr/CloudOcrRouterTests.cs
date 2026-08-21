@@ -44,13 +44,15 @@ public sealed class CloudOcrRouterTests
         OcrExecutionToken token = Token(1);
 
         OcrResultSnapshot result = await provider.RecognizeAsync(
-            new CloudOcrProviderRequest(token, "image/png", new byte[] { 1, 2, 3 }, 200, 100),
+            new CloudOcrProviderRequest(
+                token, "image/png", new byte[] { 1, 2, 3 }, 200, 100, "ja-JP"),
             CancellationToken.None);
 
         Assert.Equal("GeneralBasicOCR", captured!.Headers.GetValues("X-TC-Action").Single());
         Assert.Equal("2018-11-19", captured.Headers.GetValues("X-TC-Version").Single());
         using JsonDocument requestBody = JsonDocument.Parse(body!);
         Assert.Equal("AQID", requestBody.RootElement.GetProperty("ImageBase64").GetString());
+        Assert.Equal("jap", requestBody.RootElement.GetProperty("LanguageType").GetString());
         TextLine line = Assert.Single(result.Lines);
         Assert.Equal("攻击 100", line.Text);
         Assert.Equal(0.1, line.Bounds.X, 6);
@@ -81,12 +83,14 @@ public sealed class CloudOcrRouterTests
             "key-ref", "secret", provider.CreateCredentialBinding(), CancellationToken.None);
 
         OcrResultSnapshot result = await provider.RecognizeAsync(
-            new CloudOcrProviderRequest(Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100),
+            new CloudOcrProviderRequest(
+                Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100, "ja-JP"),
             CancellationToken.None);
 
         Assert.Equal(new byte[] { 1, 2, 3 }, body);
         Assert.Equal("secret", captured!.Headers.GetValues("Ocp-Apim-Subscription-Key").Single());
         Assert.Contains("features=read", captured.RequestUri!.Query, StringComparison.Ordinal);
+        Assert.Contains("language=ja", captured.RequestUri.Query, StringComparison.Ordinal);
         TextLine line = Assert.Single(result.Lines);
         Assert.Equal("Attack 100", line.Text);
         AssertRect(line.Bounds, 0.1, 0.1, 0.5, 0.2);
@@ -116,7 +120,7 @@ public sealed class CloudOcrRouterTests
         OcrRoutingException error = await Assert.ThrowsAsync<OcrRoutingException>(() =>
             provider.RecognizeAsync(
                 new CloudOcrProviderRequest(
-                    Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100),
+                    Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100, "auto"),
                 CancellationToken.None).AsTask());
 
         Assert.Equal("ocr.redirectRejected", error.Code);
@@ -137,20 +141,22 @@ public sealed class CloudOcrRouterTests
         var options = new GoogleVisionOcrOptions(
             new Uri("https://vision.googleapis.com/v1/images:annotate"),
             "key-ref",
-            ProxyPolicy.System,
-            ["en"]);
+            ProxyPolicy.System);
         var provider = new GoogleVisionOcrProvider(options, new HttpClient(handler), credentials);
         await credentials.WriteAsync(
             "key-ref", "secret", provider.CreateCredentialBinding(), CancellationToken.None);
 
         OcrResultSnapshot result = await provider.RecognizeAsync(
-            new CloudOcrProviderRequest(Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100),
+            new CloudOcrProviderRequest(
+                Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100, "ja-JP"),
             CancellationToken.None);
 
         Assert.Equal("secret", captured!.Headers.GetValues("x-goog-api-key").Single());
         using JsonDocument requestJson = JsonDocument.Parse(body!);
         Assert.Equal("AQID", requestJson.RootElement.GetProperty("requests")[0]
             .GetProperty("image").GetProperty("content").GetString());
+        Assert.Equal("ja-JP", requestJson.RootElement.GetProperty("requests")[0]
+            .GetProperty("imageContext").GetProperty("languageHints")[0].GetString());
         TextLine line = Assert.Single(result.Lines);
         Assert.Equal("Hi !", line.Text);
         AssertRect(line.Bounds, 0.05, 0.2, 0.5, 0.2);
@@ -172,7 +178,7 @@ public sealed class CloudOcrRouterTests
         var credentials = new BoundCredentialStore(new MemoryCredentialStore());
         var options = new BaiduOcrOptions(
             new Uri("https://aip.baidubce.com/oauth/2.0/token"),
-            new Uri("https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"),
+            new Uri("https://aip.baidubce.com/rest/2.0/ocr/v1/accurate"),
             "id-ref",
             "secret-ref",
             ProxyPolicy.System,
@@ -184,17 +190,29 @@ public sealed class CloudOcrRouterTests
             "secret-ref", "client-secret", provider.CreateCredentialBinding("client-secret"), CancellationToken.None);
 
         OcrResultSnapshot result = await provider.RecognizeAsync(
-            new CloudOcrProviderRequest(Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100),
+            new CloudOcrProviderRequest(
+                Token(1), "image/png", new byte[] { 1, 2, 3 }, 200, 100, "ja-JP"),
             CancellationToken.None);
 
         Assert.Equal(2, requests.Count);
         Assert.DoesNotContain("client_secret", requests[1].Uri.Query, StringComparison.Ordinal);
         Assert.Contains("access_token=token", requests[1].Uri.Query, StringComparison.Ordinal);
+        Assert.Equal("/rest/2.0/ocr/v1/accurate", requests[1].Uri.AbsolutePath);
         Assert.Contains("image=AQID", requests[1].Body, StringComparison.Ordinal);
+        Assert.Contains("language_type=JAP", requests[1].Body, StringComparison.Ordinal);
         TextLine line = Assert.Single(result.Lines);
         Assert.Equal("生命 200", line.Text);
         AssertRect(line.Bounds, 0.1, 0.1, 0.5, 0.2);
         Assert.Equal(0.93, line.Confidence, 6);
+    }
+
+    [Fact]
+    public void CloudOcrLanguageMappingDoesNotFallBackToProviderDefaults()
+    {
+        Assert.Null(CloudOcrLanguageMapper.GoogleVisionHint("auto"));
+        Assert.Null(CloudOcrLanguageMapper.AzureVisionLanguage("auto"));
+        Assert.Equal("auto", CloudOcrLanguageMapper.TencentLanguageType("auto"));
+        Assert.Equal("auto_detect", CloudOcrLanguageMapper.BaiduLanguageType("auto"));
     }
 
     [Fact]
@@ -210,7 +228,7 @@ public sealed class CloudOcrRouterTests
 
         OcrRoutingException error = await Assert.ThrowsAsync<OcrRoutingException>(() => router.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(token, "image/png", [1, 2, 3], 10, 10, true),
+            new CloudOcrRouteRequest(token, "image/png", [1, 2, 3], 10, 10, true, "auto"),
             strictOffline: true,
             TestContext.Current.CancellationToken).AsTask());
 
@@ -231,7 +249,7 @@ public sealed class CloudOcrRouterTests
 
         OcrRoutingException error = await Assert.ThrowsAsync<OcrRoutingException>(() => router.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, false),
+            new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, false, "auto"),
             strictOffline: false,
             TestContext.Current.CancellationToken).AsTask());
 
@@ -258,12 +276,12 @@ public sealed class CloudOcrRouterTests
 
         await router.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(first, "image/png", [1], 10, 10, true),
+            new CloudOcrRouteRequest(first, "image/png", [1], 10, 10, true, "auto"),
             false,
             TestContext.Current.CancellationToken);
         await router.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(second, "image/png", [2], 10, 10, true),
+            new CloudOcrRouteRequest(second, "image/png", [2], 10, 10, true, "auto"),
             false,
             TestContext.Current.CancellationToken);
 
@@ -294,7 +312,7 @@ public sealed class CloudOcrRouterTests
 
         Task<OcrResultSnapshot> activeRoute = router.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true),
+            new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true, "auto"),
             false,
             TestContext.Current.CancellationToken).AsTask();
         await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
@@ -318,7 +336,7 @@ public sealed class CloudOcrRouterTests
 
         OcrResultSnapshot result = await router.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(first, "image/png", [1, 2, 3], 100, 40, true),
+            new CloudOcrRouteRequest(first, "image/png", [1, 2, 3], 100, 40, true, "auto"),
             strictOffline: false,
             TestContext.Current.CancellationToken);
         OcrExecutionToken second = router.NextToken(first);
@@ -343,7 +361,7 @@ public sealed class CloudOcrRouterTests
             })
             : CreateResult(request)));
         OcrExecutionToken token = router.BeginAttempt(CreateSource(), 1);
-        var request = new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true);
+        var request = new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true, "auto");
 
         await Assert.ThrowsAsync<OcrRoutingException>(() => router.RouteAsync(
             "cloud", request, false, TestContext.Current.CancellationToken).AsTask());
@@ -367,7 +385,7 @@ public sealed class CloudOcrRouterTests
         OcrExecutionToken token = oversized.BeginAttempt(CreateSource(), 1);
         await Assert.ThrowsAsync<OcrRoutingException>(() => oversized.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true),
+            new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true, "auto"),
             false,
             TestContext.Current.CancellationToken).AsTask());
 
@@ -381,7 +399,7 @@ public sealed class CloudOcrRouterTests
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.RouteAsync(
             "cloud",
-            new CloudOcrRouteRequest(cancelledToken, "image/png", [1], 10, 10, true),
+            new CloudOcrRouteRequest(cancelledToken, "image/png", [1], 10, 10, true, "auto"),
             false,
             cancellation.Token).AsTask());
     }
@@ -405,6 +423,7 @@ public sealed class CloudOcrRouterTests
                 10,
                 10,
                 true,
+                "auto",
                 deadlineUtc: DateTimeOffset.UtcNow.AddMilliseconds(50)),
             false,
             TestContext.Current.CancellationToken).AsTask());
@@ -415,11 +434,17 @@ public sealed class CloudOcrRouterTests
     [Fact]
     public async Task RuntimeDispatcherRoutesAuthorizedCropThroughEngineHostOnly()
     {
-        var router = CreateRouter(() => new StubProvider(CreateResult));
+        string? recognitionLanguage = null;
+        var router = CreateRouter(() => new StubProvider(request =>
+        {
+            recognitionLanguage = request.RecognitionLanguage;
+            return CreateResult(request);
+        }));
         OcrExecutionToken token = router.BeginAttempt(CreateSource(), 1);
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
         using var crop = new CloudOcrCropRequest(
             token, "image/png", [1, 2, 3], 100, 40, true,
+            recognitionLanguage: "zh-Hant-TW",
             consentPolicyRevision: 5,
             encodedByteCeiling: 1024,
             deadlineUtc: deadline,
@@ -445,6 +470,7 @@ public sealed class CloudOcrRouterTests
         Assert.NotNull(received);
         Assert.Equal(token, received.ExecutionToken);
         Assert.Null(received.TerminalErrorCode);
+        Assert.Equal("zh-Hant-TW", recognitionLanguage);
     }
 
     [Fact]
@@ -456,6 +482,7 @@ public sealed class CloudOcrRouterTests
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
         using var crop = new CloudOcrCropRequest(
             token, "image/png", [1, 2, 3], 100, 40, true,
+            recognitionLanguage: "auto",
             deadlineUtc: deadline,
             providerId: "cloud");
         using var runtimeEvent = new RuntimeEngineEvent(
@@ -488,6 +515,7 @@ public sealed class CloudOcrRouterTests
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
         using var crop = new CloudOcrCropRequest(
             token, "image/png", [1], 10, 10, true,
+            recognitionLanguage: "auto",
             deadlineUtc: deadline,
             providerId: "cloud");
         using var runtimeEvent = new RuntimeEngineEvent(
@@ -513,7 +541,7 @@ public sealed class CloudOcrRouterTests
         OcrRoutingException replay = await Assert.ThrowsAsync<OcrRoutingException>(() =>
             router.RouteAsync(
                 "cloud",
-                new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true),
+                new CloudOcrRouteRequest(token, "image/png", [1], 10, 10, true, "auto"),
                 false,
                 TestContext.Current.CancellationToken).AsTask());
         Assert.Equal("ocr.sequence.outOfOrder", replay.Code);
@@ -529,6 +557,7 @@ public sealed class CloudOcrRouterTests
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
         using var crop = new CloudOcrCropRequest(
             token, "image/png", [1], 10, 10, true,
+            recognitionLanguage: "auto",
             deadlineUtc: deadline,
             providerId: "cloud");
         using var runtimeEvent = new RuntimeEngineEvent(
@@ -563,6 +592,7 @@ public sealed class CloudOcrRouterTests
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
         using var crop = new CloudOcrCropRequest(
             token, "image/png", [1], 10, 10, true,
+            recognitionLanguage: "auto",
             deadlineUtc: deadline,
             providerId: "cloud");
         using var runtimeEvent = new RuntimeEngineEvent(
@@ -598,6 +628,7 @@ public sealed class CloudOcrRouterTests
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(1);
         using var crop = new CloudOcrCropRequest(
             token, "image/png", [1], 10, 10, true,
+            recognitionLanguage: "auto",
             deadlineUtc: deadline,
             providerId: "cloud");
         using var runtimeEvent = new RuntimeEngineEvent(

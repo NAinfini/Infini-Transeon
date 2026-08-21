@@ -1,13 +1,15 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using InfiniTranseon.App.Controls;
 using InfiniTranseon.App.Controls.Dialogs;
 using InfiniTranseon.App.Features.SetupWizard;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
+using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Windows.ApplicationModel.Resources;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -16,13 +18,17 @@ namespace InfiniTranseon.App.Features.Home;
 
 public sealed partial class HomePage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private readonly AppNavigationState _navigation;
     private readonly RuntimeEventHub _runtimeEvents;
     private readonly ISettingsService _settingsService;
     private readonly DialogService _dialogs;
+    private readonly IStillFrameProbe _stillFrames;
+    private readonly IRuntimeControlService _runtime;
+    // One frame per profile for as long as this page lives. Re-grabbing on every scroll would call
+    // PrintWindow at the user's scroll rate, and the frame does not go stale fast enough to justify it.
+    private readonly Dictionary<Guid, ImageSource> _thumbnails = [];
     private ApplicationSettings? _settings;
     private string _operationError = string.Empty;
     private bool _subscribed;
@@ -34,6 +40,8 @@ public sealed partial class HomePage : Page
         _navigation = App.GetService<AppNavigationState>();
         _runtimeEvents = App.GetService<RuntimeEventHub>();
         _settingsService = App.GetService<ISettingsService>();
+        _stillFrames = App.GetService<IStillFrameProbe>();
+        _runtime = App.GetService<IRuntimeControlService>();
         _dialogs = new DialogService(() => XamlRoot);
         InitializeComponent();
     }
@@ -49,9 +57,9 @@ public sealed partial class HomePage : Page
     public string HomeSubtitle => Strings.GetString("HomeSubtitle");
     public string EmptyTitle => Strings.GetString("HomeEmptyTitle");
     public string EmptyBody => Strings.GetString("HomeEmptyBody");
-    public Visibility RunningPanelVisibility => RuntimeViewModel.Targets.Count == 0
-        ? Visibility.Collapsed
-        : Visibility.Visible;
+    public Visibility RunningPanelVisibility => RuntimeViewModel.CanControlRuntime
+        ? Visibility.Visible
+        : Visibility.Collapsed;
     public Visibility ActivityVisibility => RecentActivity.Count == 0
         ? Visibility.Collapsed
         : Visibility.Visible;
@@ -121,7 +129,126 @@ public sealed partial class HomePage : Page
     }
 
     private void OnRuntimePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(Bindings.Update);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            Bindings.Update();
+            RefreshProfileStartButtons();
+        });
+
+    /// <summary>
+    /// One engine serves one profile at a time, so while it is running no card can start anything.
+    /// The button says so by being disabled instead of accepting the click and then explaining that
+    /// it did nothing.
+    /// </summary>
+    private bool CanStartAnyProfile => RuntimeViewModel.EngineStatus
+        is EngineRuntimeStatus.Stopped
+        or EngineRuntimeStatus.Faulted
+        or EngineRuntimeStatus.ExecutableNotFound;
+
+    private void RefreshProfileStartButtons()
+    {
+        for (int index = 0; index < ProfilesViewModel.Profiles.Count; index++)
+        {
+            if (ProfileRepeater.TryGetElement(index) is FrameworkElement element &&
+                element.FindName("StartProfileButton") is Button start)
+            {
+                start.IsEnabled = CanStartAnyProfile;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fills in the card as it is realized: the engine's own frame when it is capturing this target,
+    /// otherwise one grabbed in-process. Neither is available for a target this machine is not
+    /// showing, and the card then keeps the target-kind icon rather than a stale or invented picture.
+    /// </summary>
+    private async void OnProfileCardPrepared(
+        ItemsRepeater sender,
+        ItemsRepeaterElementPreparedEventArgs args)
+    {
+        if (args.Element is not FrameworkElement element ||
+            ProfilesViewModel.Profiles.ElementAtOrDefault(args.Index) is not { } card)
+        {
+            return;
+        }
+
+        if (element.FindName("StartProfileButton") is Button start)
+        {
+            start.IsEnabled = CanStartAnyProfile;
+        }
+
+        if (element.FindName("ThumbnailImage") is not Image image ||
+            element.FindName("ThumbnailFallbackIcon") is not FontIcon icon)
+        {
+            return;
+        }
+
+        void Show(ImageSource source)
+        {
+            image.Source = source;
+            image.Visibility = Visibility.Visible;
+            icon.Visibility = Visibility.Collapsed;
+        }
+
+        image.Source = null;
+        image.Visibility = Visibility.Collapsed;
+        icon.Visibility = Visibility.Visible;
+        if (_thumbnails.TryGetValue(card.ProfileId, out ImageSource? cached))
+        {
+            Show(cached);
+            return;
+        }
+
+        if (card.TargetNativeHandle == 0 || card.TargetProbeKind.Length == 0)
+        {
+            return;
+        }
+
+        ImageSource? frame = await LoadThumbnailAsync(card);
+        if (frame is null)
+        {
+            return;
+        }
+
+        _thumbnails[card.ProfileId] = frame;
+        // The card can be scrolled out and reused for another profile while the frame is decoding.
+        if (ProfilesViewModel.Profiles.ElementAtOrDefault(sender.GetElementIndex(element))?.ProfileId
+            == card.ProfileId)
+        {
+            Show(frame);
+        }
+    }
+
+    private async Task<ImageSource?> LoadThumbnailAsync(ProfileCard card)
+    {
+        if (card.TargetProbeId != Guid.Empty)
+        {
+            try
+            {
+                if (await _runtime.RequestThumbnailAsync(card.TargetProbeId, 480) is { } thumbnail)
+                {
+                    return await CapturePreviewImaging.FromThumbnailAsync(thumbnail);
+                }
+            }
+            catch (Exception)
+            {
+                // Only the running profile's target has an engine frame; every other card falls
+                // through to the in-process probe, whose own failure leaves the icon in place.
+            }
+        }
+
+        try
+        {
+            StillFrameProbeResult frame = await _stillFrames.CaptureAsync(
+                new StillFrameProbeRequest(card.TargetNativeHandle, card.TargetProbeKind, 480),
+                CancellationToken.None);
+            return await CapturePreviewImaging.FromStillFrameAsync(frame);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     private void OnRuntimeCollectionChanged(
         object? sender,
@@ -150,12 +277,15 @@ public sealed partial class HomePage : Page
         }
     }
 
+    // Home names the subsystem and says what happened in the user's language. The engine's own
+    // sentence and its error code are diagnostic vocabulary and stay on the activity page; a player
+    // who sees this card while a game is running needs to know whether to act, not which method threw.
     private void InsertDiagnostic(RuntimeDiagnosticRaised diagnostic)
     {
         RecentActivity.Insert(0, new HomeActivityItem(
             diagnostic.OccurredAtUtc.ToLocalTime(),
-            diagnostic.ErrorCode,
-            diagnostic.MessageKey,
+            Strings.GetString(RuntimeDiagnosticPresenter.CategoryResourceKeyFor(diagnostic.ErrorCode)),
+            Strings.GetString(RuntimeDiagnosticPresenter.ResourceKeyFor(diagnostic.ErrorCode)),
             diagnostic.Severity switch
             {
                 RuntimeDiagnosticSeverity.Error => StatusSeverity.Critical,

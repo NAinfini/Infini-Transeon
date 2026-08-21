@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using InfiniTranseon.App.Controls;
 using InfiniTranseon.App.Deployment;
 using InfiniTranseon.App.Features.Settings;
@@ -34,18 +34,18 @@ namespace InfiniTranseon.App.Features.SetupWizard;
 /// </summary>
 public sealed partial class SetupWizardPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     // Source options carry a recognizer-availability note; target options do not, because the target
     // language is translated into, never read off the screen.
     private readonly IReadOnlyList<LanguageOption> _sourceLanguages =
-        AnnotateSourceLanguages(LanguageCatalog.CreateSourceOptions());
+        AnnotateSourceLanguages(LanguageCatalog.CreateSourceOptions(Strings.GetString("UiLanguageTag")));
     private readonly IReadOnlyList<LanguageOption> _targetLanguages =
-        LanguageCatalog.CreateTargetOptions();
+        LanguageCatalog.CreateTargetOptions(Strings.GetString("UiLanguageTag"));
     private readonly AppNavigationState _navigation;
     private readonly IRuntimeControlService _runtime;
+    private readonly WorkbenchViewModel _workbench;
     private readonly IStillFrameProbe _stillFrames;
     /// <summary>Last in-process frame of the selected target: shown in step 1, drawn on in step 3,
     /// and cropped for the step 3 OCR test so all three agree on the same pixels.</summary>
@@ -61,8 +61,13 @@ public sealed partial class SetupWizardPage : Page
         ViewModel = App.GetService<SetupWizardViewModel>();
         _navigation = App.GetService<AppNavigationState>();
         _runtime = App.GetService<IRuntimeControlService>();
+        _workbench = App.GetService<WorkbenchViewModel>();
         _stillFrames = App.GetService<IStillFrameProbe>();
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        // Re-probing replaces every row, which drops the list's own selection; the view model
+        // restores it by id and says so here. Nothing else writes the list's selection, so the
+        // checkboxes and the profile being built cannot drift apart.
+        ViewModel.TargetsReloaded += (_, _) => SynchronizeTargetSelection();
         Canvas.Regions = ViewModel.Regions;
     }
 
@@ -83,6 +88,8 @@ public sealed partial class SetupWizardPage : Page
         else
         {
             await ViewModel.LoadForEditAsync(_editProfileId);
+            WizardTitle.Text = Strings.GetString("SetupEditTitle");
+            WizardSubtitle.Text = Strings.GetString("SetupEditSubtitle");
         }
 
         ShowBorderlessCaptureState();
@@ -223,12 +230,96 @@ public sealed partial class SetupWizardPage : Page
             {
                 CaptureTargetList.SelectedItems.Add(target);
             }
-            CaptureTargetList.SelectedItem = ViewModel.SelectedTarget;
+            if (MissingTargetSelector.SelectedItem is not CaptureProbeTarget selectedMissing ||
+                !ViewModel.MissingTargets.Contains(selectedMissing))
+            {
+                MissingTargetSelector.SelectedItem = ViewModel.MissingTargets.FirstOrDefault();
+            }
         }
         finally
         {
             _isSynchronizingTargetSelection = false;
         }
+    }
+
+    private async void OnRebindMissingTargetClick(object sender, RoutedEventArgs e)
+    {
+        if (MissingTargetSelector.SelectedItem is not CaptureProbeTarget missing)
+        {
+            return;
+        }
+        IReadOnlyList<CaptureProbeTarget> candidates =
+            ViewModel.GetAvailableRebindTargets(missing);
+        if (candidates.Count == 0)
+        {
+            await new ContentDialog
+            {
+                Title = Strings.GetString("SetupRebindNoTargetTitle"),
+                Content = Strings.GetString("SetupRebindNoTargetMessage"),
+                CloseButtonText = Strings.GetString("SetupRebindTargetCancel"),
+                XamlRoot = XamlRoot,
+            }.ShowAsync();
+            return;
+        }
+
+        var selector = new SelectBox
+        {
+            Header = Strings.GetString("SetupRebindTargetSelectorHeader"),
+            DisplayMemberPath = nameof(CaptureProbeTarget.DisplayName),
+            CategoryMemberPath = nameof(CaptureProbeTarget.Kind),
+            ItemsSource = candidates,
+            SelectedIndex = 0,
+            MinWidth = 360,
+        };
+        var dialog = new ContentDialog
+        {
+            Title = string.Format(
+                Strings.GetString("SetupRebindTargetTitle"),
+                missing.DisplayName),
+            Content = selector,
+            PrimaryButtonText = Strings.GetString("SetupRebindTargetConfirm"),
+            CloseButtonText = Strings.GetString("SetupRebindTargetCancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary ||
+            selector.SelectedItem is not CaptureProbeTarget replacement)
+        {
+            return;
+        }
+
+        if (ViewModel.RebindMissingTarget(missing, replacement))
+        {
+            SynchronizeTargetSelection();
+            await RefreshTargetPreviewAsync();
+        }
+    }
+
+    private async void OnRemoveMissingTargetClick(object sender, RoutedEventArgs e)
+    {
+        if (MissingTargetSelector.SelectedItem is not CaptureProbeTarget missing)
+        {
+            return;
+        }
+        var dialog = new ContentDialog
+        {
+            Title = Strings.GetString("SetupRemoveTargetTitle"),
+            Content = string.Format(
+                Strings.GetString("SetupRemoveTargetMessage"),
+                missing.DisplayName),
+            PrimaryButtonText = Strings.GetString("SetupRemoveTargetConfirm"),
+            CloseButtonText = Strings.GetString("SetupRemoveTargetCancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        ViewModel.RemoveMissingTarget(missing);
+        SynchronizeTargetSelection();
+        await RefreshTargetPreviewAsync();
     }
 
     /// <summary>
@@ -256,7 +347,7 @@ public sealed partial class SetupWizardPage : Page
                 await _runtime.RequestThumbnailAsync(target.TargetId.Value, 1600);
             if (thumbnail is not null)
             {
-                ApplyTargetPreview(await DecodeThumbnailAsync(thumbnail));
+                ApplyTargetPreview(await CapturePreviewImaging.FromThumbnailAsync(thumbnail));
                 return;
             }
         }
@@ -271,7 +362,7 @@ public sealed partial class SetupWizardPage : Page
             _stillFrame = await _stillFrames.CaptureAsync(
                 new StillFrameProbeRequest(target.NativeHandle, target.Kind, 1600),
                 CancellationToken.None);
-            ApplyTargetPreview(await CreateBitmapAsync(_stillFrame));
+            ApplyTargetPreview(await CapturePreviewImaging.FromStillFrameAsync(_stillFrame));
         }
         catch (StillFrameUnavailableException unavailable)
         {
@@ -303,45 +394,6 @@ public sealed partial class SetupWizardPage : Page
         TargetPreviewPlaceholder.Text = reason;
         TargetPreviewPlaceholder.Visibility = Visibility.Visible;
         Canvas.PreviewSource = null;
-    }
-
-    private static async Task<ImageSource> DecodeThumbnailAsync(RuntimeThumbnail thumbnail)
-    {
-        using var stream = new InMemoryRandomAccessStream();
-        using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
-        {
-            writer.WriteBytes(thumbnail.EncodedImage.ToArray());
-            await writer.StoreAsync();
-            await writer.FlushAsync();
-            writer.DetachStream();
-        }
-        stream.Seek(0);
-        var bitmap = new BitmapImage();
-        await bitmap.SetSourceAsync(stream);
-        return bitmap;
-    }
-
-    /// <summary>Wraps the probe's raw BGRA in a decodable image. The round trip through the PNG
-    /// encoder keeps this on the same WinRT imaging path the rest of the page uses, rather than
-    /// depending on the buffer interop extensions that modern .NET no longer ships.</summary>
-    private static async Task<ImageSource> CreateBitmapAsync(StillFrameProbeResult frame)
-    {
-        using var stream = new InMemoryRandomAccessStream();
-        BitmapEncoder encoder =
-            await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
-        encoder.SetPixelData(
-            BitmapPixelFormat.Bgra8,
-            BitmapAlphaMode.Ignore,
-            (uint)frame.PixelWidth,
-            (uint)frame.PixelHeight,
-            96,
-            96,
-            frame.BgraPixels);
-        await encoder.FlushAsync();
-        stream.Seek(0);
-        var bitmap = new BitmapImage();
-        await bitmap.SetSourceAsync(stream);
-        return bitmap;
     }
 
     // -- Step 2: language & service ----------------------------------------------------------
@@ -616,7 +668,7 @@ public sealed partial class SetupWizardPage : Page
 
     private void OnInspectorChanged(object sender, RoutedEventArgs e) => CommitInspector();
 
-    private void OnInspectorSelectionChanged(object sender, SelectionChangedEventArgs e) => CommitInspector();
+    private void OnInspectorSelectionChanged(object? sender, EventArgs e) => CommitInspector();
 
     private void CommitInspector()
     {
@@ -834,6 +886,7 @@ public sealed partial class SetupWizardPage : Page
         await ViewModel.SaveCommand.ExecuteAsync(null);
         if (ViewModel.SavedProfileId != Guid.Empty && string.IsNullOrEmpty(ViewModel.ErrorMessage))
         {
+            await _workbench.LoadAsync(ViewModel.SavedProfileId);
             _navigation.NavigateToProfile(ViewModel.SavedProfileId);
         }
     }
@@ -848,6 +901,7 @@ public sealed partial class SetupWizardPage : Page
 
         try
         {
+            await _workbench.LoadAsync(ViewModel.SavedProfileId);
             await _runtime.StartAsync(ViewModel.SavedProfileId);
             _navigation.Navigate(GlobalDestination.Home);
         }
@@ -860,8 +914,9 @@ public sealed partial class SetupWizardPage : Page
     private async void OnSaveDraftExitClick(object sender, RoutedEventArgs e)
     {
         await ViewModel.SaveDraftCommand.ExecuteAsync(null);
-        if (string.IsNullOrEmpty(ViewModel.ErrorMessage))
+        if (ViewModel.SavedProfileId != Guid.Empty && string.IsNullOrEmpty(ViewModel.ErrorMessage))
         {
+            await _workbench.LoadAsync(ViewModel.SavedProfileId);
             _navigation.Navigate(GlobalDestination.Home);
         }
     }

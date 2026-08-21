@@ -1,4 +1,5 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using InfiniTranseon.Contracts.Runtime;
@@ -126,11 +127,11 @@ public sealed partial class RunningTargetsViewModel : PageViewModelBase
         EngineStatus = controlService.Status;
         EngineStatusDetail = EngineStatusPresenter.DetailFor(controlService.LastChange);
         StartCommand = new AsyncRelayCommand(StartAsync, CanStart);
-        StopCommand = new AsyncRelayCommand(StopAsync, CanStop);
-        TogglePauseCommand = new AsyncRelayCommand(TogglePauseAsync, () => CanStop());
-        ToggleOverlayCommand = new AsyncRelayCommand(ToggleOverlayAsync, () => CanStop());
+        StopCommand = new AsyncRelayCommand(StopAsync, () => CanControlRuntime);
+        TogglePauseCommand = new AsyncRelayCommand(TogglePauseAsync, () => CanControlRuntime);
+        ToggleOverlayCommand = new AsyncRelayCommand(ToggleOverlayAsync, () => CanControlRuntime);
         ManualOcrCommand = new AsyncRelayCommand(
-            ManualOcrAsync, () => CanStop() && !IsManualOcrUnavailable);
+            ManualOcrAsync, () => CanControlRuntime && !IsManualOcrUnavailable);
         _controlService.StatusChanged += OnStatusChanged;
         _controlService.TargetsChanged += OnTargetsChanged;
     }
@@ -159,6 +160,14 @@ public sealed partial class RunningTargetsViewModel : PageViewModelBase
     // stays disabled with the honest protocol reason instead of silently no-oping.
     [ObservableProperty]
     public partial bool IsManualOcrUnavailable { get; private set; }
+
+    /// <summary>
+    /// True while an EngineHost is live enough for the run controls to act on it. The controls
+    /// and the panel that hosts them share this single condition, because an engine whose last
+    /// capture target disappeared is still running and still has to be stoppable.
+    /// </summary>
+    public bool CanControlRuntime => EngineStatus is EngineRuntimeStatus.Running
+        or EngineRuntimeStatus.Restarting;
 
     public IAsyncRelayCommand StartCommand { get; }
 
@@ -190,8 +199,6 @@ public sealed partial class RunningTargetsViewModel : PageViewModelBase
         SelectedProfile is not null && EngineStatus is EngineRuntimeStatus.Stopped
             or EngineRuntimeStatus.Faulted or EngineRuntimeStatus.ExecutableNotFound;
 
-    private bool CanStop() => EngineStatus is EngineRuntimeStatus.Running
-        or EngineRuntimeStatus.Restarting;
 
     private Task StartAsync() => RunGuardedAsync(async () =>
     {
@@ -319,6 +326,38 @@ public sealed partial class HistoryViewModel : PageViewModelBase
     [ObservableProperty]
     public partial bool IsHistoryDisabled { get; private set; }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConfigureProfileHistory))]
+    [NotifyPropertyChangedFor(nameof(CanEditProfileHistoryLimits))]
+    public partial bool IsGlobalHistoryDisabled { get; private set; }
+
+    [ObservableProperty]
+    public partial bool IsProfileHistoryDisabled { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConfigureProfileHistory))]
+    [NotifyPropertyChangedFor(nameof(CanEditProfileHistoryLimits))]
+    public partial bool HasProfileHistoryConfiguration { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditProfileHistoryLimits))]
+    public partial bool ProfileHistoryEnabled { get; private set; }
+
+    [ObservableProperty]
+    public partial int ProfileHistoryMaxAgeDays { get; private set; } = 30;
+
+    [ObservableProperty]
+    public partial long ProfileHistoryMaxBytes { get; private set; } = 500L * 1024 * 1024;
+
+    [ObservableProperty]
+    public partial int GlobalHistoryMaxAgeDays { get; private set; } = 30;
+
+    public bool CanConfigureProfileHistory =>
+        HasProfileHistoryConfiguration && !IsGlobalHistoryDisabled;
+
+    public bool CanEditProfileHistoryLimits =>
+        CanConfigureProfileHistory && ProfileHistoryEnabled;
+
     public HistoryViewModel(IHistoryService historyService, ISettingsService settingsService)
     {
         ArgumentNullException.ThrowIfNull(historyService);
@@ -334,18 +373,53 @@ public sealed partial class HistoryViewModel : PageViewModelBase
     public void SelectProfile(Guid? profileId) => _historyService.SelectProfile(profileId);
 
     public override Task InitializeAsync(CancellationToken cancellationToken = default) =>
+        RunGuardedAsync(() => ReloadAsync(cancellationToken));
+
+    public Task UpdateProfileConfigurationAsync(
+        bool enabled,
+        int maxAgeDays,
+        long maxBytes,
+        CancellationToken cancellationToken = default) =>
         RunGuardedAsync(async () =>
         {
-            ApplicationSettings settings =
-                await _settingsService.GetSettingsAsync(cancellationToken).ConfigureAwait(true);
-            IsHistoryDisabled = settings.HistoryRetention == HistoryRetention.Off;
-
-            IReadOnlyList<HistoryEvent> events =
-                await _historyService.GetEventsAsync(cancellationToken).ConfigureAwait(true);
-            _allEvents.Clear();
-            _allEvents.AddRange(events);
-            ApplyFilter(string.Empty, days: 0);
+            ProfileHistoryConfiguration? current =
+                await _historyService.GetProfileConfigurationAsync(cancellationToken)
+                    .ConfigureAwait(true);
+            if (current is null)
+                throw new InvalidOperationException("History settings require a selected profile.");
+            await _historyService.UpdateProfileConfigurationAsync(
+                current with
+                {
+                    Enabled = enabled,
+                    MaxAgeDays = maxAgeDays,
+                    MaxBytes = maxBytes,
+                },
+                cancellationToken).ConfigureAwait(true);
+            await ReloadAsync(cancellationToken).ConfigureAwait(true);
         });
+
+    private async Task ReloadAsync(CancellationToken cancellationToken)
+    {
+        ApplicationSettings settings =
+            await _settingsService.GetSettingsAsync(cancellationToken).ConfigureAwait(true);
+        ProfileHistoryConfiguration? profileConfiguration =
+            await _historyService.GetProfileConfigurationAsync(cancellationToken)
+                .ConfigureAwait(true);
+        IsGlobalHistoryDisabled = settings.HistoryRetention == HistoryRetention.Off;
+        GlobalHistoryMaxAgeDays = settings.HistoryRetention == HistoryRetention.Days90 ? 90 : 30;
+        HasProfileHistoryConfiguration = profileConfiguration is not null;
+        ProfileHistoryEnabled = profileConfiguration?.Enabled ?? false;
+        ProfileHistoryMaxAgeDays = profileConfiguration?.MaxAgeDays ?? GlobalHistoryMaxAgeDays;
+        ProfileHistoryMaxBytes = profileConfiguration?.MaxBytes ?? 500L * 1024 * 1024;
+        IsProfileHistoryDisabled = profileConfiguration is { Enabled: false };
+        IsHistoryDisabled = IsGlobalHistoryDisabled || IsProfileHistoryDisabled;
+
+        IReadOnlyList<HistoryEvent> events =
+            await _historyService.GetEventsAsync(cancellationToken).ConfigureAwait(true);
+        _allEvents.Clear();
+        _allEvents.AddRange(events);
+        ApplyFilter(string.Empty, days: 0);
+    }
 
     public void ApplyFilter(string? query, int days)
     {
@@ -556,9 +630,9 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
     }
 
     // Pure and WinUI-free so the page code-behind and unit tests share one classification rule.
-    // Custom and local-model rows are identified by their own flags before capability; a built-in
-    // row's Kind carries "OCR" (see BuiltInProviderSpecs) whenever its capability is not translation,
-    // which is what distinguishes Cloud OCR from the defensive Other fallback.
+    // Custom and local-model rows are identified by their own flags before capability; the remaining
+    // rows are classified by the capability flags the catalog set, never by the Kind text, which is
+    // localized and would silently reclassify every OCR provider in another language.
     public static ProviderGroup ClassifyGroup(ProviderRow provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -574,7 +648,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
         {
             return ProviderGroup.CloudTranslation;
         }
-        if (provider.Kind.Contains("OCR", StringComparison.OrdinalIgnoreCase))
+        if (provider.IsOcrProvider)
         {
             return ProviderGroup.CloudOcr;
         }
@@ -589,6 +663,14 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
 
     [ObservableProperty]
     public partial string ModelOperationStatus { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// How far the transfer has got, as figures only — transferred of total, share, files done of
+    /// files declared. A download that runs for minutes has to say more than "in progress", and
+    /// numbers say it in every language.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ModelOperationDetail { get; private set; } = string.Empty;
 
     [ObservableProperty]
     public partial bool ModelOperationSucceeded { get; private set; }
@@ -622,7 +704,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
         ProviderRow provider,
         bool userApproved,
         CancellationToken cancellationToken = default) =>
-        RunGuardedAsync(async () =>
+        RunReportedAsync(async () =>
         {
             LocalModelManagementService models = _localModels ??
                 throw new InvalidOperationException(
@@ -648,6 +730,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
             ModelOperationSucceeded = false;
             ModelOperationPercent = 0;
             ModelOperationStatus = provider.Name;
+            ModelOperationDetail = string.Empty;
             try
             {
                 var progress = new Progress<LocalModelOperationProgress>(value =>
@@ -658,7 +741,17 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
                             value.BytesReceived * 100d / value.TotalBytes,
                             0,
                             100);
-                    ModelOperationStatus = value.RelativePath;
+                    // The package name stays put; the file name moves. Dropping the name left the
+                    // line reading "model.bin", which does not say what is being downloaded.
+                    ModelOperationStatus = $"{provider.Name} · {value.RelativePath}";
+                    ModelOperationDetail = string.Format(
+                        CultureInfo.CurrentCulture,
+                        "{0} / {1} · {2:0}% · {3}/{4}",
+                        ByteSizeText.Format(value.BytesReceived),
+                        ByteSizeText.Format(value.TotalBytes),
+                        ModelOperationPercent,
+                        value.CompletedFiles,
+                        value.TotalFiles);
                 });
                 await models.InstallAsync(
                     modelId,
@@ -673,6 +766,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
             catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
             {
                 ModelOperationStatus = string.Empty;
+                ModelOperationDetail = string.Empty;
             }
             finally
             {
@@ -688,7 +782,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
         ProviderRow provider,
         bool userConfirmed,
         CancellationToken cancellationToken = default) =>
-        RunGuardedAsync(async () =>
+        RunReportedAsync(async () =>
         {
             LocalModelManagementService models = _localModels ??
                 throw new InvalidOperationException(
@@ -712,6 +806,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
             ModelOperationSucceeded = false;
             ModelOperationPercent = 0;
             ModelOperationStatus = provider.Name;
+            ModelOperationDetail = string.Empty;
             try
             {
                 await models.RemoveAsync(
@@ -725,6 +820,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
             catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
             {
                 ModelOperationStatus = string.Empty;
+                ModelOperationDetail = string.Empty;
             }
             finally
             {
@@ -769,17 +865,21 @@ public sealed partial class SettingsViewModel : PageViewModelBase
 {
     private readonly ISettingsService _settingsService;
     private readonly IAppUpdateService _updateService;
+    private readonly IRuntimeControlService _runtimeControlService;
 
     public SettingsViewModel(
         ISettingsService settingsService,
         RuntimeCapabilitiesService capabilitiesService,
-        IAppUpdateService updateService)
+        IAppUpdateService updateService,
+        IRuntimeControlService runtimeControlService)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(capabilitiesService);
         ArgumentNullException.ThrowIfNull(updateService);
+        ArgumentNullException.ThrowIfNull(runtimeControlService);
         _settingsService = settingsService;
         _updateService = updateService;
+        _runtimeControlService = runtimeControlService;
         UpdateSnapshot = updateService.Snapshot;
         RuntimeCapabilities capabilities = capabilitiesService.Capabilities;
         MaxTargets = capabilities.MaxTargets;
@@ -870,27 +970,27 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     }
 
     public Task UpdateStrictOfflineAsync(bool strictOffline, CancellationToken cancellationToken = default) =>
-        ApplyAsync(Settings with { StrictOffline = strictOffline }, cancellationToken);
+        ApplyAsync(Settings with { StrictOffline = strictOffline }, cancellationToken, applyRuntime: true);
 
     public Task UpdateHistoryRetentionAsync(
         HistoryRetention retention,
         CancellationToken cancellationToken = default) =>
-        ApplyAsync(Settings with { HistoryRetention = retention }, cancellationToken);
+        ApplyAsync(Settings with { HistoryRetention = retention }, cancellationToken, applyRuntime: true);
 
     public Task UpdatePerformancePresetAsync(
         AppPerformancePreset preset,
         CancellationToken cancellationToken = default) =>
-        ApplyAsync(Settings with { PerformancePreset = preset }, cancellationToken);
+        ApplyAsync(Settings with { PerformancePreset = preset }, cancellationToken, applyRuntime: true);
 
     public Task UpdateOcrBackendAsync(
         AppOcrBackend backend,
         CancellationToken cancellationToken = default) =>
-        ApplyAsync(Settings with { OcrBackend = backend }, cancellationToken);
+        ApplyAsync(Settings with { OcrBackend = backend }, cancellationToken, applyRuntime: true);
 
     public Task UpdateReducedMotionAsync(
         bool reducedMotion,
         CancellationToken cancellationToken = default) =>
-        ApplyAsync(Settings with { ReducedMotion = reducedMotion }, cancellationToken);
+        ApplyAsync(Settings with { ReducedMotion = reducedMotion }, cancellationToken, applyRuntime: true);
 
     public Task UpdateCloseToTrayAsync(
         bool closeToTray,
@@ -949,10 +1049,18 @@ public sealed partial class SettingsViewModel : PageViewModelBase
         }
     }
 
-    private Task ApplyAsync(ApplicationSettings updated, CancellationToken cancellationToken) =>
+    private Task ApplyAsync(
+        ApplicationSettings updated,
+        CancellationToken cancellationToken,
+        bool applyRuntime = false) =>
         RunGuardedAsync(async () =>
         {
             await _settingsService.UpdateAsync(updated, cancellationToken).ConfigureAwait(true);
             Settings = updated;
+            if (applyRuntime)
+            {
+                await _runtimeControlService.ApplySettingsAsync(cancellationToken)
+                    .ConfigureAwait(true);
+            }
         });
 }

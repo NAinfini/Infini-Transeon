@@ -35,7 +35,7 @@ public static class ProfileOverlaySnapshotFactory
             _ => throw new ArgumentOutOfRangeException(nameof(region)),
         };
         OverlayPixelRect? destination = region.Overlay.Mode is OverlayMode.Offset or OverlayMode.FloatingPanel
-            ? Map(region.Overlay.OffsetDestination ?? throw new ArgumentException(
+            ? ToPixels(region.Overlay.OffsetDestination ?? throw new ArgumentException(
                 "Offset and floating overlay modes require a destination region.", nameof(region)),
                 targetPixelWidth,
                 targetPixelHeight)
@@ -69,13 +69,13 @@ public static class ProfileOverlaySnapshotFactory
             AutomaticShrink = region.Overlay.AutomaticShrink,
             NoScrollOverflow = region.Overlay.NoScrollOverflow,
         };
-        OverlayPixelRect bounds = Map(
+        OverlayPixelRect bounds = ToPixels(
             detectedBounds ?? region.Bounds, targetPixelWidth, targetPixelHeight);
         _ = new OverlayRegionSnapshot(region.RegionId, bounds, style, []);
         return (bounds, style);
     }
 
-    private static OverlayPixelRect Map(NormalizedRect value, int width, int height)
+    public static OverlayPixelRect ToPixels(NormalizedRect value, int width, int height)
     {
         int left = Math.Clamp((int)Math.Floor(value.X * width), 0, width);
         int top = Math.Clamp((int)Math.Floor(value.Y * height), 0, height);

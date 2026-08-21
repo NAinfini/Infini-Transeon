@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
@@ -139,8 +139,8 @@ public sealed partial class RegionCanvas : UserControl
 
     /// <summary>
     /// Raised when a drag or resize gesture begins on an existing region, before any mutation.
-    /// The host should push one undo point here (mirrors the original page's
-    /// <c>MarkEditorChanged(createUndoPoint: true)</c> on pointer-press).
+    /// The host should arm one undo point here; it becomes an undo step only once the gesture
+    /// really moves the region.
     /// </summary>
     public event EventHandler<WorkbenchRegionItem>? RegionDragStarted;
 
@@ -153,8 +153,8 @@ public sealed partial class RegionCanvas : UserControl
     public event EventHandler<RegionDrawStartedEventArgs>? RegionAdded;
 
     /// <summary>Raised after a region's bounds were mutated (drag, resize, draw, or keyboard
-    /// nudge). The canvas has already clamped and applied the new bounds; the host only needs to
-    /// mark the profile dirty and refresh any bound inspector fields.</summary>
+    /// nudge). The canvas has already clamped and applied the new bounds, which is what marks the
+    /// profile dirty; the host only needs to refresh any bound inspector fields.</summary>
     public event EventHandler<WorkbenchRegionItem>? RegionChanged;
 
     /// <summary>Raised when draw mode ends (pointer released, or <see cref="CancelDraw"/>), so the

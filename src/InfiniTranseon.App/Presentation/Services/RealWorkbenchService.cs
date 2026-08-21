@@ -22,21 +22,22 @@ public sealed class RealWorkbenchService : IWorkbenchService
     private readonly ProfileRepository _profiles;
     private readonly IRuntimeControlService _runtime;
     private readonly RuntimeCapabilitiesService _capabilities;
-    private readonly CustomRestAdapterStore? _customAdapters;
+    private readonly ISettingsService _settings;
 
     public RealWorkbenchService(
         ProfileRepository profiles,
         IRuntimeControlService runtime,
         RuntimeCapabilitiesService capabilities,
-        CustomRestAdapterStore? customAdapters = null)
+        ISettingsService settings)
     {
         ArgumentNullException.ThrowIfNull(profiles);
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(capabilities);
+        ArgumentNullException.ThrowIfNull(settings);
         _profiles = profiles;
         _runtime = runtime;
         _capabilities = capabilities;
-        _customAdapters = customAdapters;
+        _settings = settings;
     }
 
     public async Task<WorkbenchProfileDraft?> LoadAsync(
@@ -61,14 +62,14 @@ public sealed class RealWorkbenchService : IWorkbenchService
             await _profiles.LoadAsync(profile.ProfileId, cancellationToken).ConfigureAwait(false)
             ?? throw new KeyNotFoundException("Profile was not found.");
         ProfileDocument candidate = Apply(existing, profile);
-        var knownProviders = ProviderCatalog.Default
-            .Where(provider =>
-                provider.IsSelectable &&
-                provider.Capability == CatalogProviderCapability.Translation)
+        // The picker and the validator have to agree on what exists, so both read the provider list.
+        // A local model's selectability is a fact about this machine, not about the built-in catalog:
+        // reading the static catalog rejected the very translator the channel editor had just offered.
+        IReadOnlyList<ProviderRow> providers =
+            await _settings.GetProvidersAsync(cancellationToken).ConfigureAwait(false);
+        var knownProviders = providers
+            .Where(provider => provider.IsSelectable && provider.IsTranslationProvider)
             .Select(provider => provider.Id)
-            .Concat(_customAdapters?.GetCatalogProviders()
-                .Where(provider => provider.IsSelectable)
-                .Select(provider => provider.Id) ?? [])
             .Concat(existing.Targets
                 .SelectMany(target => target.RemainingAreaRegion is null
                     ? target.Regions
@@ -79,10 +80,17 @@ public sealed class RealWorkbenchService : IWorkbenchService
                     .Concat(channel.RefinementSteps.Select(step => step.ProviderId))))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .ToHashSet(StringComparer.Ordinal);
+        var knownCloudOcrProviders = providers
+            .Where(provider => provider.IsSelectable &&
+                provider.IsOcrProvider &&
+                !provider.IsLocalModel)
+            .Select(provider => provider.Id)
+            .ToHashSet(StringComparer.Ordinal);
         ProfileValidationResult validation = new ProfileValidator().Validate(
             candidate,
             _capabilities.Capabilities,
-            knownProviders);
+            knownProviders,
+            knownCloudOcrProviders);
         ProfileValidationIssue[] errors = validation.Issues
             .Where(issue => issue.Severity == ProfileIssueSeverity.Error)
             .ToArray();

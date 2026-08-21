@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
@@ -36,9 +36,8 @@ public sealed partial class OverlaySectionPage : Page
         public override string ToString() => Display;
     }
 
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     private readonly IProfileService _profiles;
     private Guid _requestedProfileId;
@@ -116,7 +115,7 @@ public sealed partial class OverlaySectionPage : Page
         RefreshRegionSelector();
     }
 
-    private void OnTargetSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnTargetSelectionChanged(object? sender, EventArgs e)
     {
         if (TargetSelector.SelectedItem is WorkbenchTargetItem target)
         {
@@ -134,7 +133,7 @@ public sealed partial class OverlaySectionPage : Page
         RefreshEditor();
     }
 
-    private void OnRegionSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnRegionSelectionChanged(object? sender, EventArgs e)
     {
         if (RegionSelector.SelectedItem is WorkbenchRegionItem region)
         {
@@ -166,7 +165,7 @@ public sealed partial class OverlaySectionPage : Page
                 "NoCover" => 4,
                 _ => 0,
             };
-            SelectCombo(BackgroundModeBox, region.OverlayBackgroundMode);
+            BackgroundModeBox.SelectedItem = region.OverlayBackgroundMode;
             BackgroundColorBox.Text = region.BackgroundColor ?? string.Empty;
             TextColorBox.Text = region.TextColor ?? string.Empty;
             OpacitySlider.Value = region.OverlayOpacity;
@@ -207,13 +206,14 @@ public sealed partial class OverlaySectionPage : Page
         };
     });
 
-    private void OnBackgroundModeChanged(object sender, SelectionChangedEventArgs e) => CommitAndRender(() =>
+    private void OnBackgroundModeChanged(object? sender, EventArgs e) => CommitAndRender(() =>
     {
         if (ViewModel.SelectedRegion is not { } region)
         {
             return;
         }
-        region.OverlayBackgroundMode = SelectedText(BackgroundModeBox, region.OverlayBackgroundMode);
+        region.OverlayBackgroundMode =
+            BackgroundModeBox.SelectedItem as string ?? region.OverlayBackgroundMode;
         _updating = true;
         AutomaticContrastToggle.IsOn = string.Equals(
             region.OverlayBackgroundMode,
@@ -229,11 +229,11 @@ public sealed partial class OverlaySectionPage : Page
             return;
         }
         _updating = true;
-        SelectCombo(
-            BackgroundModeBox,
-            AutomaticContrastToggle.IsOn ? "AutomaticContrastBlur" : "Translucent");
+        BackgroundModeBox.SelectedItem =
+            AutomaticContrastToggle.IsOn ? "AutomaticContrastBlur" : "Translucent";
         _updating = false;
-        CommitAndRender(() => region.OverlayBackgroundMode = SelectedText(BackgroundModeBox, region.OverlayBackgroundMode));
+        CommitAndRender(() => region.OverlayBackgroundMode =
+            BackgroundModeBox.SelectedItem as string ?? region.OverlayBackgroundMode);
     }
 
     private void OnFieldChanged(object sender, RoutedEventArgs e) => CommitAndRender(() =>
@@ -286,12 +286,12 @@ public sealed partial class OverlaySectionPage : Page
         {
             return;
         }
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
         mutate();
         RenderPreview();
     }
 
-    private void OnPreviewStateChanged(object sender, SelectionChangedEventArgs e) => RenderPreview();
+    private void OnPreviewStateChanged(object? sender, EventArgs e) => RenderPreview();
 
     private void RenderPreview()
     {
@@ -345,21 +345,6 @@ public sealed partial class OverlaySectionPage : Page
         PageInfoBar.Message = message;
         PageInfoBar.IsOpen = true;
     }
-
-    private static void SelectCombo(ComboBox combo, string value)
-    {
-        combo.SelectedItem = combo.Items
-            .OfType<ComboBoxItem>()
-            .FirstOrDefault(item => string.Equals(
-                item.Tag?.ToString() ?? item.Content?.ToString(),
-                value,
-                StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string SelectedText(ComboBox combo, string fallback) =>
-        (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ??
-        (combo.SelectedItem as ComboBoxItem)?.Content?.ToString() ??
-        fallback;
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

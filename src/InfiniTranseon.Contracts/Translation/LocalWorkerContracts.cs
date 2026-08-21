@@ -18,6 +18,17 @@ public sealed record LocalWorkerBootstrap(
     string BootstrapSecretBase64,
     string ManagedModelDirectory = "");
 
+/// <summary>
+/// The worker's answer to the bootstrap: it proves it holds the secret the launcher just handed it,
+/// over the pipe the launcher opened. Both sides read and write this same shape, so the field names
+/// on the wire cannot drift apart.
+/// </summary>
+public sealed record LocalWorkerHandshake(
+    int ProtocolVersion,
+    Guid WorkerSessionEpoch,
+    int WorkerProcessId,
+    string Proof);
+
 public sealed record LocalTranslationRequest(
     int ProtocolVersion,
     Guid WorkerSessionEpoch,

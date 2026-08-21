@@ -17,9 +17,15 @@ public interface IRuntimeOverlaySink
 
 public interface IRuntimeTranslationRecordSink
 {
+    /// <summary>
+    /// Records one source generation and everything the channels produced for it. The region name
+    /// travels with the record because the profile it came from is free to rename or delete that
+    /// region afterwards, and a history entry has to keep saying where its text was read.
+    /// </summary>
     ValueTask SaveAsync(
         Guid profileId,
         TextGeneration source,
+        string regionName,
         IReadOnlyList<TranslationOutput> outputs,
         CancellationToken cancellationToken);
 }
@@ -743,8 +749,11 @@ public sealed class RuntimeTranslationPipeline :
             Guid displayRegionId = generation.SourceToken.Area.Kind == CaptureAreaKind.UserRegion
                 ? region.RegionId
                 : generation.SourceToken.TextTrackId.Value;
+            OverlayPixelRect[] sourceLines = [.. generation.Lines.Select(line =>
+                ProfileOverlaySnapshotFactory.ToPixels(
+                    line.Bounds, target.TargetPixelWidth, target.TargetPixelHeight))];
             OverlayDesiredState initial = coordinator.BeginRegion(
-                displayRegionId, generation.SourceToken, bounds, style, channels);
+                displayRegionId, generation.SourceToken, bounds, style, sourceLines, channels);
             if (!IsCurrentExecution(key, execution, target.ProfileRevision)) return;
             await _overlay.ApplyAsync(initial, cancellationToken).ConfigureAwait(false);
             var outputs = new List<TranslationOutput>();
@@ -775,6 +784,7 @@ public sealed class RuntimeTranslationPipeline :
                 await _records.SaveAsync(
                     target.Profile.ProfileId,
                     generation,
+                    region.Name,
                     outputs.AsReadOnly(),
                     cancellationToken).ConfigureAwait(false);
             string? latestTranslation = outputs

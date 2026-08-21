@@ -22,9 +22,8 @@ public sealed partial class ProfileWorkspacePage : Page
     private const string UnsavedGlyph = "";
     private const string SavedGlyph = "";
 
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private readonly WorkbenchViewModel _workbench;
     private readonly AppNavigationState _navigation;
     private ProfileWorkspaceNavigation? _route;

@@ -72,11 +72,11 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                         <TextBlock x:Name="ThemeSettingLabel" x:Uid="ThemeSettingLabel" Style="{StaticResource BodyTextStyle}" />
                                         <TextBlock x:Uid="ThemeSettingHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <ComboBox x:Name="ThemeSelector" AutomationProperties.LabeledBy="{x:Bind ThemeSettingLabel}" Grid.Column="1" MinWidth="140" SelectionChanged="OnThemeChanged">
-                                        <ComboBoxItem x:Uid="ThemeSystem" />
-                                        <ComboBoxItem x:Uid="ThemeLight" />
-                                        <ComboBoxItem x:Uid="ThemeDark" />
-                                    </ComboBox>
+                                    <controls:SelectBox x:Name="ThemeSelector" AutomationProperties.LabeledBy="{x:Bind ThemeSettingLabel}" Grid.Column="1" MinWidth="140" VerticalAlignment="Center" SelectionChanged="OnThemeChanged">
+                                        <ListViewItem x:Uid="ThemeSystem" />
+                                        <ListViewItem x:Uid="ThemeLight" />
+                                        <ListViewItem x:Uid="ThemeDark" />
+                                    </controls:SelectBox>
                                 </Grid>
                             </Border>
                             <Border x:Name="LanguageSettingRow" Style="{StaticResource SettingRowStyle}">
@@ -87,19 +87,10 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                         <TextBlock x:Name="LanguageSettingLabel" x:Uid="LanguageSettingLabel" Style="{StaticResource BodyTextStyle}" />
                                         <TextBlock x:Uid="LanguageSettingHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <ComboBox x:Name="LanguageSelector" AutomationProperties.LabeledBy="{x:Bind LanguageSettingLabel}" Grid.Column="1" MinWidth="160" SelectionChanged="OnLanguageChanged">
-                                        <ComboBoxItem x:Uid="LanguageOptionEnUs" />
-                                        <ComboBoxItem x:Uid="LanguageOptionZhCn" />
-                                    </ComboBox>
-                                    <InfoBar
-                                        x:Name="LanguageRestartBar"
-                                        x:Uid="LanguageRestartBar"
-                                        Grid.Row="1"
-                                        Grid.ColumnSpan="2"
-                                        Margin="0,8,0,0"
-                                        IsOpen="False"
-                                        IsClosable="True"
-                                        Severity="Informational" />
+                                    <controls:SelectBox x:Name="LanguageSelector" AutomationProperties.LabeledBy="{x:Bind LanguageSettingLabel}" Grid.Column="1" MinWidth="160" VerticalAlignment="Center" SelectionChanged="OnLanguageChanged">
+                                        <ListViewItem x:Uid="LanguageOptionEnUs" />
+                                        <ListViewItem x:Uid="LanguageOptionZhCn" />
+                                    </controls:SelectBox>
                                 </Grid>
                             </Border>
                             <Border x:Name="ReducedMotionSettingRow" Style="{StaticResource SettingRowStyle}">
@@ -166,17 +157,18 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                                     Click="OnEditHotkeyClick" />
                                                 <StackPanel Grid.Column="2" Spacing="{StaticResource SpaceXS}">
-                                                    <ComboBox
+                                                    <controls:SelectBox
                                                         x:Uid="HotkeyScopeSelector"
                                                         Tag="{x:Bind}"
                                                         MinWidth="150"
+                                                        VerticalAlignment="Center"
                                                         IsEnabled="{x:Bind CanChangeScope, Mode=OneWay}"
                                                         Loaded="OnHotkeyScopeLoaded"
                                                         SelectionChanged="OnHotkeyScopeChanged">
-                                                        <ComboBoxItem x:Uid="HotkeyScopeAllTargets" Tag="AllRunningTargets" />
-                                                        <ComboBoxItem x:Uid="HotkeyScopeForeground" Tag="ForegroundMatchingTarget" />
-                                                        <ComboBoxItem x:Uid="HotkeyScopeSpecificGroup" Tag="SpecificTargetGroup" />
-                                                    </ComboBox>
+                                                        <ListViewItem x:Uid="HotkeyScopeAllTargets" Tag="AllRunningTargets" />
+                                                        <ListViewItem x:Uid="HotkeyScopeForeground" Tag="ForegroundMatchingTarget" />
+                                                        <ListViewItem x:Uid="HotkeyScopeSpecificGroup" Tag="SpecificTargetGroup" />
+                                                    </controls:SelectBox>
                                                     <Button
                                                         x:Uid="HotkeySpecificTargetsButton"
                                                         Tag="{x:Bind}"
@@ -226,11 +218,11 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                         <TextBlock x:Name="HistoryRetentionLabel" x:Uid="HistoryRetentionLabel" Style="{StaticResource BodyTextStyle}" />
                                         <TextBlock x:Uid="HistoryRetentionHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <ComboBox x:Name="RetentionSelector" AutomationProperties.LabeledBy="{x:Bind HistoryRetentionLabel}" Grid.Column="1" MinWidth="140" SelectionChanged="OnRetentionChanged">
-                                        <ComboBoxItem x:Uid="HistoryOff" />
-                                        <ComboBoxItem x:Uid="History30Days" />
-                                        <ComboBoxItem x:Uid="History90Days" />
-                                    </ComboBox>
+                                    <controls:SelectBox x:Name="RetentionSelector" AutomationProperties.LabeledBy="{x:Bind HistoryRetentionLabel}" Grid.Column="1" MinWidth="140" VerticalAlignment="Center" SelectionChanged="OnRetentionChanged">
+                                        <ListViewItem x:Uid="HistoryOff" />
+                                        <ListViewItem x:Uid="History30Days" />
+                                        <ListViewItem x:Uid="History90Days" />
+                                    </controls:SelectBox>
                                 </Grid>
                             </Border>
                         </StackPanel>
@@ -244,11 +236,11 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                         <TextBlock x:Name="PerformancePresetLabel" x:Uid="PerformancePresetLabel" Style="{StaticResource BodyTextStyle}" />
                                         <TextBlock x:Uid="PerformancePresetHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" MaxWidth="620" />
                                     </StackPanel>
-                                    <ComboBox x:Name="PerformanceSelector" AutomationProperties.LabeledBy="{x:Bind PerformancePresetLabel}" Grid.Column="1" MinWidth="160" SelectionChanged="OnPerformanceChanged">
-                                        <ComboBoxItem x:Uid="PerformanceEco" />
-                                        <ComboBoxItem x:Uid="PerformanceBalanced" />
-                                        <ComboBoxItem x:Uid="PerformanceHigh" />
-                                    </ComboBox>
+                                    <controls:SelectBox x:Name="PerformanceSelector" AutomationProperties.LabeledBy="{x:Bind PerformancePresetLabel}" Grid.Column="1" MinWidth="160" VerticalAlignment="Center" SelectionChanged="OnPerformanceChanged">
+                                        <ListViewItem x:Uid="PerformanceEco" />
+                                        <ListViewItem x:Uid="PerformanceBalanced" />
+                                        <ListViewItem x:Uid="PerformanceHigh" />
+                                    </controls:SelectBox>
                                 </Grid>
                             </Border>
                             <Border x:Name="OcrBackendSettingRow" Style="{StaticResource SettingRowStyle}">
@@ -258,11 +250,11 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                         <TextBlock x:Name="OcrBackendLabel" x:Uid="OcrBackendLabel" Style="{StaticResource BodyTextStyle}" />
                                         <TextBlock x:Uid="OcrBackendHint" Style="{StaticResource CaptionTextStyle}" TextWrapping="Wrap" MaxWidth="620" />
                                     </StackPanel>
-                                    <ComboBox x:Name="OcrBackendSelector" AutomationProperties.LabeledBy="{x:Bind OcrBackendLabel}" Grid.Column="1" MinWidth="160" SelectionChanged="OnOcrBackendChanged">
-                                        <ComboBoxItem x:Uid="OcrBackendAutomatic" />
-                                        <ComboBoxItem x:Uid="OcrBackendWindows" />
-                                        <ComboBoxItem x:Uid="OcrBackendLocal" />
-                                    </ComboBox>
+                                    <controls:SelectBox x:Name="OcrBackendSelector" AutomationProperties.LabeledBy="{x:Bind OcrBackendLabel}" Grid.Column="1" MinWidth="160" VerticalAlignment="Center" SelectionChanged="OnOcrBackendChanged">
+                                        <ListViewItem x:Uid="OcrBackendAutomatic" />
+                                        <ListViewItem x:Uid="OcrBackendWindows" />
+                                        <ListViewItem x:Uid="OcrBackendLocal" />
+                                    </controls:SelectBox>
                                 </Grid>
                             </Border>
                         </StackPanel>

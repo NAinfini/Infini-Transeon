@@ -12,19 +12,20 @@ namespace InfiniTranseon.App.Features.Settings;
 
 public sealed partial class ServicesModelsPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     public ServicesModelsPage()
     {
         ViewModel = App.GetService<ServicesModelsViewModel>();
         _settings = App.GetService<ISettingsService>();
+        _runtime = App.GetService<IRuntimeControlService>();
         _dialogs = new DialogService(() => XamlRoot);
         InitializeComponent();
     }
 
     private readonly ISettingsService _settings;
+    private readonly IRuntimeControlService _runtime;
     private readonly DialogService _dialogs;
     public ServicesModelsViewModel ViewModel { get; }
 
@@ -98,6 +99,7 @@ public sealed partial class ServicesModelsPage : Page
                 [provider.Id] = endpoint,
             };
             await _settings.UpdateAsync(current with { ProviderEndpoints = endpoints });
+            await _runtime.ApplySettingsAsync();
             await ViewModel.InitializeAsync();
             RebuildGroups();
             PageNoticeBar.Title = Strings.GetString("ProviderEndpointSavedTitle");

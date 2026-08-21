@@ -10,7 +10,10 @@
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceS}">
                     <TextBlock Text="{x:Bind Item.Timestamp, Mode=OneWay}" Style="{StaticResource MetricTextStyle}" />
                     <TextBlock Text="{x:Bind Item.ProfileName, Mode=OneWay}" Style="{StaticResource CaptionTextStyle}" />
-                    <TextBlock Text="{x:Bind Item.Region, Mode=OneWay}" Style="{StaticResource CaptionTextStyle}" />
+                    <TextBlock
+                        Text="{x:Bind Item.Region, Mode=OneWay}"
+                        Visibility="{x:Bind RegionVisibility, Mode=OneWay}"
+                        Style="{StaticResource CaptionTextStyle}" />
                 </StackPanel>
                 <Button
                     x:Uid="CopySourceButton"

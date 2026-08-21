@@ -13,18 +13,10 @@
       inline → watch the quota and worst-case budget update live.
       FORM: region selector + budget header, then stacked pipeline cards (spec 5.5).
     -->
+    <!-- No page heading: the workspace breadcrumb already names the section, so a second copy only
+         pushed the controls down the page. -->
     <ScrollViewer Padding="{StaticResource PagePadding}">
         <StackPanel Spacing="{StaticResource SpaceM}">
-            <StackPanel Spacing="{StaticResource SpaceXS}">
-                <TextBlock x:Uid="WorkspaceChannelsTitle" Style="{StaticResource PageTitleStyle}" />
-                <TextBlock
-                    x:Uid="WorkspaceChannelsSubtitle"
-                    Style="{StaticResource CaptionTextStyle}"
-                    TextWrapping="Wrap"
-                    MaxWidth="760"
-                    HorizontalAlignment="Left" />
-            </StackPanel>
-
             <InfoBar x:Name="PageInfoBar" IsOpen="False" IsClosable="True" />
 
             <Grid ColumnSpacing="{StaticResource SpaceM}">
@@ -32,16 +24,24 @@
                     <ColumnDefinition Width="220" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <ComboBox
+                <!-- Every selector below is populated from code-behind with draft records. Without
+                     DisplayMemberPath a ComboBox renders each item through ToString(), and a
+                     positional record prints its whole member list, so the user saw
+                     "WorkbenchTranslationGroupDraft { TranslationGroupId = ..., Name = Default }". -->
+                <controls:SelectBox
                     x:Uid="WorkbenchTargetSelector"
                     x:Name="TargetSelector"
+                    DisplayMemberPath="Name"
                     HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
                     SelectionChanged="OnTargetSelectionChanged" />
-                <ComboBox
+                <controls:SelectBox
                     x:Uid="ChannelsRegionSelector"
                     x:Name="RegionSelector"
+                    DisplayMemberPath="Name"
                     Grid.Column="1"
                     HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
                     SelectionChanged="OnRegionSelectionChanged" />
             </Grid>
 
@@ -54,8 +54,10 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ComboBox x:Name="TranslationGroupSelector" x:Uid="ChannelsTranslationGroupSelector"
-                              SelectionChanged="OnTranslationGroupSelectionChanged" />
+                    <controls:SelectBox x:Name="TranslationGroupSelector" x:Uid="ChannelsTranslationGroupSelector"
+                                        DisplayMemberPath="Name"
+                                        VerticalAlignment="Center"
+                                        SelectionChanged="OnTranslationGroupSelectionChanged" />
                     <TextBox x:Name="TranslationGroupNameBox" x:Uid="ChannelsTranslationGroupNameBox"
                              Grid.Column="1" />
                     <Button x:Uid="ChannelsTranslationGroupAddButton" Grid.Column="2" Click="OnAddTranslationGroupClick" />

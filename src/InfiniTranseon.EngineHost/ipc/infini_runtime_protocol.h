@@ -29,6 +29,7 @@ inline constexpr std::uint32_t ocr_result_kind = 6U;
 inline constexpr std::uint32_t ocr_result_acknowledgement_kind = 24U;
 inline constexpr std::uint32_t thumbnail_request_kind = 26U;
 inline constexpr std::uint32_t thumbnail_acknowledgement_kind = 27U;
+inline constexpr std::uint32_t local_ocr_crop_request_kind = 28U;
 inline constexpr std::size_t nonce_bytes = 32U;
 
 enum class ProtocolError
@@ -117,7 +118,12 @@ struct ProcessingRegion final
     std::uint8_t area_mode{};
     bool lock_degradation{};
     bool detect_orientation{};
-    bool use_cloud_ocr{};
+    enum class OcrBackend : std::uint8_t
+    {
+        windows = 0U,
+        local = 1U,
+        cloud = 2U,
+    } ocr_backend{};
     std::uint64_t cloud_consent_policy_revision{};
     std::uint32_t recognition_interval_milliseconds{};
     std::uint8_t line_break_mode{};
@@ -181,10 +187,23 @@ struct CloudOcrCropEvent final
     OcrExecutionIdentity token;
     std::string mime_type;
     std::string provider_id;
+    std::string recognition_language;
     std::vector<std::byte> encoded_crop;
     std::uint32_t pixel_width{};
     std::uint32_t pixel_height{};
     std::uint64_t consent_policy_revision{};
+    std::uint64_t deadline_utc_ticks{};
+    std::uint32_t encoded_byte_ceiling{};
+};
+
+struct LocalOcrCropEvent final
+{
+    OcrExecutionIdentity token;
+    std::string mime_type;
+    std::string recognition_language;
+    std::vector<std::byte> encoded_crop;
+    std::uint32_t pixel_width{};
+    std::uint32_t pixel_height{};
     std::uint64_t deadline_utc_ticks{};
     std::uint32_t encoded_byte_ceiling{};
 };
@@ -236,6 +255,9 @@ parse_processing_configuration(std::span<const std::byte> bytes) noexcept;
 
 [[nodiscard]] std::optional<std::vector<std::byte>>
     encode_cloud_ocr_crop_request(const CloudOcrCropEvent& event) noexcept;
+
+[[nodiscard]] std::optional<std::vector<std::byte>>
+    encode_local_ocr_crop_request(const LocalOcrCropEvent& event) noexcept;
 
 [[nodiscard]] std::optional<std::vector<std::byte>>
     encode_ocr_result(const OcrResultCommand& result) noexcept;

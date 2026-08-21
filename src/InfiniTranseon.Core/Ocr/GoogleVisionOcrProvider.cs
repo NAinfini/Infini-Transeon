@@ -10,7 +10,6 @@ public sealed record GoogleVisionOcrOptions(
     Uri Endpoint,
     string CredentialReference,
     ProxyPolicy ProxyPolicy,
-    IReadOnlyList<string> LanguageHints,
     int MaximumRequestBytes = 10 * 1024 * 1024,
     int MaximumResponseBytes = 4 * 1024 * 1024);
 
@@ -29,14 +28,11 @@ public sealed class GoogleVisionOcrProvider : IOcrProvider
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(credentials);
-        ArgumentNullException.ThrowIfNull(options.LanguageHints);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CredentialReference);
         if (!options.Endpoint.IsAbsoluteUri || options.Endpoint.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(options.Endpoint.UserInfo) || !string.IsNullOrEmpty(options.Endpoint.Query) ||
             !string.IsNullOrEmpty(options.Endpoint.Fragment))
             throw new ArgumentException("Google Vision endpoint must be an HTTPS URI.", nameof(options));
-        if (options.LanguageHints.Count > 16 || options.LanguageHints.Any(string.IsNullOrWhiteSpace))
-            throw new ArgumentException("Google Vision language hints are invalid.", nameof(options));
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumRequestBytes, 1024);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumResponseBytes, 1024);
         _options = options;
@@ -80,7 +76,9 @@ public sealed class GoogleVisionOcrProvider : IOcrProvider
         if (string.IsNullOrWhiteSpace(key))
             throw new OcrRoutingException("ocr.credentialMissing", "Google Vision credential is missing.");
 
-        byte[] body = CreateBody(request.EncodedCrop.Span);
+        byte[] body = CreateBody(
+            request.EncodedCrop.Span,
+            CloudOcrLanguageMapper.GoogleVisionHint(request.RecognitionLanguage));
         using var message = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
         {
             Content = new ByteArrayContent(body),
@@ -107,7 +105,7 @@ public sealed class GoogleVisionOcrProvider : IOcrProvider
         return Parse(responseBody, request);
     }
 
-    private byte[] CreateBody(ReadOnlySpan<byte> crop)
+    private static byte[] CreateBody(ReadOnlySpan<byte> crop, string? languageHint)
     {
         using var output = new MemoryStream();
         using (var writer = new Utf8JsonWriter(output))
@@ -124,11 +122,11 @@ public sealed class GoogleVisionOcrProvider : IOcrProvider
             writer.WriteNumber("maxResults", RuntimeCapabilities.VersionOne.MaxOcrBoxesPerResult);
             writer.WriteEndObject();
             writer.WriteEndArray();
-            if (_options.LanguageHints.Count > 0)
+            if (languageHint is not null)
             {
                 writer.WriteStartObject("imageContext");
                 writer.WriteStartArray("languageHints");
-                foreach (string hint in _options.LanguageHints) writer.WriteStringValue(hint);
+                writer.WriteStringValue(languageHint);
                 writer.WriteEndArray();
                 writer.WriteEndObject();
             }

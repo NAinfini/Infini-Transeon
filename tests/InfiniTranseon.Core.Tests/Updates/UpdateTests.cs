@@ -147,6 +147,45 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public async Task NonNewLegacyReleaseWithoutSignedManifestIsIgnored()
+    {
+        int requests = 0;
+        using var client = new HttpClient(new DelegateHandler(request =>
+        {
+            requests++;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent("{\"tag_name\":\"v1.0.0\",\"assets\":[]}"),
+            };
+        }));
+        GitHubReleaseUpdateService service = Service(() => client);
+
+        UpdateMetadata? update = await service.CheckAsync(
+            new UpdateCheckContext(false, true, false, true, new Version(1, 0, 0)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(update);
+        Assert.Equal(1, requests);
+    }
+
+    [Fact]
+    public async Task NewReleaseWithoutSignedManifestStillFailsClosed()
+    {
+        using var client = new HttpClient(new DelegateHandler(request =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent("{\"tag_name\":\"v2.0.0\",\"assets\":[]}"),
+            }));
+        GitHubReleaseUpdateService service = Service(() => client);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.CheckAsync(
+            new UpdateCheckContext(false, true, false, true, new Version(1, 0, 0)),
+            TestContext.Current.CancellationToken).AsTask());
+    }
+
+    [Fact]
     public void SignedReleaseFixtureUsesTheRuntimeCanonicalBytes()
     {
         const string expected =

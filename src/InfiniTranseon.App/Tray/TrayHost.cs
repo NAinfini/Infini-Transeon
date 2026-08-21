@@ -47,9 +47,8 @@ public sealed class TrayHost : IDisposable
     private const uint CommandOpen = 10;
     private const uint CommandExit = 11;
 
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     private readonly IRuntimeControlService _runtime;
     private readonly AppStatusLog _statusLog;
@@ -348,9 +347,9 @@ public sealed class TrayHost : IDisposable
             operation,
             "status.tray.operation.failed",
             StatusEventSeverity.Error,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
-                ["error"] = exception.Message,
+                ["failureType"] = StatusArgument.Id(exception.GetType().Name),
             }));
 
     public void Dispose()

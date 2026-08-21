@@ -6,9 +6,8 @@ namespace InfiniTranseon.App.Controls;
 
 public sealed partial class BudgetPreviewBar : UserControl
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     public static readonly DependencyProperty UsedChannelsProperty = DependencyProperty.Register(
         nameof(UsedChannels),

@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
+using Microsoft.ML.OnnxRuntime;
 
 namespace InfiniTranseon.Core.Ocr;
 
@@ -15,6 +17,10 @@ public sealed class PaddleOcrUnavailableException(string errorCode, string messa
 {
     public const string LanguageNotInstalledCode = "ocr.paddle.languageNotInstalled";
     public const string AutoLanguageUnsupportedCode = "ocr.paddle.autoLanguageUnsupported";
+    public const string PackageInvalidCode = "ocr.paddle.packageInvalid";
+    public const string ImageInvalidCode = "ocr.paddle.imageInvalid";
+    public const string RuntimeUnavailableCode = "ocr.paddle.runtimeUnavailable";
+    public const string ModelBusyCode = "ocr.paddle.modelBusy";
 
     public string ErrorCode { get; } = errorCode;
 }
@@ -25,14 +31,23 @@ public sealed class PaddleOcrUnavailableException(string errorCode, string messa
 /// probe is disposed.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class PaddleOcrProbe(IPaddleOcrModelCatalog catalog) : IOcrProbe, IDisposable
+public sealed class PaddleOcrProbe : IOcrProbe, IDisposable
 {
-    private readonly IPaddleOcrModelCatalog _catalog =
-        catalog ?? throw new ArgumentNullException(nameof(catalog));
+    private sealed record LoadedEngine(PaddleOcrEngine Engine, IDisposable? ModelLease);
 
-    private readonly Dictionary<string, PaddleOcrEngine> _engines = new(StringComparer.Ordinal);
+    private readonly IPaddleOcrModelCatalog _catalog;
+    private readonly Func<PaddleOcrModelSet, IDisposable>? _acquireModelLease;
+    private readonly Dictionary<string, LoadedEngine> _engines = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _disposed;
+
+    public PaddleOcrProbe(
+        IPaddleOcrModelCatalog catalog,
+        Func<PaddleOcrModelSet, IDisposable>? acquireModelLease = null)
+    {
+        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _acquireModelLease = acquireModelLease;
+    }
 
     public void Dispose()
     {
@@ -42,9 +57,10 @@ public sealed class PaddleOcrProbe(IPaddleOcrModelCatalog catalog) : IOcrProbe, 
         }
 
         _disposed = true;
-        foreach (PaddleOcrEngine engine in _engines.Values)
+        foreach (LoadedEngine loaded in _engines.Values)
         {
-            engine.Dispose();
+            try { loaded.Engine.Dispose(); }
+            finally { loaded.ModelLease?.Dispose(); }
         }
 
         _engines.Clear();
@@ -75,8 +91,16 @@ public sealed class PaddleOcrProbe(IPaddleOcrModelCatalog catalog) : IOcrProbe, 
         long start = Stopwatch.GetTimestamp();
         // Recognition is CPU-bound and takes tens to hundreds of milliseconds; running it inline
         // would block whichever thread the caller awaited on, which for the wizard is the UI thread.
-        PaddleOcrReading reading = await Task.Run(
-            () => engine.Read(request.EncodedCrop), cancellationToken).ConfigureAwait(false);
+        PaddleOcrReading reading;
+        try
+        {
+            reading = await Task.Run(
+                () => engine.Read(request.EncodedCrop), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (TryMapReadFailure(exception, out string errorCode))
+        {
+            throw new PaddleOcrUnavailableException(errorCode, exception.Message);
+        }
         TimeSpan latency = Stopwatch.GetElapsedTime(start);
 
         return new OcrProbeResult(
@@ -93,26 +117,94 @@ public sealed class PaddleOcrProbe(IPaddleOcrModelCatalog catalog) : IOcrProbe, 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_catalog.TryResolve(languageTag, out PaddleOcrModelSet? modelSet))
+            PaddleOcrModelSet? modelSet;
+            try
+            {
+                if (!_catalog.TryResolve(languageTag, out modelSet))
+                {
+                    throw new PaddleOcrUnavailableException(
+                        PaddleOcrUnavailableException.LanguageNotInstalledCode,
+                        $"No local OCR model is installed for '{languageTag}'.");
+                }
+            }
+            catch (Exception exception) when (IsInvalidPackage(exception))
             {
                 throw new PaddleOcrUnavailableException(
-                    PaddleOcrUnavailableException.LanguageNotInstalledCode,
-                    $"No local OCR model is installed for '{languageTag}'.");
+                    PaddleOcrUnavailableException.PackageInvalidCode,
+                    exception.Message);
             }
 
-            if (!_engines.TryGetValue(modelSet.LanguageTag, out PaddleOcrEngine? engine))
+            if (!_engines.TryGetValue(modelSet.LanguageTag, out LoadedEngine? loaded))
             {
-                engine = PaddleOcrEngine.Load(modelSet);
-                _engines[modelSet.LanguageTag] = engine;
+                IDisposable? lease = null;
+                try
+                {
+                    lease = _acquireModelLease?.Invoke(modelSet);
+                    loaded = new LoadedEngine(PaddleOcrEngine.Load(modelSet), lease);
+                    _engines[modelSet.LanguageTag] = loaded;
+                }
+                catch (PaddleOcrUnavailableException)
+                {
+                    lease?.Dispose();
+                    throw;
+                }
+                catch (Exception exception) when (IsInvalidPackage(exception))
+                {
+                    lease?.Dispose();
+                    throw new PaddleOcrUnavailableException(
+                        PaddleOcrUnavailableException.PackageInvalidCode,
+                        exception.Message);
+                }
+                catch (Exception exception) when (IsRuntimeUnavailable(exception))
+                {
+                    lease?.Dispose();
+                    throw new PaddleOcrUnavailableException(
+                        PaddleOcrUnavailableException.RuntimeUnavailableCode,
+                        exception.Message);
+                }
+                catch
+                {
+                    lease?.Dispose();
+                    throw;
+                }
             }
 
-            return engine;
+            return loaded.Engine;
         }
         finally
         {
             _gate.Release();
         }
     }
+
+    private static bool TryMapReadFailure(Exception exception, out string errorCode)
+    {
+        if (exception is ArgumentException or ExternalException or NotSupportedException)
+        {
+            errorCode = PaddleOcrUnavailableException.ImageInvalidCode;
+            return true;
+        }
+        if (exception is InvalidDataException)
+        {
+            errorCode = PaddleOcrUnavailableException.PackageInvalidCode;
+            return true;
+        }
+        if (IsRuntimeUnavailable(exception))
+        {
+            errorCode = PaddleOcrUnavailableException.RuntimeUnavailableCode;
+            return true;
+        }
+
+        errorCode = string.Empty;
+        return false;
+    }
+
+    private static bool IsInvalidPackage(Exception exception) =>
+        exception is InvalidDataException or IOException or UnauthorizedAccessException;
+
+    private static bool IsRuntimeUnavailable(Exception exception) =>
+        exception is OnnxRuntimeException or DllNotFoundException or BadImageFormatException or
+            PlatformNotSupportedException or TypeInitializationException;
 
     /// <summary>
     /// Converts pixel bounds to the normalized rectangle the runtime contract uses. The crop the

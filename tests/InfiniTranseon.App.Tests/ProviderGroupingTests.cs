@@ -49,11 +49,12 @@ public sealed class ProviderGroupingTests
     }
 
     [Fact]
-    public void CloudOcrProviderIsClassifiedByKindWhenNotATranslationProvider()
+    public void CloudOcrProviderIsClassifiedByCapabilityWhenNotATranslationProvider()
     {
         var provider = new ProviderRow("Vision OCR", "OCR - cloud", "Ready", StatusSeverity.Success, "detail")
         {
             IsTranslationProvider = false,
+            IsOcrProvider = true,
         };
 
         Assert.Equal(

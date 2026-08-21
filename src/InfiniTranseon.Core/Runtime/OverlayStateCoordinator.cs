@@ -25,6 +25,13 @@ public sealed class OverlayStateCoordinator
         public required SourceGenerationToken Source { get; init; }
         public required OverlayPixelRect Bounds { get; init; }
         public required OverlayRegionStyleSnapshot Style { get; init; }
+
+        /// <summary>
+        /// The pixels each captured line occupies, in reading order. This is what lets a translation
+        /// be drawn over the words it replaces instead of at the top of the region.
+        /// </summary>
+        public required IReadOnlyList<OverlayPixelRect> SourceLines { get; init; }
+
         public required Dictionary<TranslationChannelId, SlotState> Slots { get; init; }
     }
 
@@ -60,13 +67,17 @@ public sealed class OverlayStateCoordinator
         SourceGenerationToken source,
         OverlayPixelRect bounds,
         OverlayRegionStyleSnapshot style,
+        IReadOnlyList<OverlayPixelRect> sourceLines,
         IReadOnlyList<TranslationChannelDefinition> channels)
     {
         if (regionId == Guid.Empty) throw new ArgumentException("Region identity cannot be empty.", nameof(regionId));
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(bounds);
         ArgumentNullException.ThrowIfNull(style);
+        ArgumentNullException.ThrowIfNull(sourceLines);
         ArgumentNullException.ThrowIfNull(channels);
+        if (sourceLines.Any(line => line is null))
+            throw new ArgumentException("Captured line bounds cannot be null.", nameof(sourceLines));
         if (source.RuntimeEpoch != _runtimeEpoch || source.TargetInstanceId != _target)
             throw new ArgumentException("Source generation belongs to a different runtime target.", nameof(source));
         if (source.Area.Kind == CaptureAreaKind.UserRegion && source.Area.UserRegionId?.Value != regionId)
@@ -96,6 +107,9 @@ public sealed class OverlayStateCoordinator
                 Source = source,
                 Bounds = bounds,
                 Style = style,
+                SourceLines = sourceLines is OverlayPixelRect[] array
+                    ? Array.AsReadOnly(array)
+                    : Array.AsReadOnly(sourceLines.ToArray()),
                 Slots = slots,
             };
             _regions.Add(regionId, region);
@@ -277,15 +291,50 @@ public sealed class OverlayStateCoordinator
                 region.RegionId,
                 region.Bounds,
                 region.Style,
-                region.Slots.Values
-                    .OrderBy(slot => slot.Order)
-                    .Select(slot => new OverlaySlotSnapshot(
-                        slot.SlotId, slot.Order, slot.State, slot.Text, slot.Label)
-                    {
-                        StageIndex = slot.StageIndex,
-                    })
-                    .ToArray()))
+                SnapshotSlots(region)))
             .ToArray());
+
+    /// <summary>
+    /// Places a slot's translation on the pixels it replaces. A region carrying a single channel
+    /// whose translation kept the captured line count has a line-for-line correspondence, so each
+    /// translated line is drawn over the line it came from and the screen's layout survives the
+    /// translation. Anything else — two channels competing for the same words, or a translation that
+    /// merged or split lines — has no such correspondence, and the slot falls back to the horizontal
+    /// band it owns inside the region.
+    /// </summary>
+    private static OverlaySlotSnapshot[] SnapshotSlots(RegionState region)
+    {
+        SlotState[] ordered = [.. region.Slots.Values.OrderBy(slot => slot.Order)];
+        bool lineForLine = ordered.Length == 1 &&
+            region.SourceLines.Count is > 0 and
+                <= RuntimeOverlayDesiredStatePayloadCodec.MaxLinesPerSlot;
+        var snapshots = new OverlaySlotSnapshot[ordered.Length];
+        for (int index = 0; index < ordered.Length; index++)
+        {
+            SlotState slot = ordered[index];
+            string[] texts = slot.Text.Split('\n');
+            OverlayTextLine[] lines = lineForLine && slot.Text.Length != 0 &&
+                    texts.Length == region.SourceLines.Count
+                ? [.. texts.Select((text, line) => new OverlayTextLine(text, region.SourceLines[line]))]
+                : [new OverlayTextLine(
+                    slot.Text,
+                    Band(region.Bounds, index, ordered.Length),
+                    Math.Max(1, region.SourceLines.Count))];
+            snapshots[index] = new OverlaySlotSnapshot(
+                slot.SlotId, slot.Order, slot.State, lines, slot.Label)
+            {
+                StageIndex = slot.StageIndex,
+            };
+        }
+        return snapshots;
+    }
+
+    private static OverlayPixelRect Band(OverlayPixelRect bounds, int index, int count)
+    {
+        int top = bounds.Y + (int)((long)bounds.Height * index / count);
+        int bottom = bounds.Y + (int)((long)bounds.Height * (index + 1) / count);
+        return new OverlayPixelRect(bounds.X, top, bounds.Width, bottom - top);
+    }
 
     private static int Compare(TranslationOutput output, SlotState slot)
     {

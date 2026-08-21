@@ -34,4 +34,22 @@ public sealed class AppNavigationStateTests
         Assert.Equal(WorkspaceSection.Channels, request.WorkspaceSection);
         Assert.Throws<ArgumentException>(() => state.NavigateToProfile(Guid.Empty));
     }
+
+    [Fact]
+    public void Profile_setup_navigation_is_distinct_from_a_workspace_section()
+    {
+        var state = new AppNavigationState();
+        AppNavigationRequest? request = null;
+        Guid profileId = Guid.NewGuid();
+        state.NavigationRequested += (_, value) => request = value;
+
+        state.NavigateToProfileSetup(profileId);
+
+        Assert.NotNull(request);
+        Assert.True(request.IsProfileSetup);
+        Assert.False(request.IsWorkspace);
+        Assert.Equal(profileId, request.ProfileId);
+        Assert.Null(request.WorkspaceSection);
+        Assert.Throws<ArgumentException>(() => state.NavigateToProfileSetup(Guid.Empty));
+    }
 }

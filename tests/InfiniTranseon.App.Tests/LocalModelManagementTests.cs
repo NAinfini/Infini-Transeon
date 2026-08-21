@@ -74,6 +74,7 @@ public sealed class LocalModelManagementTests
         var settings = new RealSettingsService(
             new ApplicationSettingsRepository(Path.Combine(temp.Path, "settings.db")),
             new FakeSecretReferenceService(),
+            TestResourceText.Lookup,
             new CustomRestAdapterStore(Path.Combine(temp.Path, "adapters.json")),
             manager);
 
@@ -85,12 +86,87 @@ public sealed class LocalModelManagementTests
         Assert.Equal("Apache-2.0", model.ModelLicense);
         Assert.Equal("phrase-table-v1", model.ModelRuntime);
         Assert.Equal("7 B", model.ModelDownloadSize);
-        Assert.Contains("ja → en", model.Detail, StringComparison.Ordinal);
+        // The catalog declares "ja" and "en"; the row names them in the language the user reads.
+        Assert.Contains("Japanese → English", model.Detail, StringComparison.Ordinal);
         Assert.True(model.CanDownloadModel);
         Assert.False(model.CanRemoveModel);
         Assert.False(model.IsSelectable);
         Assert.Equal(StatusSeverity.Neutral, model.StateSeverity);
         Assert.Equal(0, httpClients);
+    }
+
+    /// <summary>
+    /// Windows recognition belongs in the local section even though nothing installs it, otherwise
+    /// the section understates what the machine can already read. It offers no install and no
+    /// removal, and it names its languages rather than listing recognizer tags — one name per
+    /// language, so the en-US and en-GB recognizers read as English rather than as "English, English".
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "en-US", "en-GB", "ja-JP", "zh-Hans-CN" }, StatusSeverity.Success)]
+    [InlineData(new string[0], StatusSeverity.Warning)]
+    public async Task WindowsRecognitionIsListedAsAPackageTheMachineAlreadyHas(
+        string[] recognizerTags,
+        StatusSeverity expected)
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var temp = new TempDirectory();
+        string catalogPath = Path.Combine(temp.Path, "catalog.json");
+        await File.WriteAllTextAsync(catalogPath, SignedCatalog, ct);
+        var settings = new RealSettingsService(
+            new ApplicationSettingsRepository(Path.Combine(temp.Path, "settings.db")),
+            new FakeSecretReferenceService(),
+            TestResourceText.Lookup,
+            new CustomRestAdapterStore(Path.Combine(temp.Path, "adapters.json")),
+            CreateService(temp.Path, catalogPath, () => new HttpClient()),
+            ocrBackend: null,
+            new WindowsOcrLanguageAvailability(windowsRecognizerTags: () => recognizerTags));
+
+        ProviderRow windows = Assert.Single(
+            await settings.GetProvidersAsync(ct),
+            row => row.Id == "ocr.windows");
+
+        Assert.True(windows.IsOcrProvider);
+        Assert.True(windows.IsLocalModel);
+        Assert.False(windows.CanDownloadModel);
+        Assert.False(windows.CanRemoveModel);
+        Assert.Equal(expected, windows.StateSeverity);
+        if (recognizerTags.Length > 0)
+        {
+            Assert.Contains(
+                "English, Japanese, Chinese (Simplified)",
+                windows.Detail,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void OcrPackageIsExplicitlyInstallableButNeverExposedAsATranslator()
+    {
+        var package = new LocalModelPackageView(
+            "ppocr-v4-rec-ja",
+            "4.0.0",
+            "PP-OCRv4 Japanese recognition",
+            "Apache-2.0",
+            LocalModelRuntimeAvailability.PpOcrOnnxRuntime,
+            ["ja"],
+            [],
+            9_753_335,
+            "models/ppocr-v4-rec-ja/4.0.0",
+            LocalModelInstallState.NotInstalled);
+
+        using var temp = new TempDirectory();
+        var settings = new RealSettingsService(
+            new ApplicationSettingsRepository(Path.Combine(temp.Path, "settings.db")),
+            new FakeSecretReferenceService(),
+            TestResourceText.Lookup);
+        ProviderRow row = settings.ToLocalModelRow(package, strictOffline: false);
+
+        Assert.Equal("OCR · local", row.Kind);
+        Assert.Equal("ocr.local.ppocr-v4-rec-ja", row.Id);
+        Assert.False(row.IsTranslationProvider);
+        Assert.True(row.IsOcrProvider);
+        Assert.False(row.IsSelectable);
+        Assert.True(row.CanDownloadModel);
     }
 
     [Fact]
@@ -182,20 +258,7 @@ public sealed class LocalModelManagementTests
             "{}",
             TestContext.Current.CancellationToken);
         var usage = new LocalModelManagementService.ModelUsageTracker();
-        var manager = new LocalModelManagementService(
-            new ModelCatalogService(
-                new SignatureVerifier(new Ed25519TrustRootSet(
-                    new Ed25519PublicKey("rfc8032", Convert.FromHexString(PublicKey)),
-                    null,
-                    [])),
-                new SignedSequenceState()),
-            new ModelPackageService(
-                () => throw new InvalidOperationException(),
-                Path.Combine(temp.Path, "models"),
-                isModelActive: usage.IsActive),
-            Path.Combine(temp.Path, "missing.json"),
-            static _ => false,
-            usage: usage);
+        LocalModelManagementService manager = CreateUsageTrackedService(temp.Path, usage);
 
         IDisposable lease = manager.AcquireUsage("madlad", "1");
         await Assert.ThrowsAsync<InvalidOperationException>(() => manager.RemoveAsync(
@@ -212,6 +275,77 @@ public sealed class LocalModelManagementTests
 
         Assert.False(Directory.Exists(package));
     }
+
+    [Fact]
+    public async Task RemovalReservationRejectsLeaseAcquiredAfterTheActiveCheck()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var temp = new TempDirectory();
+        string package = Path.Combine(
+            temp.Path,
+            "models",
+            "packages",
+            "madlad",
+            "1");
+        Directory.CreateDirectory(package);
+        await File.WriteAllTextAsync(Path.Combine(package, "installation.json"), "{}", ct);
+        var usage = new LocalModelManagementService.ModelUsageTracker();
+        var removalReserved = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var allowRemoval = new ManualResetEventSlim();
+        LocalModelManagementService manager = CreateUsageTrackedService(
+            temp.Path,
+            usage,
+            (modelId, version) =>
+            {
+                IDisposable reservation = usage.BeginRemoval(modelId, version);
+                removalReserved.TrySetResult();
+                if (!allowRemoval.Wait(TimeSpan.FromSeconds(10)))
+                {
+                    reservation.Dispose();
+                    throw new TimeoutException("The removal concurrency test did not resume.");
+                }
+                return reservation;
+            });
+
+        Task removal = Task.Run(async () => await manager.RemoveAsync(
+            "madlad",
+            "1",
+            userConfirmed: true,
+            ct), ct);
+        await removalReserved.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        try
+        {
+            Assert.True(Directory.Exists(package));
+            Assert.Throws<LocalModelRemovalInProgressException>(() => manager.AcquireUsage("madlad", "1"));
+        }
+        finally
+        {
+            allowRemoval.Set();
+        }
+
+        await removal.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        Assert.False(Directory.Exists(package));
+    }
+
+    private static LocalModelManagementService CreateUsageTrackedService(
+        string root,
+        LocalModelManagementService.ModelUsageTracker usage,
+        Func<string, string, IDisposable>? beginModelRemoval = null) =>
+        new(
+            new ModelCatalogService(
+                new SignatureVerifier(new Ed25519TrustRootSet(
+                    new Ed25519PublicKey("rfc8032", Convert.FromHexString(PublicKey)),
+                    null,
+                    [])),
+                new SignedSequenceState()),
+            new ModelPackageService(
+                () => throw new InvalidOperationException(),
+                Path.Combine(root, "models"),
+                beginModelRemoval: beginModelRemoval ?? usage.BeginRemoval),
+            Path.Combine(root, "missing.json"),
+            static _ => false,
+            usage: usage);
 
     private static LocalModelManagementService CreateService(
         string root,

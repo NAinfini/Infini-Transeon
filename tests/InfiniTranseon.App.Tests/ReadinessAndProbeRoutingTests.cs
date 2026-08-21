@@ -1,4 +1,5 @@
 using InfiniTranseon.App.Presentation;
+using InfiniTranseon.App.Presentation.Fakes;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
@@ -7,6 +8,7 @@ using InfiniTranseon.Core.Privacy;
 using InfiniTranseon.Core.Probes;
 using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Storage;
+using ApplicationSettingsRepository = InfiniTranseon.Core.Settings.ApplicationSettingsRepository;
 
 namespace InfiniTranseon.App.Tests;
 
@@ -74,6 +76,50 @@ public sealed class ReadinessAndProbeRoutingTests
         Assert.Equal(TranslationProbe.CredentialRebindCode, result.ErrorCode);
     }
 
+    [Fact]
+    public async Task Enabling_strict_offline_after_probe_creation_blocks_cloud_translation_test()
+    {
+        var credentials = new EmptyCredentialStore();
+        var settings = new FakeSettingsService();
+        CatalogTranslationProbe probe = NewProbe(credentials, settings);
+        ApplicationSettings current = await settings.GetSettingsAsync(
+            TestContext.Current.CancellationToken);
+        await settings.UpdateAsync(
+            current with { StrictOffline = true },
+            TestContext.Current.CancellationToken);
+
+        TranslationProbeResult result = await probe.TranslateAsync(
+            new TranslationProbeRequest(
+                "hello", "en", "zh-Hans", null, ProviderId: "translation.deepl"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CatalogTranslationProbe.StrictOfflineCode, result.ErrorCode);
+        Assert.Equal(0, credentials.ReadCount);
+    }
+
+    [Fact]
+    public async Task Strict_offline_does_not_block_the_local_translation_probe_route()
+    {
+        var settings = new FakeSettingsService();
+        ApplicationSettings current = await settings.GetSettingsAsync(
+            TestContext.Current.CancellationToken);
+        await settings.UpdateAsync(
+            current with { StrictOffline = true },
+            TestContext.Current.CancellationToken);
+        CatalogTranslationProbe probe = NewProbe(new EmptyCredentialStore(), settings);
+
+        TranslationProbeResult result = await probe.TranslateAsync(
+            new TranslationProbeRequest(
+                "hello",
+                "en",
+                "zh-Hans",
+                null,
+                ProviderId: EngineRuntimeComposition.LocalTranslationProviderIdPrefix + "missing"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CatalogTranslationProbe.ProviderUnknownCode, result.ErrorCode);
+    }
+
     [Theory]
     [InlineData("provider.deepl.authorization", "ProbeErrorAuthorization")]
     [InlineData("provider.yandex.forbidden", "ProbeErrorAuthorization")]
@@ -92,6 +138,7 @@ public sealed class ReadinessAndProbeRoutingTests
     [InlineData("translation.probe.credentialMissing", "ProbeErrorCredentialMissing")]
     [InlineData("provider.credentialMissing", "ProbeErrorCredentialMissing")]
     [InlineData("provider.policy.strictOffline", "ProbeErrorOffline")]
+    [InlineData("translation.probe.strictOffline", "ProbeErrorOffline")]
     public void Error_codes_map_onto_a_localizable_key(string errorCode, string expectedKey) =>
         Assert.Equal(expectedKey, ProbeErrorPresenter.ResourceKeyFor(errorCode));
 
@@ -145,14 +192,14 @@ public sealed class ReadinessAndProbeRoutingTests
                 ],
             };
             await repository.SaveAsync(document, ct);
-            var service = new RealProfileService(repository, databasePath);
+            var service = new RealProfileService(repository, new FakeCaptureProbe(), TestResourceText.Lookup, databasePath);
 
             ProfileCard card = Assert.Single(await service.GetProfilesAsync(ct));
             Assert.Equal(1, card.RegionCount);
             Assert.Equal(1, card.ChannelCount);
 
             IReadOnlyList<string> providers =
-                await service.GetTranslationProviderIdsAsync(document.ProfileId, ct);
+                await service.GetRequiredProviderIdsAsync(document.ProfileId, ct);
             Assert.Equal(["translation.deepl-free"], providers);
         }
         finally
@@ -170,9 +217,9 @@ public sealed class ReadinessAndProbeRoutingTests
         string databasePath = Path.Combine(root, "profiles.db");
         try
         {
-            var service = new RealProfileService(new ProfileRepository(databasePath), databasePath);
-            Assert.Empty(await service.GetTranslationProviderIdsAsync(Guid.NewGuid(), ct));
-            Assert.Empty(await service.GetTranslationProviderIdsAsync(Guid.Empty, ct));
+            var service = new RealProfileService(new ProfileRepository(databasePath), new FakeCaptureProbe(), TestResourceText.Lookup, databasePath);
+            Assert.Empty(await service.GetRequiredProviderIdsAsync(Guid.NewGuid(), ct));
+            Assert.Empty(await service.GetRequiredProviderIdsAsync(Guid.Empty, ct));
         }
         finally
         {
@@ -180,20 +227,150 @@ public sealed class ReadinessAndProbeRoutingTests
         }
     }
 
-    private static CatalogTranslationProbe NewProbe(IBoundCredentialStore store) => new(
-        store,
-        new CustomRestAdapterStore(Path.Combine(
+    [Fact]
+    public async Task Provider_readiness_query_includes_enabled_cloud_ocr_but_not_disabled_regions()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = Path.Combine(Path.GetTempPath(), "infini-readiness-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+        string databasePath = Path.Combine(root, "profiles.db");
+        try
+        {
+            var repository = new ProfileRepository(databasePath);
+            ProfileDocument document = ProfileDocument.Create("Cloud OCR", "ja", "zh-Hans") with
+            {
+                Targets =
+                [
+                    ProfileTarget.Create("Game", CaptureTargetKind.Window) with
+                    {
+                        Regions =
+                        [
+                            ProfileRegion.Create("Dialogue", new NormalizedRect(0, 0, 1, 1)) with
+                            {
+                                TranslationChannels =
+                                [
+                                    ProfileTranslationChannel.Create("translation.deepl-free"),
+                                ],
+                                Ocr = new ProfileOcrSettings
+                                {
+                                    UseCloudOcr = true,
+                                    CloudConsentPolicyRevision = 1,
+                                    ProviderId = "ocr.google-cloud-vision",
+                                },
+                            },
+                            ProfileRegion.Create("Disabled", new NormalizedRect(0, 0, 1, 1)) with
+                            {
+                                Enabled = false,
+                                Ocr = new ProfileOcrSettings
+                                {
+                                    UseCloudOcr = true,
+                                    CloudConsentPolicyRevision = 1,
+                                    ProviderId = "ocr.azure-ai-vision",
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+            await repository.SaveAsync(document, ct);
+            var service = new RealProfileService(
+                repository,
+                new FakeCaptureProbe(),
+                TestResourceText.Lookup,
+                databasePath);
+
+            IReadOnlyList<string> providers = await service
+                .GetRequiredProviderIdsAsync(document.ProfileId, ct);
+
+            Assert.Equal(
+                ["translation.deepl-free", "ocr.google-cloud-vision"],
+                providers);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Provider_readiness_marks_azure_ocr_unready_when_its_endpoint_is_missing()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = Path.Combine(Path.GetTempPath(), "infini-readiness-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var settings = new ApplicationSettingsRepository(Path.Combine(root, "settings.db"));
+            await settings.SaveAsync(
+                new InfiniTranseon.Core.Settings.ApplicationSettings
+                {
+                    ProviderEndpoints = new Dictionary<string, string>
+                    {
+                        ["ocr.azure-ai-vision"] = "https://example.cognitiveservices.azure.com/",
+                    },
+                },
+                ct);
+            var credentials = new BoundCredentialStore(new MemoryCredentialStore());
+            var secrets = new RealSecretReferenceService(
+                credentials,
+                settings,
+                () => ProviderCatalog.Default);
+            CatalogProvider azure = Assert.Single(
+                ProviderCatalog.Default,
+                provider => provider.Id == "ocr.azure-ai-vision");
+            await secrets.SetSecretAsync(
+                azure.Id,
+                Assert.Single(azure.Credentials).Reference,
+                "test-key",
+                ct);
+            await settings.SaveAsync(new InfiniTranseon.Core.Settings.ApplicationSettings(), ct);
+
+            ProviderReadinessStatus status = Assert.Single(await ProfileProviderReadiness.EvaluateAsync(
+                [azure.Id],
+                ProviderCatalog.Default,
+                secrets,
+                ct));
+
+            Assert.False(status.IsReady);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    // A local model would need an installed package and a worker process; these cases all route
+    // cloud provider ids, which never reach the local branch.
+    private static CatalogTranslationProbe NewProbe(
+        IBoundCredentialStore store,
+        ISettingsService? settings = null)
+    {
+        var options = new AppDataOptions(Path.Combine(
             Path.GetTempPath(),
-            "infini-adapters-" + Guid.NewGuid().ToString("n"),
-            "adapters.json")));
+            "infini-probe-" + Guid.NewGuid().ToString("n")));
+        return new CatalogTranslationProbe(
+            store,
+            new CustomRestAdapterStore(Path.Combine(
+                Path.GetTempPath(),
+                "infini-adapters-" + Guid.NewGuid().ToString("n"),
+                "adapters.json")),
+            LocalModelManagementService.CreateProduction(options),
+            settings ?? new FakeSettingsService(),
+            options);
+    }
 
     private sealed class EmptyCredentialStore : IBoundCredentialStore
     {
+        public int ReadCount { get; private set; }
+
         public ValueTask<string?> ReadAsync(
             string reference,
             CredentialBinding binding,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<string?>(null);
+            CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return ValueTask.FromResult<string?>(null);
+        }
 
         public ValueTask WriteAsync(
             string reference,

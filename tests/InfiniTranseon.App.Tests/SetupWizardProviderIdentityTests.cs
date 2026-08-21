@@ -29,7 +29,7 @@ public sealed class SetupWizardProviderIdentityTests
         public Task<ProfileEditModel?> LoadForEditAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_editModel);
 
-        public Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+        public Task<IReadOnlyList<string>> GetRequiredProviderIdsAsync(
             Guid profileId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>([]);

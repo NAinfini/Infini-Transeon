@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Contracts.Runtime;
@@ -11,8 +13,12 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
     private readonly IWorkbenchService _service;
     private readonly Stack<WorkbenchProfileDraft> _undo = [];
     private readonly Stack<WorkbenchProfileDraft> _redo = [];
+    private readonly HashSet<INotifyPropertyChanged> _editedItems = [];
+    private readonly HashSet<ObservableCollection<WorkbenchRegionItem>> _editedRegionLists = [];
+    private WorkbenchProfileDraft? _armedUndo;
     private Guid _profileId;
     private bool _isLoaded;
+    private bool _restoring;
 
     public WorkbenchViewModel(
         IWorkbenchService service,
@@ -23,6 +29,7 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         MaxTranslationChannels =
             (capabilities?.Capabilities ?? RuntimeCapabilities.VersionOne)
             .MaxTranslationChannelsPerRegion;
+        Targets.CollectionChanged += (_, _) => ObserveDraftItems();
     }
 
     public ObservableCollection<WorkbenchTargetItem> Targets { get; } = [];
@@ -187,10 +194,8 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
     public void SetRegionEnabled(WorkbenchRegionItem region, bool enabled)
     {
         ArgumentNullException.ThrowIfNull(region);
-        if (region.Enabled == enabled) return;
-        PushUndo();
+        BeginEdit();
         region.Enabled = enabled;
-        MarkDirty();
     }
 
     public void SetRegionBounds(
@@ -202,7 +207,7 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         bool createUndoPoint)
     {
         ArgumentNullException.ThrowIfNull(region);
-        if (createUndoPoint) PushUndo();
+        if (createUndoPoint) BeginEdit();
         const double minimum = 0.01;
         width = Math.Clamp(width, minimum, 1);
         height = Math.Clamp(height, minimum, 1);
@@ -212,14 +217,15 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         region.Y = y;
         region.Width = width;
         region.Height = height;
-        MarkDirty();
     }
 
-    public void MarkEditorChanged(bool createUndoPoint = false)
-    {
-        if (createUndoPoint) PushUndo();
-        MarkDirty();
-    }
+    /// <summary>
+    /// Arms an undo point for the edit gesture that is about to run. The snapshot is kept aside and
+    /// only becomes an undo step once the gesture really changes a value, so pressing a region
+    /// without moving it, or re-picking the option already selected, leaves neither an undo step nor
+    /// an unsaved-changes prompt behind.
+    /// </summary>
+    public void BeginEdit() => _armedUndo = Snapshot();
 
     public bool TryAddChannel(WorkbenchRegionItem region, WorkbenchChannelDraft channel)
     {
@@ -377,9 +383,73 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
 
     private void PushUndo()
     {
+        _armedUndo = null;
         _undo.Push(Snapshot());
         _redo.Clear();
         NotifyHistoryChanged();
+    }
+
+    /// <summary>
+    /// The profile counts as edited only once a value really differs, which is why this is driven by
+    /// the draft items raising a change rather than by a page reporting that an editor event fired.
+    /// Opening a section writes the stored values back into its controls, and those controls raise
+    /// their events either way; treating that as an edit is what made merely visiting a section ask
+    /// the user to save.
+    /// </summary>
+    private void OnDraftItemChanged(object? sender, PropertyChangedEventArgs e) => RecordEdit();
+
+    private void RecordEdit()
+    {
+        if (_armedUndo is { } armed)
+        {
+            _armedUndo = null;
+            _undo.Push(armed);
+            _redo.Clear();
+            NotifyHistoryChanged();
+        }
+        MarkDirty();
+    }
+
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        ArgumentNullException.ThrowIfNull(e);
+        if (_restoring) return;
+        if (e.PropertyName is nameof(ProfileName) or nameof(SourceLanguage) or nameof(TargetLanguage)
+            or nameof(GameName) or nameof(GameDescription) or nameof(RecentLineCount))
+        {
+            RecordEdit();
+        }
+    }
+
+    // Targets and regions come and go with every load, undo and region command, so the whole tree is
+    // re-observed instead of tracking each mutation: a missed detach would keep a discarded draft
+    // marking the profile dirty, and the tree is a handful of objects.
+    private void ObserveDraftItems()
+    {
+        foreach (INotifyPropertyChanged item in _editedItems)
+            item.PropertyChanged -= OnDraftItemChanged;
+        _editedItems.Clear();
+        foreach (ObservableCollection<WorkbenchRegionItem> regions in _editedRegionLists)
+            regions.CollectionChanged -= OnRegionsChanged;
+        _editedRegionLists.Clear();
+
+        foreach (WorkbenchTargetItem target in Targets)
+        {
+            Observe(target);
+            target.Regions.CollectionChanged += OnRegionsChanged;
+            _editedRegionLists.Add(target.Regions);
+            foreach (WorkbenchRegionItem region in target.Regions)
+                Observe(region);
+        }
+    }
+
+    private void OnRegionsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ObserveDraftItems();
+
+    private void Observe(INotifyPropertyChanged item)
+    {
+        if (_editedItems.Add(item))
+            item.PropertyChanged += OnDraftItemChanged;
     }
 
     private void MarkDirty()
@@ -401,6 +471,20 @@ public sealed partial class WorkbenchViewModel : PageViewModelBase
         ActiveTranslationGroupId);
 
     private void Restore(WorkbenchProfileDraft draft)
+    {
+        _armedUndo = null;
+        _restoring = true;
+        try
+        {
+            RestoreCore(draft);
+        }
+        finally
+        {
+            _restoring = false;
+        }
+    }
+
+    private void RestoreCore(WorkbenchProfileDraft draft)
     {
         Guid? targetId = SelectedTarget?.TargetId;
         Guid? regionId = SelectedRegion?.RegionId;

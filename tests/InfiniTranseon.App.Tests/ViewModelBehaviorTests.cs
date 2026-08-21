@@ -1,5 +1,6 @@
-using InfiniTranseon.App.Composition;
+﻿using InfiniTranseon.App.Composition;
 using InfiniTranseon.App.Presentation;
+using InfiniTranseon.App.Presentation.Fakes;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
@@ -199,6 +200,32 @@ public sealed class ViewModelBehaviorTests
         Assert.NotEmpty(viewModel.Providers);
     }
 
+    /// <summary>
+    /// A model download reports itself; it must not blank the page. IsLoading drives the page shell's
+    /// skeleton, so raising it for the length of a multi-gigabyte transfer hid the progress bar and
+    /// the cancel button that belong to that very transfer. Failures still have to reach the user,
+    /// which is why the error state is asserted in the same pass.
+    /// </summary>
+    [Fact]
+    public async Task ServicesModels_local_model_operations_report_progress_without_blanking_the_page()
+    {
+        using ServiceProvider provider = Build();
+        var viewModel = provider.GetRequiredService<ServicesModelsViewModel>();
+        await viewModel.InitializeAsync(TestContext.Current.CancellationToken);
+        List<string?> changed = [];
+        viewModel.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        await viewModel.InstallLocalModelAsync(
+            viewModel.Providers[0],
+            userApproved: true,
+            TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(nameof(ServicesModelsViewModel.IsLoading), changed);
+        Assert.False(viewModel.IsLoading);
+        Assert.True(viewModel.HasError);
+        Assert.NotEmpty(viewModel.ErrorMessage);
+    }
+
     [Fact]
     public void Settings_view_model_exposes_protocol_ceilings()
     {
@@ -247,6 +274,23 @@ public sealed class ViewModelBehaviorTests
         Assert.Equal(UiThemePreference.Dark, viewModel.Settings.Theme);
         Assert.Equal(UiThemePreference.Dark, (await settingsService.GetSettingsAsync(ct)).Theme);
         Assert.Contains(nameof(SettingsViewModel.Settings), changed);
+    }
+
+    [Fact]
+    public async Task Runtime_affecting_settings_are_applied_without_restarting_for_theme_changes()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using ServiceProvider provider = Build();
+        var runtime = Assert.IsType<FakeRuntimeControlService>(
+            provider.GetRequiredService<IRuntimeControlService>());
+        var viewModel = provider.GetRequiredService<SettingsViewModel>();
+        await viewModel.InitializeAsync(ct);
+
+        await viewModel.UpdateThemeAsync(UiThemePreference.Dark, ct);
+        Assert.Equal(0, runtime.SettingsApplyCount);
+
+        await viewModel.UpdateStrictOfflineAsync(true, ct);
+        Assert.Equal(1, runtime.SettingsApplyCount);
     }
 
     [Fact]
@@ -334,6 +378,43 @@ public sealed class ViewModelBehaviorTests
         Assert.True(viewModel.SaveDraftCommand.CanExecute(null));
     }
 
+    /// <summary>
+    /// The previewed target is one of the chosen ones. Step 3 draws regions and runs its OCR test on
+    /// whatever this names, so a target the user has deselected must not survive here.
+    /// </summary>
+    [Fact]
+    public async Task SetupWizard_previews_a_target_that_is_still_selected()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using ServiceProvider provider = Build();
+        var viewModel = provider.GetRequiredService<SetupWizardViewModel>();
+        await viewModel.InitializeAsync(ct);
+        CaptureProbeTarget window = viewModel.Targets[0];
+        CaptureProbeTarget display = viewModel.Targets.Single(item =>
+            string.Equals(item.Kind, "Display", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(viewModel.SelectedTargets);
+        Assert.Null(viewModel.SelectedTarget);
+
+        viewModel.SetSelectedTargets([window]);
+        Assert.Equal(window, viewModel.SelectedTarget);
+
+        // Checking a second target keeps the first, and previews the one just checked.
+        viewModel.SetSelectedTargets([window, display]);
+
+        Assert.Equal(2, viewModel.SelectedTargets.Count);
+        Assert.Equal(display, viewModel.SelectedTarget);
+        Assert.True(viewModel.CanUseDesktopFixedRegion);
+
+        viewModel.SetSelectedTargets([display]);
+
+        Assert.Equal(display, viewModel.SelectedTarget);
+
+        viewModel.SetSelectedTargets([]);
+
+        Assert.Null(viewModel.SelectedTarget);
+        Assert.False(viewModel.HasReadyTarget);
+    }
+
     [Fact]
     public async Task SetupWizard_creates_a_valid_desktop_fixed_region_from_a_display()
     {
@@ -367,6 +448,7 @@ public sealed class ViewModelBehaviorTests
         var viewModel = provider.GetRequiredService<SetupWizardViewModel>();
         await viewModel.InitializeAsync(ct);
         viewModel.ProfileName = "Draft profile";
+        viewModel.SetSelectedTargets([viewModel.Targets[0]]);
         viewModel.SelectedProvider = viewModel.Providers.Single(item =>
             item.Id == "translation.baidu");
 
@@ -386,10 +468,11 @@ public sealed class ViewModelBehaviorTests
         await viewModel.InitializeAsync(ct);
 
         // Satisfy each step's gate so Next actually advances instead of being blocked:
-        // step 1 needs a name plus the target InitializeAsync already auto-selected, step 2's
-        // languages/provider are ready by default (InitializeAsync auto-selects the first ready
-        // provider), and step 3 needs at least one geometrically valid region.
+        // step 1 needs a name and a chosen target, step 2's languages/provider are ready by default
+        // (InitializeAsync auto-selects the first ready provider), and step 3 needs at least one
+        // geometrically valid region.
         viewModel.ProfileName = "Advance test";
+        viewModel.SetSelectedTargets([viewModel.Targets[0]]);
         viewModel.AddRegion("HUD", RegionPriorityLevel.P1);
 
         for (int step = 0; step < SetupWizardViewModel.StepCount - 1; step++)
@@ -431,6 +514,7 @@ public sealed class ViewModelBehaviorTests
         var viewModel = provider.GetRequiredService<SetupWizardViewModel>();
         await viewModel.InitializeAsync(ct);
         viewModel.ProfileName = "Step change test";
+        viewModel.SetSelectedTargets([viewModel.Targets[0]]);
         bool backChanged = false;
         viewModel.BackCommand.CanExecuteChanged += (_, _) => backChanged = true;
 
@@ -438,6 +522,167 @@ public sealed class ViewModelBehaviorTests
 
         Assert.True(backChanged);
         Assert.True(viewModel.CanGoBack);
+    }
+
+    [Fact]
+    public async Task SetupWizard_requires_explicit_rebind_or_removal_for_an_offline_saved_target()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        Guid profileId = Guid.NewGuid();
+        Guid firstStableId = Guid.NewGuid();
+        Guid missingStableId = Guid.NewGuid();
+        var draft = new ProfileEditModel(
+            profileId,
+            "Existing profile",
+            "ja",
+            "en",
+            firstStableId,
+            "Original window",
+            "Window",
+            "1920x1080",
+            "translation.deepl",
+            [new ProfileRegionDraft("Dialogue", RegionPriorityLevel.P0, Guid.NewGuid())],
+            CaptureTargets:
+            [
+                new ProfileCaptureTargetDraft(
+                    firstStableId, "Original window", "Window", "1920x1080"),
+                new ProfileCaptureTargetDraft(
+                    missingStableId, "Offline window", "Window", "1920x1080"),
+            ]);
+        var profileService = new EditableProfileService(draft);
+        CaptureProbeTarget original = CaptureTarget("Original window");
+        CaptureProbeTarget replacement = CaptureTarget("Replacement window");
+        var viewModel = new SetupWizardViewModel(
+            new CaptureListProbe([original, replacement]),
+            new FakeOcrProbe(),
+            new FakeTranslationProbe(),
+            new FakeSettingsService(),
+            new FakeSecretReferenceService(),
+            profileService);
+
+        await viewModel.LoadForEditAsync(profileId, ct);
+
+        CaptureProbeTarget missing = Assert.Single(viewModel.MissingTargets);
+        Assert.Equal("Offline window", missing.DisplayName);
+        Assert.Equal(2, viewModel.SelectedTargets.Count);
+        Assert.False(viewModel.HasReadyTarget);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+        Assert.Equal(
+            replacement,
+            Assert.Single(viewModel.GetAvailableRebindTargets(missing)));
+
+        Assert.True(viewModel.RebindMissingTarget(missing, replacement));
+        Assert.Empty(viewModel.MissingTargets);
+        Assert.True(viewModel.HasReadyTarget);
+        Assert.True(viewModel.SaveCommand.CanExecute(null));
+        await viewModel.SaveCommand.ExecuteAsync(null);
+
+        ProfileEditModel saved = Assert.IsType<ProfileEditModel>(profileService.LastSaved);
+        ProfileCaptureTargetDraft rebound = Assert.Single(
+            saved.EffectiveCaptureTargets,
+            target => target.TargetId == missingStableId);
+        Assert.Equal("Replacement window", rebound.Name);
+
+        var removeService = new EditableProfileService(draft);
+        var removeViewModel = new SetupWizardViewModel(
+            new CaptureListProbe([original, replacement]),
+            new FakeOcrProbe(),
+            new FakeTranslationProbe(),
+            new FakeSettingsService(),
+            new FakeSecretReferenceService(),
+            removeService);
+        await removeViewModel.LoadForEditAsync(profileId, ct);
+        Assert.True(removeViewModel.RemoveMissingTarget(
+            Assert.Single(removeViewModel.MissingTargets)));
+        await removeViewModel.SaveCommand.ExecuteAsync(null);
+        Assert.Single(Assert.IsType<ProfileEditModel>(removeService.LastSaved)
+            .EffectiveCaptureTargets);
+    }
+
+    [Fact]
+    public async Task SetupWizard_preserves_desktop_region_when_a_display_gets_a_new_live_id()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        Guid profileId = Guid.NewGuid();
+        Guid stableDisplayId = Guid.NewGuid();
+        Guid liveDisplayId = Guid.NewGuid();
+        var bounds = new OverlayPixelRect(120, 80, 1440, 760);
+        var draft = new ProfileEditModel(
+            profileId,
+            "Existing display profile",
+            "ja",
+            "en",
+            stableDisplayId,
+            "Main display — fixed area",
+            "DesktopFixedRegion",
+            "2560x1440",
+            "translation.deepl",
+            [new ProfileRegionDraft("Dialogue", RegionPriorityLevel.P0, Guid.NewGuid())],
+            DesktopRegion: bounds,
+            CaptureTargets:
+            [
+                new ProfileCaptureTargetDraft(
+                    stableDisplayId,
+                    "Main display — fixed area",
+                    "DesktopFixedRegion",
+                    "2560x1440",
+                    bounds),
+            ]);
+        var profileService = new EditableProfileService(draft);
+        var liveDisplay = new CaptureProbeTarget(
+            new CaptureTargetId(liveDisplayId),
+            "Main display",
+            "Display",
+            2560,
+            1440,
+            144,
+            Capturable: true,
+            ErrorCode: null);
+        var viewModel = new SetupWizardViewModel(
+            new CaptureListProbe([liveDisplay]),
+            new FakeOcrProbe(),
+            new FakeTranslationProbe(),
+            new FakeSettingsService(),
+            new FakeSecretReferenceService(),
+            profileService);
+
+        await viewModel.LoadForEditAsync(profileId, ct);
+
+        Assert.Equal(liveDisplay, viewModel.SelectedTarget);
+        Assert.True(viewModel.UseDesktopFixedRegion);
+        Assert.Equal(bounds.X, viewModel.DesktopRegionX);
+        Assert.Equal(bounds.Y, viewModel.DesktopRegionY);
+        Assert.Equal(bounds.Width, viewModel.DesktopRegionWidth);
+        Assert.Equal(bounds.Height, viewModel.DesktopRegionHeight);
+
+        await viewModel.SaveCommand.ExecuteAsync(null);
+
+        ProfileCaptureTargetDraft saved = Assert.Single(
+            Assert.IsType<ProfileEditModel>(profileService.LastSaved).EffectiveCaptureTargets);
+        Assert.Equal(stableDisplayId, saved.TargetId);
+        Assert.Equal(bounds, saved.DesktopRegion);
+    }
+
+    // A game that closes takes its capture target with it while the EngineHost keeps running, so
+    // the run controls have to stay available on the engine state alone: gating them on the target
+    // list leaves a running engine that the user can no longer pause, hide or stop.
+    [Fact]
+    public async Task Run_controls_stay_available_when_a_running_engine_has_no_targets()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using ServiceProvider provider = Build();
+        var viewModel = new RunningTargetsViewModel(
+            new TargetlessRunningControlService(),
+            provider.GetRequiredService<IProfileService>());
+
+        await viewModel.InitializeAsync(ct);
+
+        Assert.Equal(EngineRuntimeStatus.Running, viewModel.EngineStatus);
+        Assert.Empty(viewModel.Targets);
+        Assert.True(viewModel.CanControlRuntime);
+        Assert.True(viewModel.StopCommand.CanExecute(null));
+        Assert.True(viewModel.TogglePauseCommand.CanExecute(null));
+        Assert.True(viewModel.ToggleOverlayCommand.CanExecute(null));
     }
 
     [Fact]
@@ -450,7 +695,96 @@ public sealed class ViewModelBehaviorTests
         Assert.Throws<ArgumentNullException>(() => _ = new DiagnosticsViewModel(null!));
         Assert.Throws<ArgumentNullException>(() => _ = new GlossaryViewModel(null!));
         Assert.Throws<ArgumentNullException>(() => _ = new ServicesModelsViewModel(null!));
-        Assert.Throws<ArgumentNullException>(() => _ = new SettingsViewModel(null!, null!, null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            _ = new SettingsViewModel(null!, null!, null!, null!));
         Assert.Throws<ArgumentNullException>(() => _ = new SetupWizardViewModel(null!, null!, null!, null!, null!, null!));
+    }
+
+    private sealed class TargetlessRunningControlService : IRuntimeControlService
+    {
+        public EngineRuntimeStatus Status => EngineRuntimeStatus.Running;
+        public EngineRuntimeStatusChange? LastChange => null;
+        public bool IsPaused => false;
+        public bool IsOverlayVisible => true;
+        public event EventHandler<EngineRuntimeStatusChange>? StatusChanged
+        {
+            add { }
+            remove { }
+        }
+        public event EventHandler? TargetsChanged
+        {
+            add { }
+            remove { }
+        }
+        public IReadOnlyList<RunningTarget> GetRunningTargets() => [];
+        public Task StartAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetPausedAsync(bool paused, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task SetOverlayVisibleAsync(bool visible, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task RequestManualOcrAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private static CaptureProbeTarget CaptureTarget(string name) => new(
+        new CaptureTargetId(Guid.NewGuid()),
+        name,
+        "Window",
+        1920,
+        1080,
+        96,
+        Capturable: true,
+        ErrorCode: null);
+
+    private sealed class CaptureListProbe(IReadOnlyList<CaptureProbeTarget> targets) : ICaptureProbe
+    {
+        public ValueTask<CaptureProbeResult> ProbeAsync(
+            CaptureProbeRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(new CaptureProbeResult(targets));
+        }
+    }
+
+    private sealed class EditableProfileService(ProfileEditModel draft) : IProfileService
+    {
+        public ProfileEditModel? LastSaved { get; private set; }
+
+        public Task<IReadOnlyList<ProfileCard>> GetProfilesAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProfileCard>>([]);
+
+        public Task<ProfileEditModel?> LoadForEditAsync(
+            Guid profileId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProfileEditModel?>(profileId == draft.ProfileId ? draft : null);
+
+        public Task<IReadOnlyList<string>> GetRequiredProviderIdsAsync(
+            Guid profileId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
+        public Task<Guid> SaveAsync(
+            ProfileEditModel profile,
+            CancellationToken cancellationToken = default)
+        {
+            LastSaved = profile;
+            return Task.FromResult(profile.ProfileId);
+        }
+
+        public Task DeleteAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ExportAsync(
+            Guid profileId,
+            Stream destination,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<Guid> ImportAsync(
+            Stream source,
+            CancellationToken cancellationToken = default) => Task.FromResult(Guid.NewGuid());
     }
 }

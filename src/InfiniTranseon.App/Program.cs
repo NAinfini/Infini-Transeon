@@ -17,7 +17,18 @@ public static class Program
     // against the same profile database. Deep links therefore redirect into the running instance.
     private const string SingleInstanceKey = "InfiniTranseon.Desktop.Main";
 
+    // Handing an activation to a live instance is a local call that completes in milliseconds. This
+    // budget only has to outlast a busy machine, never a dead one.
+    private static readonly TimeSpan RedirectTimeout = TimeSpan.FromSeconds(5);
+
     internal static Exception? LaunchPrerequisiteFailure { get; private set; }
+
+    /// <summary>
+    /// True when the registered single instance did not accept this process's activation, so this
+    /// process took over. Recorded at startup because a stale registration is a real fault the user
+    /// should be able to see in the activity feed, not a silent recovery.
+    /// </summary>
+    internal static bool SingleInstanceRedirectTimedOut { get; private set; }
     internal static BorderlessCaptureAuthorizationStatus? BorderlessCaptureAuthorization { get; private set; }
 
     /// <summary>Route requested by the command line that started this process.</summary>
@@ -83,6 +94,10 @@ public static class Program
     /// running and reports that the caller should exit. A redirect failure is not swallowed: it is
     /// promoted to a launch prerequisite failure so the recovery window shows the real exception
     /// instead of a silent second instance.
+    ///
+    /// A registered instance that never answers is treated as gone rather than as a reason to stop:
+    /// the point of redirecting is to raise a window the user can see, so when no window can be
+    /// raised this process opens its own.
     /// </summary>
     private static bool TryClaimPrimaryInstance()
     {
@@ -95,8 +110,13 @@ public static class Program
                 return true;
             }
 
-            RedirectActivationTo(primary);
-            return false;
+            if (TryRedirectActivationTo(primary))
+            {
+                return false;
+            }
+
+            SingleInstanceRedirectTimedOut = true;
+            return true;
         }
         catch (Exception exception)
         {
@@ -105,13 +125,23 @@ public static class Program
         }
     }
 
-    // RedirectActivationToAsync must not be awaited on the STA main thread, which is still pumping
-    // the activation call that produced these arguments. The documented workaround is to complete it
-    // on a separate thread and block here until it finishes.
-    private static void RedirectActivationTo(AppInstance primary)
+    /// <summary>
+    /// Hands this process's activation to <paramref name="primary"/> and reports whether the handoff
+    /// actually landed.
+    ///
+    /// RedirectActivationToAsync must not be awaited on the STA main thread, which is still pumping
+    /// the activation call that produced these arguments, so it is completed on a separate thread.
+    /// That wait is bounded because the registration outlives the process it names: after a crash or
+    /// a forced kill, FindOrRegisterForKey still hands back the dead instance and the redirect never
+    /// completes. An unbounded wait there left the user with a process that had no window, wrote no
+    /// log, and never exited — the application simply stopped opening, permanently.
+    /// </summary>
+    private static bool TryRedirectActivationTo(AppInstance primary)
     {
         AppActivationArguments arguments = AppInstance.GetCurrent().GetActivatedEventArgs();
-        using var completed = new ManualResetEventSlim(false);
+        // Not disposed: on the timeout path the worker is still inside the redirect call and will set
+        // this handle whenever it returns.
+        var completed = new ManualResetEventSlim(false);
         Exception? failure = null;
         var worker = new Thread(() =>
         {
@@ -129,14 +159,21 @@ public static class Program
             }
         })
         {
-            IsBackground = false,
+            // Background, so an abandoned redirect can never hold the process open after Main returns.
+            IsBackground = true,
         };
         worker.Start();
-        completed.Wait();
+        if (!completed.Wait(RedirectTimeout))
+        {
+            return false;
+        }
+
         if (failure is not null)
         {
             throw failure;
         }
+
+        return true;
     }
 
     private static void OnPrimaryInstanceActivated(object? sender, AppActivationArguments arguments) =>

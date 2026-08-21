@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -398,10 +399,12 @@ std::optional<overlay::desired_state> parse_overlay_desired_state(
     constexpr std::size_t header_bytes = 48U;
     constexpr std::size_t region_bytes = 136U;
     constexpr std::size_t slot_bytes = 40U;
+    constexpr std::size_t line_bytes = 24U;
     constexpr std::uint32_t maximum_regions = 256U;
     constexpr std::uint32_t maximum_slots = 4U;
+    constexpr std::uint32_t maximum_lines_per_slot = 256U;
     constexpr std::size_t maximum_characters = 16'384U;
-    if (bytes.size() < header_bytes || read_u32(bytes, 0U) != 4U)
+    if (bytes.size() < header_bytes || read_u32(bytes, 0U) != 5U)
         return std::nullopt;
     const std::uint32_t region_count = read_u32(bytes, 4U);
     overlay::desired_state result{};
@@ -513,29 +516,50 @@ std::optional<overlay::desired_state> parse_overlay_desired_state(
             slot.order = read_u32(bytes, offset + 16U);
             const std::uint32_t state = read_u32(bytes, offset + 20U);
             const std::uint32_t label_bytes = read_u32(bytes, offset + 24U);
-            const std::uint32_t text_bytes = read_u32(bytes, offset + 28U);
+            const std::uint32_t line_count = read_u32(bytes, offset + 28U);
             slot.stage_index = read_u32(bytes, offset + 32U);
-            const std::size_t content_bytes = static_cast<std::size_t>(label_bytes) +
-                static_cast<std::size_t>(text_bytes);
             if (!unique_identity(slot_ids, slot.id) ||
                 std::ranges::find(orders, slot.order) != orders.end() ||
                 state > static_cast<std::uint32_t>(overlay::slot_state::cancelled) ||
                 !reserved_zero(bytes.subspan(offset + 36U, 4U)) ||
-                content_bytes > bytes.size() - offset - slot_bytes)
+                line_count > maximum_lines_per_slot ||
+                static_cast<std::size_t>(label_bytes) > bytes.size() - offset - slot_bytes)
                 return std::nullopt;
             orders.push_back(slot.order);
             const auto label = utf8_to_utf16(bytes.subspan(
                 offset + slot_bytes, label_bytes));
-            const auto text = utf8_to_utf16(bytes.subspan(
-                offset + slot_bytes + label_bytes, text_bytes));
-            if (!label.has_value() || !text.has_value()) return std::nullopt;
-            total_characters += label->size() + text->size();
+            if (!label.has_value()) return std::nullopt;
+            total_characters += label->size();
             if (total_characters > maximum_characters) return std::nullopt;
             slot.state = static_cast<overlay::slot_state>(state);
             slot.label = std::move(*label);
-            slot.text = std::move(*text);
+            offset += slot_bytes + label_bytes;
+
+            slot.lines.reserve(line_count);
+            for (std::uint32_t line_index{}; line_index < line_count; ++line_index)
+            {
+                if (offset > bytes.size() || line_bytes > bytes.size() - offset)
+                    return std::nullopt;
+                overlay::slot_line line{};
+                const std::uint32_t line_text_bytes = read_u32(bytes, offset);
+                line.bounds = {
+                    static_cast<float>(read_i32(bytes, offset + 4U)),
+                    static_cast<float>(read_i32(bytes, offset + 8U)),
+                    static_cast<float>(read_i32(bytes, offset + 12U)),
+                    static_cast<float>(read_i32(bytes, offset + 16U))};
+                line.source_line_count = read_u32(bytes, offset + 20U);
+                if (line.source_line_count == 0U ||
+                    static_cast<std::size_t>(line_text_bytes) > bytes.size() - offset - line_bytes)
+                    return std::nullopt;
+                auto text = utf8_to_utf16(bytes.subspan(offset + line_bytes, line_text_bytes));
+                if (!text.has_value()) return std::nullopt;
+                total_characters += text->size();
+                if (total_characters > maximum_characters) return std::nullopt;
+                line.text = std::move(*text);
+                slot.lines.push_back(std::move(line));
+                offset += line_bytes + line_text_bytes;
+            }
             region.ordered_slots.push_back(std::move(slot));
-            offset += slot_bytes + content_bytes;
         }
         result.regions.push_back(std::move(region));
     }
@@ -599,7 +623,7 @@ std::optional<ProcessingConfigurationCommand> parse_processing_configuration(
     constexpr std::size_t header_bytes = 72U;
     constexpr std::size_t region_bytes = 80U;
     constexpr std::uint32_t maximum_regions = 256U;
-    if (bytes.size() < header_bytes || read_u32(bytes, 0U) != 3U ||
+    if (bytes.size() < header_bytes || read_u32(bytes, 0U) != 4U ||
         std::to_integer<std::uint8_t>(bytes[64U]) > 1U ||
         !reserved_zero(bytes.subspan(65U, 7U)))
         return std::nullopt;
@@ -641,7 +665,8 @@ std::optional<ProcessingConfigurationCommand> parse_processing_configuration(
         region.lock_degradation = bytes[offset + 50U] == std::byte{1};
         const std::uint8_t flags = std::to_integer<std::uint8_t>(bytes[offset + 51U]);
         region.detect_orientation = (flags & 1U) != 0U;
-        region.use_cloud_ocr = (flags & 2U) != 0U;
+        region.ocr_backend = static_cast<ProcessingRegion::OcrBackend>(
+            std::to_integer<std::uint8_t>(bytes[offset + 57U]));
         region.recognition_interval_milliseconds = read_u32(bytes, offset + 52U);
         region.line_break_mode = std::to_integer<std::uint8_t>(bytes[offset + 56U]);
         const std::uint16_t provider_bytes = read_u16(bytes, offset + 58U);
@@ -652,8 +677,9 @@ std::optional<ProcessingConfigurationCommand> parse_processing_configuration(
         const std::size_t variable_bytes = static_cast<std::size_t>(provider_bytes) +
             language_bytes + pipeline_bytes;
         if (!unique_identity(region_ids, region.region_id) ||
-            bytes[offset + 50U] > std::byte{1} || (flags & ~3U) != 0U ||
-            bytes[offset + 57U] != std::byte{} || region.priority > 3U ||
+            bytes[offset + 50U] > std::byte{1} || flags > 1U ||
+            std::to_integer<std::uint8_t>(bytes[offset + 57U]) > 2U ||
+            region.priority > 3U ||
             region.area_mode > 2U || region.line_break_mode > 4U ||
             region.recognition_interval_milliseconds < 16U ||
             region.recognition_interval_milliseconds > 3'600'000U ||
@@ -662,7 +688,8 @@ std::optional<ProcessingConfigurationCommand> parse_processing_configuration(
             region.x < 0.0 || region.y < 0.0 || region.width <= 0.0 ||
             region.height <= 0.0 || region.x + region.width > 1.0 ||
             region.y + region.height > 1.0 ||
-            (region.use_cloud_ocr != (region.cloud_consent_policy_revision > 0U)) ||
+            ((region.ocr_backend == ProcessingRegion::OcrBackend::cloud) !=
+                (region.cloud_consent_policy_revision > 0U)) ||
             region.cloud_consent_policy_revision > static_cast<std::uint64_t>(INT64_MAX) ||
             !std::isfinite(region.detection_scale) || region.detection_scale < 0.1 ||
             region.detection_scale > 4.0 || provider_bytes == 0U ||
@@ -691,6 +718,13 @@ std::optional<ProcessingConfigurationCommand> parse_processing_configuration(
         region.ocr_provider_id = std::move(*provider);
         region.recognition_language = std::move(*language);
         region.preprocessing_pipeline = std::move(*pipeline);
+        if (region.ocr_backend == ProcessingRegion::OcrBackend::local)
+        {
+            std::string normalized = region.recognition_language;
+            std::ranges::transform(normalized, normalized.begin(), [](const char value)
+                { return static_cast<char>(std::tolower(static_cast<unsigned char>(value))); });
+            if (normalized == "auto") return std::nullopt;
+        }
         result.regions.push_back(std::move(region));
         offset += region_bytes + variable_bytes;
     }
@@ -836,7 +870,7 @@ std::optional<OcrResultCommand> parse_ocr_result(
 std::optional<std::vector<std::byte>> encode_cloud_ocr_crop_request(
     const CloudOcrCropEvent& event) noexcept
 {
-    constexpr std::size_t fixed_bytes = 160U;
+    constexpr std::size_t fixed_bytes = 164U;
     constexpr std::size_t maximum_payload_bytes = 8'388'608U - 56U;
     const bool region_identity_valid = event.token.area_kind == 0U
         ? nonzero(event.token.region_id)
@@ -858,6 +892,31 @@ std::optional<std::vector<std::byte>> encode_cloud_ocr_crop_request(
         {
             return character >= 'a' && character <= 'z';
         });
+    const auto valid_recognition_language = [](const std::string_view value)
+    {
+        if (value.empty() || value.size() > 64U || value.front() == '-' || value.back() == '-')
+            return false;
+        bool previous_hyphen{};
+        for (const unsigned char character : value)
+        {
+            if (character == '-')
+            {
+                if (previous_hyphen) return false;
+                previous_hyphen = true;
+            }
+            else if ((character >= 'a' && character <= 'z') ||
+                (character >= 'A' && character <= 'Z') ||
+                (character >= '0' && character <= '9'))
+            {
+                previous_hyphen = false;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
+    };
     if (!nonzero(event.token.runtime_epoch) ||
         !nonzero(event.token.target_instance_id) || event.token.area_kind > 2U ||
         !region_identity_valid || !nonzero(event.token.text_track_id) ||
@@ -866,17 +925,18 @@ std::optional<std::vector<std::byte>> encode_cloud_ocr_crop_request(
         event.token.result_sequence == 0U || event.consent_policy_revision == 0U ||
         event.deadline_utc_ticks == 0U || event.pixel_width == 0U ||
         event.pixel_height == 0U || !valid_mime || !valid_identifier(event.provider_id) ||
-        event.encoded_crop.empty() || event.encoded_byte_ceiling == 0U ||
+        !valid_recognition_language(event.recognition_language) || event.encoded_crop.empty() ||
+        event.encoded_byte_ceiling == 0U ||
         event.encoded_crop.size() > event.encoded_byte_ceiling)
         return std::nullopt;
     const std::size_t variable_bytes = event.mime_type.size() + event.provider_id.size() +
-        event.encoded_crop.size();
+        event.recognition_language.size() + event.encoded_crop.size();
     if (variable_bytes > maximum_payload_bytes - fixed_bytes) return std::nullopt;
     try
     {
         std::vector<std::byte> payload(fixed_bytes + variable_bytes);
         const auto bytes = std::span<std::byte>(payload);
-        write_u32(bytes, 0U, 1U);
+        write_u32(bytes, 0U, 2U);
         std::ranges::copy(event.token.runtime_epoch, payload.begin() + 4U);
         std::ranges::copy(event.token.target_instance_id, payload.begin() + 20U);
         payload[36U] = static_cast<std::byte>(event.token.area_kind);
@@ -897,6 +957,7 @@ std::optional<std::vector<std::byte>> encode_cloud_ocr_crop_request(
         write_u32(bytes, 148U, static_cast<std::uint32_t>(event.encoded_crop.size()));
         payload[152U] = std::byte{1};
         write_u32(bytes, 156U, static_cast<std::uint32_t>(event.provider_id.size()));
+        write_u32(bytes, 160U, static_cast<std::uint32_t>(event.recognition_language.size()));
         std::size_t offset = fixed_bytes;
         std::ranges::transform(event.mime_type, payload.begin() + offset,
             [](const char value) { return static_cast<std::byte>(value); });
@@ -904,6 +965,91 @@ std::optional<std::vector<std::byte>> encode_cloud_ocr_crop_request(
         std::ranges::transform(event.provider_id, payload.begin() + offset,
             [](const char value) { return static_cast<std::byte>(value); });
         offset += event.provider_id.size();
+        std::ranges::transform(event.recognition_language, payload.begin() + offset,
+            [](const char value) { return static_cast<std::byte>(value); });
+        offset += event.recognition_language.size();
+        std::ranges::copy(event.encoded_crop, payload.begin() + offset);
+        return payload;
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
+}
+
+std::optional<std::vector<std::byte>> encode_local_ocr_crop_request(
+    const LocalOcrCropEvent& event) noexcept
+{
+    constexpr std::size_t fixed_bytes = 152U;
+    constexpr std::size_t maximum_payload_bytes = 8'388'608U - 56U;
+    const bool region_identity_valid = event.token.area_kind == 0U
+        ? nonzero(event.token.region_id)
+        : reserved_zero(event.token.region_id);
+    const bool valid_mime = event.mime_type.starts_with("image/") &&
+        event.mime_type.size() > 6U && event.mime_type.size() <= 64U &&
+        std::ranges::all_of(event.mime_type.substr(6U), [](const char character)
+        {
+            return character >= 'a' && character <= 'z';
+        });
+    std::string normalized_language = event.recognition_language;
+    std::ranges::transform(
+        normalized_language,
+        normalized_language.begin(),
+        [](const char value)
+        {
+            return static_cast<char>(std::tolower(static_cast<unsigned char>(value)));
+        });
+    const bool valid_language = !event.recognition_language.empty() &&
+        event.recognition_language.size() <= 64U && normalized_language != "auto" &&
+        std::ranges::none_of(event.recognition_language, [](const unsigned char value)
+        {
+            return value < 0x20U || value == 0x7fU;
+        });
+    if (!nonzero(event.token.runtime_epoch) ||
+        !nonzero(event.token.target_instance_id) || event.token.area_kind > 2U ||
+        !region_identity_valid || !nonzero(event.token.text_track_id) ||
+        !nonzero(event.token.ocr_run_id) || event.token.source_generation == 0U ||
+        event.token.profile_revision == 0U || event.token.attempt == 0U ||
+        event.token.result_sequence == 0U || event.deadline_utc_ticks == 0U ||
+        event.pixel_width == 0U || event.pixel_height == 0U || !valid_mime ||
+        !valid_language || event.encoded_crop.empty() ||
+        event.encoded_byte_ceiling == 0U ||
+        event.encoded_crop.size() > event.encoded_byte_ceiling)
+        return std::nullopt;
+    const std::size_t variable_bytes = event.mime_type.size() +
+        event.recognition_language.size() + event.encoded_crop.size();
+    if (variable_bytes > maximum_payload_bytes - fixed_bytes) return std::nullopt;
+    try
+    {
+        std::vector<std::byte> payload(fixed_bytes + variable_bytes);
+        const auto bytes = std::span<std::byte>(payload);
+        write_u32(bytes, 0U, 1U);
+        std::ranges::copy(event.token.runtime_epoch, payload.begin() + 4U);
+        std::ranges::copy(event.token.target_instance_id, payload.begin() + 20U);
+        payload[36U] = static_cast<std::byte>(event.token.area_kind);
+        payload[37U] = event.token.manual ? std::byte{1} : std::byte{};
+        std::ranges::copy(event.token.region_id, payload.begin() + 40U);
+        std::ranges::copy(event.token.text_track_id, payload.begin() + 56U);
+        write_u64(bytes, 72U, event.token.source_generation);
+        write_u64(bytes, 80U, event.token.profile_revision);
+        std::ranges::copy(event.token.ocr_run_id, payload.begin() + 88U);
+        write_u32(bytes, 104U, event.token.attempt);
+        write_u64(bytes, 108U, event.token.result_sequence);
+        write_u32(bytes, 116U, static_cast<std::uint32_t>(event.mime_type.size()));
+        write_u64(bytes, 120U, event.deadline_utc_ticks);
+        write_u32(bytes, 128U, event.pixel_width);
+        write_u32(bytes, 132U, event.pixel_height);
+        write_u32(bytes, 136U, event.encoded_byte_ceiling);
+        write_u32(bytes, 140U, static_cast<std::uint32_t>(event.encoded_crop.size()));
+        write_u32(bytes, 144U,
+            static_cast<std::uint32_t>(event.recognition_language.size()));
+        std::size_t offset = fixed_bytes;
+        std::ranges::transform(event.mime_type, payload.begin() + offset,
+            [](const char value) { return static_cast<std::byte>(value); });
+        offset += event.mime_type.size();
+        std::ranges::transform(event.recognition_language, payload.begin() + offset,
+            [](const char value) { return static_cast<std::byte>(value); });
+        offset += event.recognition_language.size();
         std::ranges::copy(event.encoded_crop, payload.begin() + offset);
         return payload;
     }

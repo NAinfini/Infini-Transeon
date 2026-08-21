@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:InfiniTranseon.App.Controls"
+    xmlns:data="using:InfiniTranseon.App.Presentation"
     xmlns:automation="using:Microsoft.UI.Xaml.Automation"
     Loaded="OnLoaded"
     Unloaded="OnUnloaded"
@@ -23,39 +24,17 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid ColumnSpacing="{StaticResource SpaceM}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Spacing="{StaticResource SpaceXS}">
-                <TextBlock x:Uid="WorkspaceCaptureTitle" Style="{StaticResource PageTitleStyle}" />
-                <TextBlock
-                    x:Uid="WorkspaceCaptureSubtitle"
-                    Style="{StaticResource CaptionTextStyle}"
-                    TextWrapping="Wrap"
-                    MaxWidth="760"
-                    HorizontalAlignment="Left" />
-            </StackPanel>
-            <CommandBar
-                Grid.Column="1"
-                Background="Transparent"
-                DefaultLabelPosition="Right"
-                IsDynamicOverflowEnabled="True">
-                <AppBarButton x:Name="UndoButton" x:Uid="WorkbenchUndoButton" Icon="Undo" Click="OnUndoClick" />
-                <AppBarButton x:Name="RedoButton" x:Uid="WorkbenchRedoButton" Icon="Redo" Click="OnRedoClick" />
-            </CommandBar>
-        </Grid>
-
-        <InfoBar x:Name="PageInfoBar" Grid.Row="1" IsOpen="False" IsClosable="True" />
+        <!-- No page heading and no command bar: the workspace breadcrumb already names the section,
+             and a toolbar holding only undo/redo cost a band of empty width across the top of the
+             editor. Ctrl+Z and Ctrl+Y remain the way to reach the history. -->
+        <InfoBar x:Name="PageInfoBar" IsOpen="False" IsClosable="True" />
 
         <Border
-            Grid.Row="2"
+            Grid.Row="1"
             Style="{StaticResource CardBorderStyle}"
             Padding="{StaticResource InsetM}">
             <StackPanel Spacing="{StaticResource SpaceS}">
@@ -64,10 +43,12 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ComboBox
+                    <controls:SelectBox
                         x:Uid="WorkbenchTargetSelector"
                         x:Name="TargetSelector"
+                        DisplayMemberPath="Name"
                         HorizontalAlignment="Stretch"
+                        VerticalAlignment="Center"
                         SelectionChanged="OnTargetSelectionChanged" />
                     <CommandBar
                         Grid.Column="1"
@@ -131,7 +112,7 @@
 
         <Grid
             x:Name="EditorGrid"
-            Grid.Row="3"
+            Grid.Row="2"
             ColumnSpacing="{StaticResource SpaceM}"
             RowSpacing="{StaticResource SpaceM}">
             <Grid.ColumnDefinitions>
@@ -184,30 +165,34 @@
                                     x:Name="RegionEnabledToggle"
                                     x:Uid="WorkbenchRegionEnabledToggle"
                                     Toggled="OnInspectorChanged" />
-                                <ComboBox
+                                <controls:SelectBox
                                     x:Name="RegionPriorityBox"
                                     x:Uid="RegionPriorityBox"
                                     HorizontalAlignment="Stretch"
                                     SelectionChanged="OnInspectorSelectionChanged">
-                                    <ComboBoxItem Content="P0" />
-                                    <ComboBoxItem Content="P1" />
-                                    <ComboBoxItem Content="P2" />
-                                    <ComboBoxItem Content="P3" />
-                                </ComboBox>
+                                    <!-- Named for what the scheduler actually does with them: only
+                                         levels 2 and 3 are eligible for a lengthened interval under
+                                         load (PerformanceGovernor.BuildChanges). "P0".."P3" told the
+                                         user nothing and implied all four degraded in steps. -->
+                                    <ListViewItem x:Uid="RegionPriorityHighest" />
+                                    <ListViewItem x:Uid="RegionPriorityHigh" />
+                                    <ListViewItem x:Uid="RegionPriorityNormal" />
+                                    <ListViewItem x:Uid="RegionPriorityLow" />
+                                </controls:SelectBox>
                                 <TextBlock
                                     x:Uid="WorkbenchPriorityHint"
                                     Style="{StaticResource CaptionTextStyle}"
                                     TextWrapping="Wrap" />
-                                <ComboBox
+                                <controls:SelectBox
                                     x:Name="ContextRoleBox"
                                     x:Uid="WorkbenchContextRoleBox"
                                     HorizontalAlignment="Stretch"
                                     SelectionChanged="OnInspectorSelectionChanged">
-                                    <ComboBoxItem x:Uid="WorkbenchRoleNone" />
-                                    <ComboBoxItem x:Uid="WorkbenchRoleSpeaker" />
-                                    <ComboBoxItem x:Uid="WorkbenchRoleScene" />
-                                    <ComboBoxItem x:Uid="WorkbenchRoleDialogue" />
-                                </ComboBox>
+                                    <ListViewItem x:Uid="WorkbenchRoleNone" />
+                                    <ListViewItem x:Uid="WorkbenchRoleSpeaker" />
+                                    <ListViewItem x:Uid="WorkbenchRoleScene" />
+                                    <ListViewItem x:Uid="WorkbenchRoleDialogue" />
+                                </controls:SelectBox>
                                 <TextBlock
                                     x:Uid="WorkbenchContextRoleHint"
                                     Style="{StaticResource CaptionTextStyle}"
@@ -224,20 +209,39 @@
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch">
                             <StackPanel Spacing="{StaticResource SpaceM}" Padding="4,8">
-                                <ComboBox
+                                <AutoSuggestBox
                                     x:Name="OcrProviderBox"
                                     x:Uid="WorkbenchOcrProviderBox"
-                                    IsEditable="True"
-                                    IsTextSearchEnabled="True"
                                     HorizontalAlignment="Stretch"
-                                    LostFocus="OnInspectorChanged" />
-                                <ComboBox
+                                    QueryIcon="Find"
+                                    TextMemberPath="Name"
+                                    GotFocus="OnOcrProviderGotFocus"
+                                    LostFocus="OnOcrProviderLostFocus"
+                                    TextChanged="OnOcrProviderTextChanged"
+                                    SuggestionChosen="OnOcrProviderSuggestionChosen"
+                                    QuerySubmitted="OnOcrProviderQuerySubmitted">
+                                    <AutoSuggestBox.ItemTemplate>
+                                        <DataTemplate x:DataType="data:ProviderRow">
+                                            <StackPanel Padding="0,4" Spacing="2">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
+                                                <TextBlock Style="{StaticResource CaptionTextStyle}">
+                                                    <Run Text="{x:Bind Kind}" /><Run Text=" · " /><Run Text="{x:Bind StateText}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </AutoSuggestBox.ItemTemplate>
+                                </AutoSuggestBox>
+                                <AutoSuggestBox
                                     x:Name="RecognitionLanguageBox"
                                     x:Uid="WorkbenchRecognitionLanguageBox"
-                                    IsEditable="True"
-                                    IsTextSearchEnabled="True"
                                     HorizontalAlignment="Stretch"
-                                    LostFocus="OnInspectorChanged" />
+                                    QueryIcon="Find"
+                                    TextMemberPath="DisplayName"
+                                    GotFocus="OnRecognitionLanguageGotFocus"
+                                    LostFocus="OnRecognitionLanguageLostFocus"
+                                    TextChanged="OnRecognitionLanguageTextChanged"
+                                    SuggestionChosen="OnRecognitionLanguageSuggestionChosen"
+                                    QuerySubmitted="OnRecognitionLanguageQuerySubmitted" />
                                 <ToggleSwitch
                                     x:Name="DetectOrientationToggle"
                                     x:Uid="WorkbenchDetectOrientationToggle"
@@ -276,31 +280,31 @@
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch">
                             <StackPanel Spacing="{StaticResource SpaceM}" Padding="4,8">
-                                <ComboBox
+                                <controls:SelectBox
                                     x:Name="LineBreakModeBox"
                                     x:Uid="WorkbenchLineBreakModeBox"
                                     HorizontalAlignment="Stretch"
                                     SelectionChanged="OnInspectorSelectionChanged">
-                                    <ComboBoxItem x:Uid="LineBreakPreserve" Tag="PreserveLines" />
-                                    <ComboBoxItem x:Uid="LineBreakJoin" Tag="JoinParagraph" />
-                                    <ComboBoxItem x:Uid="LineBreakKeyValue" Tag="KeyValueRows" />
-                                    <ComboBoxItem x:Uid="LineBreakCustom" Tag="CustomSeparator" />
-                                    <ComboBoxItem x:Uid="LineBreakPerBox" Tag="PerBox" />
-                                </ComboBox>
+                                    <ListViewItem x:Uid="LineBreakPreserve" Tag="PreserveLines" />
+                                    <ListViewItem x:Uid="LineBreakJoin" Tag="JoinParagraph" />
+                                    <ListViewItem x:Uid="LineBreakKeyValue" Tag="KeyValueRows" />
+                                    <ListViewItem x:Uid="LineBreakCustom" Tag="CustomSeparator" />
+                                    <ListViewItem x:Uid="LineBreakPerBox" Tag="PerBox" />
+                                </controls:SelectBox>
                                 <TextBox
                                     x:Name="CustomSeparatorBox"
                                     x:Uid="WorkbenchCustomSeparatorBox"
                                     LostFocus="OnInspectorChanged" />
-                                <ComboBox
+                                <controls:SelectBox
                                     x:Name="LineAlignmentBox"
                                     x:Uid="WorkbenchLineAlignmentBox"
                                     HorizontalAlignment="Stretch"
                                     SelectionChanged="OnInspectorSelectionChanged">
-                                    <ComboBoxItem x:Uid="LineAlignmentAuto" Tag="Auto" />
-                                    <ComboBoxItem x:Uid="LineAlignmentLeft" Tag="Left" />
-                                    <ComboBoxItem x:Uid="LineAlignmentCenter" Tag="Center" />
-                                    <ComboBoxItem x:Uid="LineAlignmentRight" Tag="Right" />
-                                </ComboBox>
+                                    <ListViewItem x:Uid="LineAlignmentAuto" Tag="Auto" />
+                                    <ListViewItem x:Uid="LineAlignmentLeft" Tag="Left" />
+                                    <ListViewItem x:Uid="LineAlignmentCenter" Tag="Center" />
+                                    <ListViewItem x:Uid="LineAlignmentRight" Tag="Right" />
+                                </controls:SelectBox>
                                 <NumberBox
                                     x:Name="MaximumLinesBox"
                                     x:Uid="WorkbenchMaximumLinesBox"
@@ -358,7 +362,7 @@
         </Grid>
 
         <Border
-            Grid.Row="4"
+            Grid.Row="3"
             Style="{StaticResource CardBorderStyle}"
             Padding="14,9">
             <Grid ColumnSpacing="{StaticResource SpaceL}">

@@ -55,6 +55,7 @@ public sealed class LocalWorkerSandboxSession : ILocalWorkerSession
 public static class LocalWorkerSandboxLauncher
 {
     private const int ErrorAlreadyExists = unchecked((int)0x800700B7);
+    private const uint ProtectedDaclSecurityInformation = 0x80000004U;
 
     public static async ValueTask<LocalWorkerSandboxSession> LaunchAsync(
         LocalWorkerSandboxOptions options,
@@ -152,6 +153,7 @@ public static class LocalWorkerSandboxLauncher
                 throw new InvalidDataException("Local worker pipe client PID does not match the launched process.");
             LocalWorkerHandshake handshake = await LocalWorkerFrameCodec.ReadAsync<LocalWorkerHandshake>(
                 pipe, timeout.Token).ConfigureAwait(false);
+            int workerProcessId = checked((int)processInformation.ProcessId);
             byte[] identity = Encoding.UTF8.GetBytes($"{epoch:D}:{processInformation.ProcessId}");
             byte[] expectedProof = HMACSHA256.HashData(secret, identity);
             byte[] actualProof;
@@ -161,7 +163,7 @@ public static class LocalWorkerSandboxLauncher
             {
                 if (handshake.ProtocolVersion != LocalWorkerProtocol.Version ||
                     handshake.WorkerSessionEpoch != epoch ||
-                    handshake.WorkerProcessId != processInformation.ProcessId ||
+                    handshake.WorkerProcessId != workerProcessId ||
                     !CryptographicOperations.FixedTimeEquals(expectedProof, actualProof))
                     throw new InvalidDataException("Local worker handshake authentication failed.");
             }
@@ -173,7 +175,7 @@ public static class LocalWorkerSandboxLauncher
 
             var client = new LocalWorkerClient(pipe, epoch);
             var session = new LocalWorkerSandboxSession(
-                checked((int)processInformation.ProcessId), epoch, client, process, job);
+                workerProcessId, epoch, client, process, job);
             pipe = null;
             process = null;
             job = null;
@@ -219,7 +221,7 @@ public static class LocalWorkerSandboxLauncher
         finally { _ = LocalWorkerSandboxNative.LocalFree(text); }
     }
 
-    private static void ApplyDirectoryAcl(string path, string sid, string access)
+    internal static void ApplyDirectoryAcl(string path, string sid, string access)
     {
         string sddl = $"D:P(A;OICI;FA;;;OW)(A;OICI;FA;;;SY)(A;OICI;{access};;;{sid})";
         if (!LocalWorkerSandboxNative.ConvertStringSecurityDescriptorToSecurityDescriptor(
@@ -227,9 +229,18 @@ public static class LocalWorkerSandboxLauncher
             throw new Win32Exception(Marshal.GetLastWin32Error());
         try
         {
-            if (!LocalWorkerSandboxNative.SetFileSecurity(
-                    path, 0x80000004U, descriptor))
+            if (!LocalWorkerSandboxNative.GetSecurityDescriptorDacl(
+                    descriptor, out bool present, out IntPtr dacl, out _) || !present)
                 throw new Win32Exception(Marshal.GetLastWin32Error());
+            // The inheritable ACEs have to reach the files already sitting in the directory. A
+            // package is downloaded before any sandbox exists, so writing the descriptor onto the
+            // directory alone leaves every model file without an ACE for the AppContainer and the
+            // worker dies the moment it opens one. SetNamedSecurityInfo re-runs inheritance over
+            // the existing children; SetFileSecurity does not.
+            uint result = LocalWorkerSandboxNative.SetNamedSecurityInfo(
+                path, 1, ProtectedDaclSecurityInformation,
+                IntPtr.Zero, IntPtr.Zero, dacl, IntPtr.Zero);
+            if (result != 0U) throw new Win32Exception(checked((int)result));
         }
         finally { _ = LocalWorkerSandboxNative.LocalFree(descriptor); }
     }
@@ -321,12 +332,6 @@ public static class LocalWorkerSandboxLauncher
         assembly is null
             ? $"\"{host}\" --bootstrap-handle={bootstrapHandle.ToInt64()}"
             : $"\"{host}\" \"{assembly}\" --bootstrap-handle={bootstrapHandle.ToInt64()}";
-
-    private sealed record LocalWorkerHandshake(
-        int ProtocolVersion,
-        Guid WorkerSessionEpoch,
-        uint WorkerProcessId,
-        string Proof);
 }
 
 internal sealed class AppContainerProcessAttributeList : IDisposable
@@ -394,6 +399,17 @@ internal sealed class SanitizedEnvironmentBlock : IDisposable
 
     public static SanitizedEnvironmentBlock Create(string scratch, string host)
     {
+        string block = string.Join('\0', BuildValues(scratch, host).Select(item => item.Key + "=" + item.Value))
+            + "\0\0";
+        return new SanitizedEnvironmentBlock(Marshal.StringToHGlobalUni(block));
+    }
+
+    /// <summary>
+    /// The only variables the worker is allowed to see. Everything else in this process — tokens,
+    /// proxy settings, the user's PATH — stays out of the sandbox.
+    /// </summary>
+    internal static SortedDictionary<string, string> BuildValues(string scratch, string host)
+    {
         var values = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows),
@@ -402,12 +418,17 @@ internal sealed class SanitizedEnvironmentBlock : IDisposable
             ["TMP"] = scratch,
             ["PATH"] = string.Join(';', Path.GetDirectoryName(host), Environment.SystemDirectory),
             ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = scratch,
+            // Windows resolves the AppContainer's redirected package folders from this one while it
+            // creates the process. Leave it out and CreateProcess never starts the worker at all:
+            // it fails with ERROR_ENVVAR_NOT_FOUND before any of the sandbox limits even apply.
+            [LocalAppDataVariable] = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         };
         string? dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
         if (!string.IsNullOrWhiteSpace(dotnetRoot)) values["DOTNET_ROOT"] = dotnetRoot;
-        string block = string.Join('\0', values.Select(item => item.Key + "=" + item.Value)) + "\0\0";
-        return new SanitizedEnvironmentBlock(Marshal.StringToHGlobalUni(block));
+        return values;
     }
+
+    internal const string LocalAppDataVariable = "LOCALAPPDATA";
 
     public void Dispose()
     {
@@ -469,10 +490,13 @@ internal static class LocalWorkerSandboxNative
         string stringSecurityDescriptor, uint stringSDRevision,
         out IntPtr securityDescriptor, out uint securityDescriptorSize);
 
-    [DllImport("advapi32.dll", EntryPoint = "SetFileSecurityW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport("advapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool SetFileSecurity(
-        string fileName, uint securityInformation, IntPtr securityDescriptor);
+    internal static extern bool GetSecurityDescriptorDacl(
+        IntPtr securityDescriptor,
+        [MarshalAs(UnmanagedType.Bool)] out bool daclPresent,
+        out IntPtr dacl,
+        [MarshalAs(UnmanagedType.Bool)] out bool daclDefaulted);
 
     [DllImport("advapi32.dll", EntryPoint = "GetNamedSecurityInfoW", CharSet = CharSet.Unicode)]
     internal static extern uint GetNamedSecurityInfo(

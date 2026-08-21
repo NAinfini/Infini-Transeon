@@ -127,8 +127,13 @@ public sealed class DiagnosticsStorageTests
             profile, 20, null, TestContext.Current.CancellationToken)).Items);
     }
 
+    /// <summary>
+    /// Free-form text can no longer reach an argument: <see cref="StatusArgument"/> has no conversion
+    /// from string, so the smuggling attempts this used to make at runtime do not compile. What is
+    /// still a plain string, and therefore still checked here, is the argument's name.
+    /// </summary>
     [Fact]
-    public async Task StatusLogRejectsTextFieldsAndFreeFormStringSmuggling()
+    public async Task StatusLogRejectsArgumentNamesThatAreSecretsOrFreeText()
     {
         using var temp = new TempDirectory();
         await using var log = new StatusEventLog(temp.Path, maximumFileBytes: 1024, maximumFiles: 2);
@@ -138,18 +143,9 @@ public sealed class DiagnosticsStorageTests
             "provider.failed",
             "status.provider.failed",
             StatusEventSeverity.Error,
-            new Dictionary<string, object?> { ["sourceText"] = "private" }),
-            TestContext.Current.CancellationToken).AsTask());
-
-        await Assert.ThrowsAsync<ArgumentException>(() => log.WriteAsync(new StatusEvent(
-            DateTimeOffset.UtcNow,
-            "provider",
-            "provider.failed",
-            "status.provider.failed",
-            StatusEventSeverity.Error,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
-                ["detail"] = "private OCR text can otherwise be smuggled here",
+                ["sourceText"] = StatusArgument.Id("llm.openai"),
             }), TestContext.Current.CancellationToken).AsTask());
 
         await Assert.ThrowsAsync<ArgumentException>(() => log.WriteAsync(new StatusEvent(
@@ -158,7 +154,7 @@ public sealed class DiagnosticsStorageTests
             "provider.failed",
             "status.provider.failed",
             StatusEventSeverity.Error,
-            new Dictionary<string, object?> { ["detail"] = "Attack" }),
+            new Dictionary<string, StatusArgument> { ["the failing provider"] = 2 }),
             TestContext.Current.CancellationToken).AsTask());
 
         await log.WriteAsync(new StatusEvent(
@@ -167,28 +163,40 @@ public sealed class DiagnosticsStorageTests
             "provider.failed",
             "status.provider.failed",
             StatusEventSeverity.Error,
-            new Dictionary<string, object?>
+            new Dictionary<string, StatusArgument>
             {
-                ["providerId"] = new StatusIdentifier("llm.openai"),
+                ["providerId"] = StatusArgument.Id("llm.openai"),
                 ["attempt"] = 2,
+                ["cancelled"] = false,
+                ["waited"] = TimeSpan.FromSeconds(3),
+                ["severity"] = StatusEventSeverity.Error,
+                ["missing"] = StatusArgument.Id(null),
             }), TestContext.Current.CancellationToken);
 
         string contents = await File.ReadAllTextAsync(
             Path.Combine(temp.Path, "status-0.jsonl"), TestContext.Current.CancellationToken);
         Assert.Contains("llm.openai", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("private OCR text", contents, StringComparison.Ordinal);
+        Assert.Contains("\"missing\":null", contents, StringComparison.Ordinal);
+        Assert.Single(await File.ReadAllLinesAsync(
+            Path.Combine(temp.Path, "status-0.jsonl"), TestContext.Current.CancellationToken));
     }
+
+    /// <summary>A machine token still has to be one: <see cref="StatusArgument.Id"/> rejects prose at
+    /// the call site, where the author can see which value was wrong.</summary>
+    [Fact]
+    public void StatusArgumentRejectsProseWhereTheCallerCanStillSeeIt() =>
+        Assert.Throws<ArgumentException>(() =>
+            StatusArgument.Id("private OCR text can otherwise be smuggled here"));
 
     [Fact]
     public async Task StatusLogRejectsAnEventLargerThanItsConfiguredFileBudget()
     {
         using var temp = new TempDirectory();
         await using var log = new StatusEventLog(temp.Path, maximumFileBytes: 1024, maximumFiles: 2);
-        IReadOnlyDictionary<string, object?> arguments = Enumerable.Range(0, 32)
+        IReadOnlyDictionary<string, StatusArgument> arguments = Enumerable.Range(0, 32)
             .ToDictionary(
                 index => $"field{index}",
-                index => (object?)new StatusIdentifier(
-                    new string((char)('a' + index % 26), 128)),
+                index => StatusArgument.Id(new string((char)('a' + index % 26), 128)),
                 StringComparer.Ordinal);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => log.WriteAsync(

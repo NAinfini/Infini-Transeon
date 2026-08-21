@@ -42,6 +42,7 @@ public enum RuntimeMessageKind
     RuntimeBudgetSnapshot = 25,
     ThumbnailRequest = 26,
     ThumbnailAcknowledgement = 27,
+    LocalOcrCropRequest = 28,
 }
 
 public sealed record RuntimeEnvelopeHeader(

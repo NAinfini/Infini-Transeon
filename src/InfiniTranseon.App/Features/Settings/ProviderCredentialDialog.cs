@@ -13,9 +13,8 @@ namespace InfiniTranseon.App.Features.Settings;
 internal static class ProviderCredentialDialog
 {
     private const int MaximumServiceAccountBytes = 256 * 1024;
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     public static async Task<bool> ShowAsync(
         XamlRoot xamlRoot,

@@ -1,5 +1,7 @@
 using InfiniTranseon.Contracts.Translation;
+using InfiniTranseon.Core.Storage;
 using InfiniTranseon.Core.Translation;
+using Microsoft.Data.Sqlite;
 
 namespace InfiniTranseon.Core.Tests.Translation;
 
@@ -75,6 +77,36 @@ public sealed class TranslationMemoryTests
 
         Assert.True(hit?.Persistent);
         Assert.Equal("persistent result", hit?.Translation);
+    }
+
+    [Fact]
+    public async Task PersistentHitIsPromotedToMemory()
+    {
+        using var temp = new TempDirectory();
+        string database = Path.Combine(temp.Path, "memory.db");
+        Guid profile = Guid.NewGuid();
+        TranslationCacheKey key = Key("persistent source");
+        var writer = new TranslationMemory(
+            new TranslationMemoryOptions(PersistentEnabled: true), database);
+        await writer.StoreAsync(
+            profile, key, "persistent result", TestContext.Current.CancellationToken);
+        var reader = new TranslationMemory(
+            new TranslationMemoryOptions(PersistentEnabled: true), database);
+
+        TranslationMemoryHit? first = await reader.FindAsync(
+            profile, key, TestContext.Current.CancellationToken);
+        await using (SqliteConnection connection = DatabaseConnection.Open(database))
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "DELETE FROM translation_memory;";
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+        TranslationMemoryHit? second = await reader.FindAsync(
+            profile, key, TestContext.Current.CancellationToken);
+
+        Assert.True(first?.Persistent);
+        Assert.Equal("persistent result", second?.Translation);
+        Assert.False(second?.Persistent);
     }
 
     [Fact]

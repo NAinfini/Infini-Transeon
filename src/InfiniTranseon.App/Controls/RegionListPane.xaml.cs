@@ -3,6 +3,7 @@ using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.Windows.ApplicationModel.Resources;
 
 namespace InfiniTranseon.App.Controls;
 
@@ -31,6 +32,24 @@ public sealed partial class RegionListPane : UserControl
     {
         InitializeComponent();
     }
+
+    /// <summary>
+    /// The list badge for a priority level. The enum names (P0…P3) are storage identifiers and say
+    /// nothing to the user; the selector's full sentences are far too long for a one-column badge, so
+    /// the list carries its own short vocabulary.
+    /// </summary>
+    public static string DescribePriority(RegionPriorityLevel priority) => priority switch
+    {
+        // Spelled out per branch rather than composed: the parity test that catches a key typo before
+        // it becomes a runtime NAMED_RESOURCE_NOT_FOUND only sees literals inside GetString.
+        RegionPriorityLevel.P0 => Strings.GetString("RegionPriorityBadgeHighest"),
+        RegionPriorityLevel.P1 => Strings.GetString("RegionPriorityBadgeHigh"),
+        RegionPriorityLevel.P2 => Strings.GetString("RegionPriorityBadgeNormal"),
+        RegionPriorityLevel.P3 => Strings.GetString("RegionPriorityBadgeLow"),
+        _ => throw new ArgumentOutOfRangeException(nameof(priority), priority, null),
+    };
+
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     /// <summary>The live target region collection. Assigned once per target switch (never
     /// null-then-reassigned), so <see cref="ListView"/> selection and scroll position survive

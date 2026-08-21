@@ -78,7 +78,7 @@ std::optional<refinement_transition> plan_refinement_transition(
                     [&next_slot](const slot& value) { return value.id == next_slot.id; });
                 return previous_slot != previous_region->ordered_slots.end() &&
                     next_slot.stage_index > previous_slot->stage_index &&
-                    next_slot.text != previous_slot->text;
+                    next_slot.lines != previous_slot->lines;
             });
         if (!refined) continue;
         found = true;

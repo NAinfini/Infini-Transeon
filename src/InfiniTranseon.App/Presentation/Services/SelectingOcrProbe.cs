@@ -1,4 +1,6 @@
 using InfiniTranseon.Contracts.Probes;
+using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Settings;
 
 namespace InfiniTranseon.App.Presentation.Services;
 
@@ -12,7 +14,8 @@ namespace InfiniTranseon.App.Presentation.Services;
 /// <see cref="AppOcrBackend.Automatic"/> switches to them exactly there and nowhere else.
 ///
 /// The routing decision is made per call rather than cached, because both sides change underneath
-/// it: the user can add a Windows language pack, and the local packages install in the background.
+/// it: the user can add a Windows language pack, and an explicitly approved local-model install can
+/// complete while the app is open.
 /// </summary>
 public sealed class SelectingOcrProbe(
     IOcrProbe windows,
@@ -38,26 +41,42 @@ public sealed class SelectingOcrProbe(
 
     internal IOcrProbe Select(string? languageTag)
     {
-        // Only the Windows recognizer can decide the language for itself, from the account's display
-        // languages. The local models are one network per language and have nothing to fall back on.
-        bool isAutomaticLanguage = string.IsNullOrWhiteSpace(languageTag) ||
-            string.Equals(languageTag, "auto", StringComparison.OrdinalIgnoreCase);
-        if (isAutomaticLanguage)
+        OcrBackendPreference preference = _backend() switch
         {
-            return _windows;
-        }
+            AppOcrBackend.Windows => OcrBackendPreference.Windows,
+            AppOcrBackend.Local => OcrBackendPreference.Local,
+            _ => OcrBackendPreference.Automatic,
+        };
+        return OcrRuntimeBackendResolver.Resolve(preference, _availability, languageTag) switch
+        {
+            RuntimeOcrBackend.Windows => _windows,
+            RuntimeOcrBackend.Local => _local,
+            _ => throw new InvalidOperationException("Global OCR preference cannot select cloud OCR."),
+        };
+    }
+}
 
-        return _backend() switch
+public static class OcrRuntimeBackendResolver
+{
+    public static RuntimeOcrBackend Resolve(
+        OcrBackendPreference preference,
+        IOcrLanguageAvailability availability,
+        string? languageTag)
+    {
+        ArgumentNullException.ThrowIfNull(availability);
+        if (!Enum.IsDefined(preference))
+            throw new ArgumentOutOfRangeException(nameof(preference));
+        if (string.IsNullOrWhiteSpace(languageTag) ||
+            string.Equals(languageTag, "auto", StringComparison.OrdinalIgnoreCase))
+            return RuntimeOcrBackend.Windows;
+        return preference switch
         {
-            AppOcrBackend.Windows => _windows,
-            AppOcrBackend.Local => _local,
-            // Windows when it can read this language; the downloaded models otherwise — including
-            // when nothing is installed yet, because the local probe's failure names a package the
-            // application can go and fetch, while the Windows one names a Features-on-Demand pack it
-            // cannot install for the user.
-            _ => _availability.StatusFor(languageTag!).Source == OcrLanguageSource.WindowsRecognizer
-                ? _windows
-                : _local,
+            OcrBackendPreference.Windows => RuntimeOcrBackend.Windows,
+            OcrBackendPreference.Local => RuntimeOcrBackend.Local,
+            _ => availability.StatusFor(languageTag).Source ==
+                OcrLanguageSource.WindowsRecognizer
+                    ? RuntimeOcrBackend.Windows
+                    : RuntimeOcrBackend.Local,
         };
     }
 }

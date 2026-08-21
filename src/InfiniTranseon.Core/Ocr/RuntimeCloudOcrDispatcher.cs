@@ -92,6 +92,7 @@ public sealed class RuntimeCloudOcrDispatcher
                 crop.PixelWidth,
                 crop.PixelHeight,
                 crop.ExplicitCloudConsent,
+                crop.RecognitionLanguage,
                 crop.ConsentPolicyRevision,
                 crop.EncodedByteCeiling,
                 crop.DeadlineUtc);

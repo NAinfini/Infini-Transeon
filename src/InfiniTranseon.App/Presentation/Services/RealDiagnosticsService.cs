@@ -75,12 +75,13 @@ public sealed class RealDiagnosticsService : IDiagnosticsService
         }
     }
 
+    // A truncated field means the writer produced a line the reader cannot explain; the empty string
+    // routes it to the presenter's "unrecognized" wording instead of inventing a plausible category.
     private static DiagnosticEvent ToDiagnostic(StatusEventDto dto) => new(
-        dto.OccurredAtUtc.ToLocalTime().ToString("HH:mm:ss"),
-        dto.Category ?? "runtime",
-        dto.ErrorCode ?? "unknown",
+        dto.OccurredAtUtc,
+        dto.Category ?? string.Empty,
+        dto.ErrorCode ?? string.Empty,
         dto.MessageKey ?? string.Empty,
-        "—",
         ToSeverity(dto.Severity));
 
     private static StatusSeverity ToSeverity(int severity) => severity switch

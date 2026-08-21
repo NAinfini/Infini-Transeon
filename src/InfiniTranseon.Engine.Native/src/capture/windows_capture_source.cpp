@@ -13,8 +13,12 @@
 #include <winrt/base.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <stdexcept>
+#include <string>
+#include <thread>
 #include <utility>
 
 namespace infini::capture {
@@ -81,6 +85,9 @@ struct windows_capture_source::implementation final : std::enable_shared_from_th
     lifecycle_callback on_lifecycle;
     std::shared_ptr<frame_lease> latest_lease;
     std::mutex gate;
+    std::mutex watch_gate;
+    std::condition_variable watch_changed;
+    std::thread watcher;
     std::atomic<bool> is_running{};
     std::atomic<bool> recreating{};
     std::atomic<std::uint64_t> latest_requested_sequence{};
@@ -100,6 +107,29 @@ struct windows_capture_source::implementation final : std::enable_shared_from_th
         if (callback) callback(lifecycle);
     }
 
+    // Minimising or closing a window stops its frames, so neither state can be inferred from the
+    // frame path: the transition the caller needs to hear about is exactly the one that silences
+    // the only signal. Window state therefore has its own observer, and the frame path reports
+    // nothing about it.
+    void watch_window() noexcept {
+        capture_lifecycle reported = capture_lifecycle::running;
+        while (is_running.load()) {
+            const capture_lifecycle current = IsWindow(descriptor.window) == FALSE
+                ? capture_lifecycle::closed
+                : (IsIconic(descriptor.window) != FALSE
+                    ? capture_lifecycle::minimized
+                    : capture_lifecycle::running);
+            if (current != reported) {
+                reported = current;
+                notify_lifecycle(current);
+            }
+            if (current == capture_lifecycle::closed) return;
+            std::unique_lock lock(watch_gate);
+            watch_changed.wait_for(lock, std::chrono::milliseconds{200},
+                [this] { return !is_running.load(); });
+        }
+    }
+
     void emit_frame(std::shared_ptr<captured_frame> frame) noexcept {
         frame_callback callback;
         {
@@ -115,15 +145,9 @@ struct windows_capture_source::implementation final : std::enable_shared_from_th
             if (!is_running.load()) return;
             Direct3D11CaptureFrame frame = sender.TryGetNextFrame();
             if (!frame) return;
-            if (descriptor.kind == capture_source_kind::window && !IsWindow(descriptor.window)) {
-                frame.Close();
-                notify_lifecycle(capture_lifecycle::closed);
-                return;
-            }
             const auto size = frame.ContentSize();
             if (size.Width <= 0 || size.Height <= 0) {
                 frame.Close();
-                notify_lifecycle(capture_lifecycle::minimized);
                 return;
             }
             if (recreating.load()) {
@@ -225,7 +249,9 @@ struct windows_capture_source::implementation final : std::enable_shared_from_th
                         return;
                     }
                     if (!state->is_running.load() ||
-                        state->latest_requested_sequence.load() != identity.frame_sequence) return;
+                        state->latest_requested_sequence.load() != identity.frame_sequence) {
+                        return;
+                    }
                     auto output_lease = std::make_shared<frame_lease>(identity, [] {});
                     auto output = std::make_shared<captured_frame>(captured_frame{
                         identity,
@@ -312,6 +338,8 @@ void windows_capture_source::start(frame_callback on_frame, lifecycle_callback o
         impl_->notify_lifecycle(border_required
             ? capture_lifecycle::border_required
             : capture_lifecycle::running);
+        if (impl_->descriptor.kind == capture_source_kind::window)
+            impl_->watcher = std::thread([state = impl_] { state->watch_window(); });
     } catch (...) {
         stop();
         throw;
@@ -321,6 +349,15 @@ void windows_capture_source::start(frame_callback on_frame, lifecycle_callback o
 void windows_capture_source::stop() noexcept {
     if (!impl_) return;
     impl_->is_running.store(false);
+    impl_->watch_changed.notify_all();
+    if (impl_->watcher.joinable()) {
+        // A lifecycle callback runs on the observer, so a teardown started from that callback would
+        // otherwise join the thread it is running on.
+        if (impl_->watcher.get_id() == std::this_thread::get_id())
+            impl_->watcher.detach();
+        else
+            impl_->watcher.join();
+    }
     if (!impl_->session && !impl_->frame_pool && !impl_->item) return;
     try {
         if (impl_->frame_pool && impl_->frame_arrived_token.value != 0)

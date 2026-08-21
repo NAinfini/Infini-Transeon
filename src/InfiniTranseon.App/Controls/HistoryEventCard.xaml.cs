@@ -8,9 +8,8 @@ namespace InfiniTranseon.App.Controls;
 
 public sealed partial class HistoryEventCard : UserControl
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     public static readonly DependencyProperty ItemProperty = DependencyProperty.Register(
         nameof(Item),
         typeof(HistoryEvent),
@@ -32,6 +31,15 @@ public sealed partial class HistoryEventCard : UserControl
         get => (HistoryEvent)GetValue(ItemProperty);
         set => SetValue(ItemProperty, value);
     }
+
+    /// <summary>
+    /// Entries written before history recorded the region carry no name, and no later lookup can
+    /// recover it. The label is omitted for those rather than filled with a placeholder that reads
+    /// like a region called "—".
+    /// </summary>
+    public Visibility RegionVisibility => string.IsNullOrEmpty(Item?.Region)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
 
     private static void OnItemChanged(
         DependencyObject sender,

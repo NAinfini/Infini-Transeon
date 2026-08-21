@@ -42,6 +42,7 @@ public sealed class RuntimeFrame : IDisposable
             RuntimeMessageKind.HandshakeResponse or
             RuntimeMessageKind.OcrResult or
             RuntimeMessageKind.CloudOcrCropRequest or
+            RuntimeMessageKind.LocalOcrCropRequest or
             RuntimeMessageKind.TranslationOutput or
             RuntimeMessageKind.TranslationStreamSnapshot or
             RuntimeMessageKind.OverlayDesiredState or

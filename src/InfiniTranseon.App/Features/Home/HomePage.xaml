@@ -86,7 +86,10 @@
 
                     <StackPanel Spacing="{StaticResource SpaceM}">
                         <TextBlock x:Uid="HomeProfilesHeader" Style="{StaticResource SectionHeaderStyle}" />
-                        <ItemsRepeater ItemsSource="{x:Bind ProfilesViewModel.Profiles}">
+                        <ItemsRepeater
+                            x:Name="ProfileRepeater"
+                            ItemsSource="{x:Bind ProfilesViewModel.Profiles}"
+                            ElementPrepared="OnProfileCardPrepared">
                             <ItemsRepeater.Layout>
                                 <UniformGridLayout
                                     MinItemWidth="{StaticResource ProfileCardWidth}"
@@ -106,9 +109,14 @@
                                                 Background="{ThemeResource ThumbLetterboxBrush}"
                                                 CornerRadius="8,8,0,0">
                                                 <FontIcon
+                                                    x:Name="ThumbnailFallbackIcon"
                                                     Glyph="&#xE7F4;"
                                                     FontSize="28"
                                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                <Image
+                                                    x:Name="ThumbnailImage"
+                                                    Stretch="UniformToFill"
+                                                    Visibility="Collapsed" />
                                                 <controls:StatusBadge
                                                     Text="{x:Bind MatchStateText}"
                                                     Severity="{x:Bind MatchSeverity}"
@@ -154,6 +162,7 @@
                                                 <TextBlock Text="{x:Bind Languages}" Style="{StaticResource CaptionTextStyle}" />
                                                 <Grid Margin="{StaticResource ProfileActionMargin}">
                                                     <Button
+                                                        x:Name="StartProfileButton"
                                                         Content="{x:Bind PrimaryAction}"
                                                         Tag="{x:Bind ProfileId}"
                                                         Click="OnStartProfileClick"

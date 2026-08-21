@@ -1,4 +1,4 @@
-using InfiniTranseon.Contracts.Runtime;
+﻿using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Runtime;
 
 namespace InfiniTranseon.Core.Tests.Runtime;
@@ -125,6 +125,7 @@ public sealed class EngineRuntimePipelineWiringTests
         await sink.SaveAsync(
             profileId,
             Generation(),
+            "Dialogue",
             [Output("one"), Output("two")],
             TestContext.Current.CancellationToken);
 

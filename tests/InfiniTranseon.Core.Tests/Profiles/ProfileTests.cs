@@ -236,6 +236,54 @@ public sealed class ProfileTests
     }
 
     [Fact]
+    public void InvalidOcrLanguageTagsAreRejectedWithoutRestrictingValidBcp47Tags()
+    {
+        ProfileDocument document = ProfileDocument.Create("Game", "ja", "en");
+        ProfileTarget target = ProfileTarget.Create("Window", CaptureTargetKind.Window);
+        target.Regions.Add(ProfileRegion.Create(
+            "Dialogue",
+            new NormalizedRect(0, 0, 1, 1)) with
+        {
+            Ocr = new ProfileOcrSettings
+            {
+                RecognitionLanguage = "ja\nJP",
+            },
+            TranslationEnabled = false,
+        });
+        document.Targets.Add(target);
+
+        ProfileValidationResult invalid = new ProfileValidator().Validate(
+            document,
+            RuntimeCapabilities.VersionOne,
+            new HashSet<string>(StringComparer.Ordinal));
+        ProfileValidationResult valid = new ProfileValidator().Validate(
+            document with
+            {
+                Targets =
+                [
+                    target with
+                    {
+                        Regions =
+                        [
+                            target.Regions[0] with
+                            {
+                                Ocr = new ProfileOcrSettings
+                                {
+                                    RecognitionLanguage = "zh-Hant-TW",
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+            RuntimeCapabilities.VersionOne,
+            new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.Contains(invalid.Issues, issue => issue.Code == "profile.ocr.languageInvalid");
+        Assert.DoesNotContain(valid.Issues, issue => issue.Code == "profile.ocr.languageInvalid");
+    }
+
+    [Fact]
     public void ProfileTargetBuildsCompleteBoundedRuntimeProcessingConfiguration()
     {
         ProfileTarget target = ProfileTarget.Create("Game", CaptureTargetKind.Window) with
@@ -292,11 +340,13 @@ public sealed class ProfileTests
         Assert.Equal(125, region.RecognitionIntervalMilliseconds);
         Assert.True(region.LockDegradation);
         Assert.Equal(9, region.CloudConsentPolicyRevision);
+        Assert.Equal(RuntimeOcrBackend.Cloud, region.OcrBackend);
         Assert.Equal("ocr.windows.media", region.OcrProviderId);
         Assert.Equal("[\"grayscale\",\"threshold\"]", region.PreprocessingPipeline);
         RuntimeProcessingRegion automatic = Assert.Single(
             configuration.Regions, item => item.AreaMode == CaptureAreaKind.RemainingArea);
         Assert.Equal(2000, automatic.RecognitionIntervalMilliseconds);
+        Assert.Equal(RuntimeOcrBackend.Windows, automatic.OcrBackend);
     }
 
     [Fact]
@@ -335,6 +385,24 @@ public sealed class ProfileTests
             profileId: Guid.NewGuid(),
             profileRevision: 1);
         Assert.True(Assert.Single(cloudConfiguration.Regions).UseCloudOcr);
+
+        ProfileTarget localTarget = ProfileTarget.Create("Local", CaptureTargetKind.Window);
+        localTarget.Regions.Add(ProfileRegion.Create(
+            "Dialogue", new NormalizedRect(0, 0, 1, 1)) with
+        {
+            Ocr = new ProfileOcrSettings { RecognitionLanguage = "ja-JP" },
+        });
+        RuntimeProcessingConfiguration localConfiguration =
+            ProfileRuntimeConfigurationFactory.Create(
+                localTarget,
+                new TargetInstanceId(Guid.NewGuid()),
+                configurationRevision: 1,
+                profileId: Guid.NewGuid(),
+                profileRevision: 1,
+                _ => RuntimeOcrBackend.Local);
+        Assert.Equal(
+            RuntimeOcrBackend.Local,
+            Assert.Single(localConfiguration.Regions).OcrBackend);
     }
 
     [Fact]

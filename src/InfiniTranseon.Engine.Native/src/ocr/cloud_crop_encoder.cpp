@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace infini::ocr
 {
@@ -67,6 +68,17 @@ bgra_image downscale_bgra(
         }
     }
     return result;
+}
+
+bgra_image downscale_bgra(
+    bgra_image&& source,
+    const std::uint32_t maximum_long_edge)
+{
+    if (!source.valid() || maximum_long_edge == 0U)
+        throw std::invalid_argument("BGRA downscale input is invalid");
+    if ((std::max)(source.width, source.height) <= maximum_long_edge)
+        return std::move(source);
+    return downscale_bgra(static_cast<const bgra_image&>(source), maximum_long_edge);
 }
 
 bool mask_bgra_regions(

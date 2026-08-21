@@ -1,4 +1,4 @@
-using InfiniTranseon.Contracts.Runtime;
+﻿using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Runtime;
 
 namespace InfiniTranseon.Core.Storage;
@@ -23,12 +23,14 @@ public sealed class RuntimeTranslationRecordSink :
     public async ValueTask SaveAsync(
         Guid profileId,
         TextGeneration source,
+        string regionName,
         IReadOnlyList<TranslationOutput> outputs,
         CancellationToken cancellationToken)
     {
         if (profileId == Guid.Empty)
             throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(regionName);
         ArgumentNullException.ThrowIfNull(outputs);
         TranslationOutput[] terminal = outputs
             .Where(output => output.StreamCompleted || output.TerminalErrorCode is not null)
@@ -61,7 +63,8 @@ public sealed class RuntimeTranslationRecordSink :
                 output.EstimatedCost,
                 output.CostCurrency,
                 output.CacheHit,
-                output.TerminalErrorCode)).ToArray());
+                output.TerminalErrorCode)).ToArray(),
+            regionName);
         await _history.SaveAsync(history, cancellationToken).ConfigureAwait(false);
     }
 

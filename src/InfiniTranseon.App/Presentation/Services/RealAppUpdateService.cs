@@ -53,14 +53,20 @@ public sealed class RealAppUpdateService : IAppUpdateService
             Record(
                 "update.check.started",
                 StatusEventSeverity.Information,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
                     ["explicitUserAction"] = explicitUserAction,
                 });
             ApplicationSettings settings =
                 await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+            if (settings.StrictOffline)
+            {
+                PublishOfflineMode();
+                return;
+            }
+
             var context = new UpdateCheckContext(
-                settings.StrictOffline,
+                StrictOffline: false,
                 explicitUserAction,
                 CaptureTargetActive: _runtime.Status is EngineRuntimeStatus.Running
                     or EngineRuntimeStatus.Restarting,
@@ -96,21 +102,16 @@ public sealed class RealAppUpdateService : IAppUpdateService
             Record(
                 "update.check.available",
                 StatusEventSeverity.Information,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["availableVersion"] = DisplayVersion(update.Version),
-                    ["verifiedKeyId"] = update.VerifiedKeyId,
-                    ["codeSigning"] = _installer.CodeSigning,
+                    ["availableVersion"] = StatusArgument.Id(DisplayVersion(update.Version)),
+                    ["verifiedKeyId"] = StatusArgument.Id(update.VerifiedKeyId),
+                    ["codeSigning"] = StatusArgument.Id(_installer.CodeSigning),
                 });
         }
         catch (UpdatePolicyException exception) when (exception.Code == "update.strictOffline")
         {
-            _installer = null;
-            Publish(new AppUpdateSnapshot(
-                AppUpdateStatus.DisabledByOfflineMode,
-                DisplayVersion(_currentVersion),
-                ErrorCode: exception.Code));
-            Record(exception.Code, StatusEventSeverity.Information);
+            PublishOfflineMode();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -126,9 +127,9 @@ public sealed class RealAppUpdateService : IAppUpdateService
             Record(
                 ErrorCodeFor(exception, "update.checkFailed"),
                 StatusEventSeverity.Warning,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["failureType"] = exception.GetType().Name,
+                    ["failureType"] = StatusArgument.Id(exception.GetType().Name),
                 });
         }
         finally
@@ -147,6 +148,14 @@ public sealed class RealAppUpdateService : IAppUpdateService
         await _operation.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ApplicationSettings settings =
+                await _settings.GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+            if (settings.StrictOffline)
+            {
+                PublishOfflineMode();
+                return;
+            }
+
             if (_installer is null || string.IsNullOrWhiteSpace(Snapshot.AvailableVersion))
             {
                 Publish(Snapshot with
@@ -184,9 +193,9 @@ public sealed class RealAppUpdateService : IAppUpdateService
             Record(
                 "update.download.verified",
                 StatusEventSeverity.Information,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["availableVersion"] = Snapshot.AvailableVersion,
+                    ["availableVersion"] = StatusArgument.Id(Snapshot.AvailableVersion),
                 });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -204,15 +213,25 @@ public sealed class RealAppUpdateService : IAppUpdateService
             Record(
                 ErrorCodeFor(exception, "update.downloadFailed"),
                 StatusEventSeverity.Warning,
-                new Dictionary<string, object?>
+                new Dictionary<string, StatusArgument>
                 {
-                    ["failureType"] = exception.GetType().Name,
+                    ["failureType"] = StatusArgument.Id(exception.GetType().Name),
                 });
         }
         finally
         {
             _operation.Release();
         }
+    }
+
+    private void PublishOfflineMode()
+    {
+        _installer = null;
+        Publish(new AppUpdateSnapshot(
+            AppUpdateStatus.DisabledByOfflineMode,
+            DisplayVersion(_currentVersion),
+            ErrorCode: "update.strictOffline"));
+        Record("update.strictOffline", StatusEventSeverity.Information);
     }
 
     private void Publish(AppUpdateSnapshot snapshot)
@@ -224,14 +243,14 @@ public sealed class RealAppUpdateService : IAppUpdateService
     private void Record(
         string behaviorCode,
         StatusEventSeverity severity,
-        IReadOnlyDictionary<string, object?>? data = null) =>
+        IReadOnlyDictionary<string, StatusArgument>? data = null) =>
         _statusLog?.Record(new StatusEvent(
             DateTimeOffset.UtcNow,
             "app.update",
             behaviorCode,
             "status.app.update",
             severity,
-            data ?? new Dictionary<string, object?>()));
+            data ?? new Dictionary<string, StatusArgument>()));
 
     private static string ErrorCodeFor(Exception exception, string fallback) =>
         exception switch

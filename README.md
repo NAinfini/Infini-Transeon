@@ -73,11 +73,29 @@ Desktop development with C++ workload, and a Windows 11 SDK.
 ```powershell
 dotnet tool restore
 dotnet restore InfiniTranseon.sln
-dotnet test InfiniTranseon.sln -c Release --no-restore
+dotnet test --solution InfiniTranseon.sln --configuration Release --no-restore
 cmake --preset windows-x64 -DINFINI_ENABLE_LOCAL_MODEL_RUNTIME=ON
 cmake --build --preset windows-x64-release
 ctest --test-dir artifacts/cmake/windows-x64 -C Release --output-on-failure
 ```
+
+### Local models in a source build
+
+A source build has no local models: the signed catalog, the model worker, and
+the native translation library are release artifacts, and the application looks
+for all three beside its executable. Assemble them into a build output once, and
+both local translation and local OCR packages become installable from Settings:
+
+```powershell
+./scripts/build-signed-model-catalog.ps1 -TemplatePath packaging/model-catalog.template.json -OutputPath packaging/model-catalog.json -CatalogSequence 1
+./scripts/prepare-local-model-runtime.ps1 -Configuration Release
+```
+
+The first command signs the catalog and needs `RELEASE_ED25519_PRIVATE_KEY` and
+`RELEASE_ED25519_KEY_ID`; only the key owner can run it, and its output stays
+out of version control. Anyone holding an already-signed catalog can skip it and
+pass `-CatalogPath` instead. Sequence 1 is deliberate: the catalog a release
+publishes carries a higher sequence, so a developer copy can never roll one back.
 
 Release packaging and unsigned-build details are documented in
 [docs/release/github-release.md](docs/release/github-release.md). Hardware

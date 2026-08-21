@@ -86,7 +86,20 @@ public sealed class TranslationMemory
             }
         }
         if (!allowPersistent || !_options.PersistentEnabled) return null;
-        return await FindPersistentAsync(profileId, key, cancellationToken).ConfigureAwait(false);
+        TranslationMemoryHit? persistent = await FindPersistentAsync(
+            profileId, key, cancellationToken).ConfigureAwait(false);
+        if (persistent is null) return null;
+        lock (_gate)
+        {
+            if (_entries.TryGetValue(memoryKey, out Entry? current))
+            {
+                Touch(current);
+                return new TranslationMemoryHit(
+                    current.Translation, true, 1, key.ProviderId, key.ModelId, false);
+            }
+            StoreMemoryUnderLock(profileId, key, persistent.Translation);
+        }
+        return persistent;
     }
 
     public async ValueTask StoreAsync(
@@ -99,23 +112,13 @@ public sealed class TranslationMemory
         ValidateProfile(profileId);
         ArgumentNullException.ThrowIfNull(key);
         ArgumentException.ThrowIfNullOrWhiteSpace(translation);
-        long byteSize = Encoding.UTF8.GetByteCount(key.NormalizedSource) +
-            Encoding.UTF8.GetByteCount(translation) + 512;
-        var memoryKey = new MemoryKey(profileId, key);
         lock (_gate)
-        {
-            if (_entries.Remove(memoryKey, out Entry? old))
-            {
-                _lru.Remove(old.Node);
-                _memoryBytes -= old.ByteSize;
-            }
-            LinkedListNode<MemoryKey> node = _lru.AddFirst(memoryKey);
-            _entries[memoryKey] = new Entry(profileId, key, translation, byteSize, node);
-            _memoryBytes += byteSize;
-            EvictMemory();
-        }
+            StoreMemoryUnderLock(profileId, key, translation);
         if (persist && _options.PersistentEnabled)
+        {
+            long byteSize = EntryByteSize(key, translation);
             await StorePersistentAsync(profileId, key, translation, byteSize, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public int Count
@@ -270,6 +273,28 @@ public sealed class TranslationMemory
             _memoryBytes -= entry.ByteSize;
         }
     }
+
+    private void StoreMemoryUnderLock(
+        Guid profileId,
+        TranslationCacheKey key,
+        string translation)
+    {
+        var memoryKey = new MemoryKey(profileId, key);
+        if (_entries.Remove(memoryKey, out Entry? old))
+        {
+            _lru.Remove(old.Node);
+            _memoryBytes -= old.ByteSize;
+        }
+        long byteSize = EntryByteSize(key, translation);
+        LinkedListNode<MemoryKey> node = _lru.AddFirst(memoryKey);
+        _entries[memoryKey] = new Entry(profileId, key, translation, byteSize, node);
+        _memoryBytes += byteSize;
+        EvictMemory();
+    }
+
+    private static long EntryByteSize(TranslationCacheKey key, string translation) =>
+        Encoding.UTF8.GetByteCount(key.NormalizedSource) +
+        Encoding.UTF8.GetByteCount(translation) + 512;
 
     private void Touch(Entry entry)
     {

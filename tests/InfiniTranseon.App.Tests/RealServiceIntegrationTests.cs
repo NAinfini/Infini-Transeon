@@ -26,6 +26,13 @@ public sealed class RealServiceIntegrationTests
         return dir;
     }
 
+    // The workbench validates a saved profile against the providers the settings service reports,
+    // which is the same list its editor offers.
+    private static RealSettingsService Settings(AppDataOptions options) => new(
+        new ApplicationSettingsRepository(options.DatabasePath),
+        new FakeSecretReferenceService(),
+        TestResourceText.Lookup);
+
     private static ProfileEditModel NewDraft(
         string name = "Elden Ring",
         string provider = "DeepL") =>
@@ -42,8 +49,14 @@ public sealed class RealServiceIntegrationTests
         try
         {
             var profiles = new ProfileRepository(options.DatabasePath);
-            ProfileDocument first = ProfileDocument.Create("First", "ja", "zh-Hans");
-            ProfileDocument second = ProfileDocument.Create("Second", "en", "zh-Hans");
+            ProfileDocument first = ProfileDocument.Create("First", "ja", "zh-Hans") with
+            {
+                History = new ProfileHistorySettings { Enabled = true },
+            };
+            ProfileDocument second = ProfileDocument.Create("Second", "en", "zh-Hans") with
+            {
+                History = new ProfileHistorySettings { Enabled = true },
+            };
             await profiles.SaveAsync(first, ct);
             await profiles.SaveAsync(second, ct);
             var history = new HistoryRepository(
@@ -82,7 +95,8 @@ public sealed class RealServiceIntegrationTests
             var service = new RealHistoryService(
                 options,
                 profiles,
-                new FakeSettingsService());
+                new FakeSettingsService(),
+                new FakeRuntimeControlService());
 
             IReadOnlyList<HistoryEvent> global = await service.GetEventsAsync(ct);
 
@@ -105,6 +119,24 @@ public sealed class RealServiceIntegrationTests
                     selected.SourceText,
                     ct);
             Assert.Equal("corrected one", correction?.Corrected);
+
+            ProfileHistoryConfiguration configuration = Assert.IsType<ProfileHistoryConfiguration>(
+                await service.GetProfileConfigurationAsync(ct));
+            await service.UpdateProfileConfigurationAsync(
+                configuration with
+                {
+                    Enabled = false,
+                    MaxAgeDays = 7,
+                    MaxBytes = 2 * 1024,
+                },
+                ct);
+
+            ProfileDocument updated = await profiles.LoadAsync(first.ProfileId, ct) ??
+                throw new InvalidOperationException("Updated profile was not persisted.");
+            Assert.False(updated.History.Enabled);
+            Assert.Equal(7, updated.History.MaxAgeDays);
+            Assert.Equal(2 * 1024, updated.History.MaxBytes);
+            Assert.Empty(await service.GetEventsAsync(ct));
         }
         finally
         {
@@ -120,12 +152,12 @@ public sealed class RealServiceIntegrationTests
         var options = new AppDataOptions(root);
         try
         {
-            var service = new RealProfileService(new ProfileRepository(options.DatabasePath), options.DatabasePath);
+            var service = new RealProfileService(new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
             Guid id = await service.SaveAsync(NewDraft(), ct);
             Assert.NotEqual(Guid.Empty, id);
 
             // Simulate an app restart: a brand-new repository over the same database file.
-            var reopened = new RealProfileService(new ProfileRepository(options.DatabasePath), options.DatabasePath);
+            var reopened = new RealProfileService(new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
             IReadOnlyList<ProfileCard> cards = await reopened.GetProfilesAsync(ct);
             Assert.Contains(cards, card => card.ProfileId == id && card.Name == "Elden Ring");
 
@@ -134,6 +166,12 @@ public sealed class RealServiceIntegrationTests
             Assert.Equal("ja", loaded!.SourceLanguage);
             Assert.Equal("zh-Hans", loaded.TargetLanguage);
             Assert.Single(loaded.Regions);
+
+            ProfileDocument saved = Assert.IsType<ProfileDocument>(
+                await new ProfileRepository(options.DatabasePath).LoadAsync(id, ct));
+            Assert.All(
+                saved.Targets.SelectMany(target => target.Regions),
+                region => Assert.Equal("ja", region.Ocr.RecognitionLanguage));
 
             await reopened.DeleteAsync(id, ct);
             Assert.Empty(await reopened.GetProfilesAsync(ct));
@@ -181,7 +219,7 @@ public sealed class RealServiceIntegrationTests
                 ],
             };
             await repository.SaveAsync(original, ct);
-            var service = new RealProfileService(repository, options.DatabasePath);
+            var service = new RealProfileService(repository, new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
             ProfileEditModel loaded = Assert.IsType<ProfileEditModel>(
                 await service.LoadForEditAsync(original.ProfileId, ct));
 
@@ -253,7 +291,8 @@ public sealed class RealServiceIntegrationTests
             var service = new RealWorkbenchService(
                 repository,
                 runtime,
-                new RuntimeCapabilitiesService());
+                new RuntimeCapabilitiesService(),
+                Settings(options));
             WorkbenchProfileDraft loaded = Assert.IsType<WorkbenchProfileDraft>(
                 await service.LoadAsync(original.ProfileId, ct));
             WorkbenchTargetDraft first = loaded.Targets[0];
@@ -424,7 +463,8 @@ public sealed class RealServiceIntegrationTests
             var service = new RealWorkbenchService(
                 repository,
                 new FakeRuntimeControlService(),
-                new RuntimeCapabilitiesService());
+                new RuntimeCapabilitiesService(),
+                Settings(options));
             WorkbenchProfileDraft loaded = Assert.IsType<WorkbenchProfileDraft>(
                 await service.LoadAsync(original.ProfileId, ct));
             WorkbenchProfileDraft changed = loaded with
@@ -488,7 +528,7 @@ public sealed class RealServiceIntegrationTests
         try
         {
             var service = new RealProfileService(
-                new ProfileRepository(options.DatabasePath),
+                new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup,
                 options.DatabasePath);
             Guid originalId = await service.SaveAsync(NewDraft("Portable"), ct);
             using var archive = new MemoryStream();
@@ -508,24 +548,78 @@ public sealed class RealServiceIntegrationTests
         }
     }
 
-    [Fact]
-    public async Task Profile_rejects_a_local_model_that_is_not_runtime_ready()
+    /// <summary>
+    /// A local model is selectable once this machine has it, and the workbench has to accept the same
+    /// translator its editor offered. Reading a static catalog instead rejected an installed model
+    /// with profile.provider.unknown, because a static entry cannot know what was downloaded today.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Workbench_accepts_a_local_model_exactly_when_the_provider_list_offers_it(
+        bool installed)
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         string root = NewTempRoot();
         var options = new AppDataOptions(root);
         try
         {
-            var service = new RealProfileService(
-                new ProfileRepository(options.DatabasePath),
-                options.DatabasePath);
+            var repository = new ProfileRepository(options.DatabasePath);
+            ProfileDocument original = ProfileDocument.Create("Local", "ja", "zh-Hans") with
+            {
+                Targets =
+                [
+                    ProfileTarget.Create("Game", CaptureTargetKind.Display) with
+                    {
+                        Regions =
+                        [
+                            ProfileRegion.Create("Dialogue", new NormalizedRect(0.1, 0.6, 0.8, 0.3)) with
+                            {
+                                TranslationChannels =
+                                    [ProfileTranslationChannel.Create("translation.deepl")],
+                            },
+                        ],
+                    },
+                ],
+            };
+            await repository.SaveAsync(original, ct);
+            var service = new RealWorkbenchService(
+                repository,
+                new FakeRuntimeControlService(),
+                new RuntimeCapabilitiesService(),
+                new ProviderListStub(
+                    new ProviderRow("Local MADLAD-400 3B INT8", "NMT · local", "Ready",
+                        StatusSeverity.Success, "installed")
+                    {
+                        Id = "translation.local.madlad",
+                        IsSelectable = installed,
+                        IsLocalModel = true,
+                    }));
+            WorkbenchProfileDraft loaded = Assert.IsType<WorkbenchProfileDraft>(
+                await service.LoadAsync(original.ProfileId, ct));
+            WorkbenchChannelDraft channel = loaded.Targets[0].Regions[0].Channels[0];
+            WorkbenchProfileDraft changed = Retarget(
+                loaded,
+                channel with { ProviderId = "translation.local.madlad" });
 
-            InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => service.SaveAsync(
-                    NewDraft(provider: "Local MADLAD-400 3B"),
-                    ct));
-
-            Assert.Contains("not installed", failure.Message, StringComparison.OrdinalIgnoreCase);
+            if (installed)
+            {
+                await service.SaveAndApplyAsync(changed, ct);
+                ProfileDocument saved = Assert.IsType<ProfileDocument>(
+                    await repository.LoadAsync(original.ProfileId, ct));
+                Assert.Equal(
+                    "translation.local.madlad",
+                    saved.Targets[0].Regions[0].TranslationChannels[0].InitialProviderId);
+            }
+            else
+            {
+                WorkbenchValidationException failure =
+                    await Assert.ThrowsAsync<WorkbenchValidationException>(
+                        () => service.SaveAndApplyAsync(changed, ct));
+                Assert.Contains(
+                    failure.Issues,
+                    issue => issue.Code == "profile.provider.unknown");
+            }
         }
         finally
         {
@@ -534,7 +628,236 @@ public sealed class RealServiceIntegrationTests
     }
 
     [Fact]
-    public async Task Settings_report_unwired_local_model_as_not_installed()
+    public async Task Profile_target_rebind_preserves_stable_identity_and_region_configuration()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = NewTempRoot();
+        var options = new AppDataOptions(root);
+        try
+        {
+            var repository = new ProfileRepository(options.DatabasePath);
+            Guid targetId = Guid.NewGuid();
+            Guid regionId = Guid.NewGuid();
+            Guid channelId = Guid.NewGuid();
+            Guid secondChannelId = Guid.NewGuid();
+            Guid refinementId = Guid.NewGuid();
+            ProfileRegion region = ProfileRegion.Create(
+                "Dialogue",
+                new NormalizedRect(0.1, 0.65, 0.8, 0.25)) with
+            {
+                RegionId = regionId,
+                Ocr = new ProfileOcrSettings
+                {
+                    ProviderId = "ocr.baidu",
+                    RecognitionLanguage = "ko",
+                    UseCloudOcr = true,
+                    CloudConsentPolicyRevision = 1,
+                },
+                Overlay = new ProfileOverlaySettings
+                {
+                    Mode = OverlayMode.Offset,
+                    BackgroundMode = OverlayBackgroundMode.Translucent,
+                    TextColor = "#FFFFFFFF",
+                },
+                TranslationChannels =
+                [
+                    ProfileTranslationChannel.Create("translation.deepl") with
+                    {
+                        ChannelId = channelId,
+                        RefinementSteps =
+                        [
+                            new ProfileRefinementStep
+                            {
+                                StageId = refinementId,
+                                ProviderId = "llm.openai",
+                            },
+                        ],
+                    },
+                    ProfileTranslationChannel.Create("translation.google-cloud") with
+                    {
+                        ChannelId = secondChannelId,
+                        DisplayOrder = 1,
+                    },
+                ],
+            };
+            ProfileDocument original = ProfileDocument.Create("Rebind", "ja", "en") with
+            {
+                Targets =
+                [
+                    ProfileTarget.Create("Old window", CaptureTargetKind.Window) with
+                    {
+                        TargetId = targetId,
+                        MachineBinding = new TargetMachineBinding(
+                            42,
+                            "C:\\Games\\old.exe",
+                            "Old window"),
+                        Regions = [region],
+                    },
+                ],
+            };
+            await repository.SaveAsync(original, ct);
+            var service = new RealProfileService(
+                repository,
+                new FakeCaptureProbe(),
+                TestResourceText.Lookup,
+                options.DatabasePath);
+            ProfileEditModel loaded = Assert.IsType<ProfileEditModel>(
+                await service.LoadForEditAsync(original.ProfileId, ct));
+
+            await service.SaveAsync(
+                loaded with
+                {
+                    TargetName = "New window",
+                    CaptureTargets =
+                    [
+                        loaded.EffectiveCaptureTargets[0] with { Name = "New window" },
+                    ],
+                },
+                ct);
+
+            ProfileDocument saved = Assert.IsType<ProfileDocument>(
+                await repository.LoadAsync(original.ProfileId, ct));
+            ProfileTarget rebound = Assert.Single(saved.Targets);
+            Assert.Equal(targetId, rebound.TargetId);
+            Assert.Equal("New window", rebound.Name);
+            Assert.Null(rebound.MachineBinding);
+            ProfileRegion savedRegion = Assert.Single(rebound.Regions);
+            Assert.Equal(regionId, savedRegion.RegionId);
+            Assert.Equal("ko", savedRegion.Ocr.RecognitionLanguage);
+            Assert.Equal(OverlayMode.Offset, savedRegion.Overlay.Mode);
+            Assert.Equal(2, savedRegion.TranslationChannels.Count);
+            Assert.Equal(channelId, savedRegion.TranslationChannels[0].ChannelId);
+            Assert.Equal(secondChannelId, savedRegion.TranslationChannels[1].ChannelId);
+            Assert.Equal(
+                refinementId,
+                Assert.Single(savedRegion.TranslationChannels[0].RefinementSteps).StageId);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Workbench_rejects_an_unregistered_cloud_ocr_provider()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = NewTempRoot();
+        var options = new AppDataOptions(root);
+        try
+        {
+            var repository = new ProfileRepository(options.DatabasePath);
+            ProfileDocument original = ProfileDocument.Create("Cloud OCR", "ja", "zh-Hans") with
+            {
+                Targets =
+                [
+                    ProfileTarget.Create("Game", CaptureTargetKind.Window) with
+                    {
+                        Regions =
+                        [
+                            ProfileRegion.Create(
+                                "Dialogue",
+                                new NormalizedRect(0.1, 0.6, 0.8, 0.3)) with
+                            {
+                                TranslationChannels =
+                                    [ProfileTranslationChannel.Create("translation.deepl")],
+                            },
+                        ],
+                    },
+                ],
+            };
+            await repository.SaveAsync(original, ct);
+            var service = new RealWorkbenchService(
+                repository,
+                new FakeRuntimeControlService(),
+                new RuntimeCapabilitiesService(),
+                new ProviderListStub(
+                    new ProviderRow("DeepL", "NMT", "Ready", StatusSeverity.Success, "")
+                    {
+                        Id = "translation.deepl",
+                    },
+                    new ProviderRow("Azure Vision", "OCR", "Ready", StatusSeverity.Success, "")
+                    {
+                        Id = "ocr.azure-ai-vision",
+                        IsTranslationProvider = false,
+                        IsOcrProvider = true,
+                    }));
+            WorkbenchProfileDraft loaded = Assert.IsType<WorkbenchProfileDraft>(
+                await service.LoadAsync(original.ProfileId, ct));
+            WorkbenchTargetDraft target = loaded.Targets[0];
+            WorkbenchRegionDraft region = target.Regions[0] with
+            {
+                UseCloudOcr = true,
+                CloudConsentPolicyRevision = 1,
+                OcrProviderId = "ocr.not-registered",
+            };
+            WorkbenchProfileDraft changed = loaded with
+            {
+                Targets = [target with { Regions = [region] }],
+            };
+
+            WorkbenchValidationException failure =
+                await Assert.ThrowsAsync<WorkbenchValidationException>(
+                    () => service.SaveAndApplyAsync(changed, ct));
+
+            Assert.Contains(
+                failure.Issues,
+                issue => issue.Code == "profile.ocr.providerUnknown");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static WorkbenchProfileDraft Retarget(
+        WorkbenchProfileDraft profile,
+        WorkbenchChannelDraft channel)
+    {
+        WorkbenchTargetDraft target = profile.Targets[0];
+        WorkbenchRegionDraft region = target.Regions[0];
+        return profile with
+        {
+            Targets =
+            [
+                target with
+                {
+                    Regions = [region with { Channels = [channel] }],
+                },
+            ],
+        };
+    }
+
+    /// <summary>Reports one provider list and nothing else; the workbench reads only that.</summary>
+    private sealed class ProviderListStub(params ProviderRow[] providers) : ISettingsService
+    {
+        public Task<ApplicationSettings> GetSettingsAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdateAsync(ApplicationSettings settings, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ProviderRow>> GetProvidersAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProviderRow>>(providers);
+
+        public Task<ProviderRow> ImportRestAdapterAsync(
+            Stream source,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task RemoveCustomProviderAsync(
+            string providerId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Without local model management wired there are no local models — not a placeholder row saying
+    /// one is missing. The row a user sees has to come from the service that can also install it.
+    /// </summary>
+    [Fact]
+    public async Task Settings_offer_no_local_model_until_model_management_is_wired()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         string root = NewTempRoot();
@@ -543,21 +866,15 @@ public sealed class RealServiceIntegrationTests
         {
             var settings = new RealSettingsService(
                 new ApplicationSettingsRepository(options.DatabasePath),
-                new FakeSecretReferenceService());
+                new FakeSecretReferenceService(),
+                TestResourceText.Lookup);
 
-            ProviderRow local = Assert.Single(
-                await settings.GetProvidersAsync(ct),
-                provider => provider.Name == "Local MADLAD-400 3B");
+            IReadOnlyList<ProviderRow> providers = await settings.GetProvidersAsync(ct);
 
-            Assert.Contains("Not installed", local.StateText, StringComparison.Ordinal);
-            Assert.Equal(StatusSeverity.Neutral, local.StateSeverity);
-            Assert.False(local.IsSelectable);
-            Assert.True(local.IsLocalModel);
-            Assert.False(local.CanConfigure);
-            Assert.False(local.CanDownloadModel);
+            Assert.DoesNotContain(providers, provider => provider.IsLocalModel);
 
             ProviderRow cloudOcr = Assert.Single(
-                await settings.GetProvidersAsync(ct),
+                providers,
                 provider => provider.Name == "Google Cloud Vision");
             Assert.False(cloudOcr.IsTranslationProvider);
         }
@@ -575,7 +892,7 @@ public sealed class RealServiceIntegrationTests
         var options = new AppDataOptions(root);
         try
         {
-            var profiles = new RealProfileService(new ProfileRepository(options.DatabasePath), options.DatabasePath);
+            var profiles = new RealProfileService(new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
             await profiles.SaveAsync(NewDraft(), ct);
 
             var glossary = new RealGlossaryService(new ProfileRepository(options.DatabasePath));
@@ -607,7 +924,7 @@ public sealed class RealServiceIntegrationTests
         var options = new AppDataOptions(root);
         try
         {
-            var profiles = new RealProfileService(new ProfileRepository(options.DatabasePath), options.DatabasePath);
+            var profiles = new RealProfileService(new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
             await profiles.SaveAsync(NewDraft(), ct);
 
             var glossary = new RealGlossaryService(new ProfileRepository(options.DatabasePath));
@@ -663,7 +980,7 @@ public sealed class RealServiceIntegrationTests
         try
         {
             var profiles = new RealProfileService(
-                new ProfileRepository(options.DatabasePath),
+                new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup,
                 options.DatabasePath);
             Guid profileId = await profiles.SaveAsync(NewDraft(), ct);
             var glossary = new RealGlossaryService(
@@ -707,7 +1024,8 @@ public sealed class RealServiceIntegrationTests
         {
             ISettingsService Make() => new RealSettingsService(
                 new ApplicationSettingsRepository(options.DatabasePath),
-                new FakeSecretReferenceService());
+                new FakeSecretReferenceService(),
+                TestResourceText.Lookup);
 
             var settings = new ApplicationSettings(
                 UiThemePreference.Dark,
@@ -745,7 +1063,8 @@ public sealed class RealServiceIntegrationTests
         {
             ISettingsService Make() => new RealSettingsService(
                 new ApplicationSettingsRepository(options.DatabasePath),
-                new FakeSecretReferenceService());
+                new FakeSecretReferenceService(),
+                TestResourceText.Lookup);
 
             Guid profileId = Guid.NewGuid();
             Guid targetId = Guid.NewGuid();
@@ -785,7 +1104,8 @@ public sealed class RealServiceIntegrationTests
         {
             ISettingsService Make() => new RealSettingsService(
                 new ApplicationSettingsRepository(options.DatabasePath),
-                new FakeSecretReferenceService());
+                new FakeSecretReferenceService(),
+                TestResourceText.Lookup);
 
             Guid first = Guid.NewGuid();
             Guid second = Guid.NewGuid();
@@ -817,7 +1137,7 @@ public sealed class RealServiceIntegrationTests
         var options = new AppDataOptions(root);
         try
         {
-            var service = new RealProfileService(new ProfileRepository(options.DatabasePath), options.DatabasePath);
+            var service = new RealProfileService(new ProfileRepository(options.DatabasePath), new FakeCaptureProbe(), TestResourceText.Lookup, options.DatabasePath);
             var viewModel = new ProfileCenterViewModel(service);
 
             await viewModel.InitializeAsync(ct);
@@ -866,9 +1186,8 @@ public sealed class RealServiceIntegrationTests
         await wizard.InitializeAsync(ct);
 
         wizard.ProfileName = "My profile";
-        Assert.NotNull(wizard.SelectedTarget);
         CaptureProbeTarget secondTarget = wizard.Targets[1];
-        wizard.SetSelectedTargets([wizard.SelectedTarget!, secondTarget]);
+        wizard.SetSelectedTargets([wizard.Targets[0], secondTarget]);
         wizard.AddRegion("HUD", RegionPriorityLevel.P1);
         Assert.True(wizard.CanSave);
 
@@ -878,7 +1197,9 @@ public sealed class RealServiceIntegrationTests
         Assert.NotEqual(Guid.Empty, wizard.SavedProfileId);
         Assert.NotNull(spy.LastSaved);
         Assert.Equal("My profile", spy.LastSaved!.Name);
-        Assert.Equal(wizard.SelectedTarget!.DisplayName, spy.LastSaved.TargetName);
+        // The profile is named after its first capture target; the wizard previews the one the user
+        // checked last, so the two are deliberately not the same target here.
+        Assert.Equal(wizard.SelectedTargets[0].DisplayName, spy.LastSaved.TargetName);
         Assert.Equal(2, spy.LastSaved.EffectiveCaptureTargets.Count);
         Assert.Contains(spy.LastSaved.EffectiveCaptureTargets,
             target => target.Name == secondTarget.DisplayName);
@@ -973,7 +1294,7 @@ public sealed class RealServiceIntegrationTests
         public Task<ProfileEditModel?> LoadForEditAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             Task.FromResult<ProfileEditModel?>(null);
 
-        public Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+        public Task<IReadOnlyList<string>> GetRequiredProviderIdsAsync(
             Guid profileId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>([]);

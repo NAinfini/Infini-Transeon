@@ -1,6 +1,8 @@
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Contracts.Probes;
+using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Core.Settings;
 
 namespace InfiniTranseon.App.Tests;
 
@@ -51,9 +53,25 @@ public sealed class SelectingOcrProbeTests
         Assert.Same(local, localOnly.Select("ja"));
     }
 
+    [Fact]
+    public void RuntimeResolverUsesTheSameSelectionRulesAsTheProbe()
+    {
+        var availability = new WindowsOcrLanguageAvailability(() => ["en-US"]);
+
+        Assert.Equal(RuntimeOcrBackend.Windows, OcrRuntimeBackendResolver.Resolve(
+            OcrBackendPreference.Local, availability, "auto"));
+        Assert.Equal(RuntimeOcrBackend.Windows, OcrRuntimeBackendResolver.Resolve(
+            OcrBackendPreference.Automatic, availability, "en"));
+        Assert.Equal(RuntimeOcrBackend.Local, OcrRuntimeBackendResolver.Resolve(
+            OcrBackendPreference.Automatic, availability, "ja-JP"));
+        Assert.Equal(RuntimeOcrBackend.Local, OcrRuntimeBackendResolver.Resolve(
+            OcrBackendPreference.Local, availability, "en"));
+    }
+
     /// <summary>
-    /// Both sides change while the app is open — the user can add a Windows language pack, and the
-    /// packages install in the background — so the choice cannot be made once and cached.
+    /// Both sides change while the app is open — the user can add a Windows language pack, and an
+    /// explicitly approved package install can complete — so the choice cannot be made once and
+    /// cached.
     /// </summary>
     [Fact]
     public void TheChoiceIsMadeAgainForEveryRecognition()

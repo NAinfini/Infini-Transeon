@@ -80,7 +80,7 @@ public sealed class PaddleOcrModelCatalogTests : IDisposable
     }
 
     /// <summary>
-    /// A silent update publishes the new version before retiring the old one, so both are on disk
+    /// An approved update publishes the new version before retiring the old one, so both are on disk
     /// for a moment. The app must already be running the new files by then.
     /// </summary>
     [Fact]

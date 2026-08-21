@@ -33,7 +33,8 @@ public static class ProbeErrorPresenter
                 "ProbeErrorCredentialMissing",
             "translation.probe.credentialRebindRequired" or
                 "provider.credentialReconfirmationRequired" => "ProbeErrorCredentialRebind",
-            "provider.policy.strictOffline" or "provider.offlineBlocked" => "ProbeErrorOffline",
+            "translation.probe.strictOffline" or "provider.policy.strictOffline" or
+                "provider.offlineBlocked" => "ProbeErrorOffline",
             "provider.costBudget" => "ProbeErrorCostBudget",
             "provider.cancelled" => "ProbeErrorCancelled",
             "provider.network" or "provider.streamingDisconnect" => "ProbeErrorNetwork",

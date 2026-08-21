@@ -166,42 +166,54 @@ bool write_capabilities(
     return true;
 }
 
-bool read_exact(HANDLE handle, const std::span<std::byte> destination) noexcept
+// Windows serialises every operation issued on a synchronous handle. The message loop spends
+// almost all of its life parked in a blocking read, so on a synchronous pipe the unsolicited
+// events the capture, OCR and overlay threads push would queue behind that read and only leave
+// the process when the app happened to send a request. The pipe is therefore opened overlapped
+// and each transfer carries its own completion event, which lets one reader and the event
+// writers make progress independently. The write mutex still orders writers against each other.
+bool transfer_exact(
+    HANDLE handle,
+    std::byte* const buffer,
+    const std::size_t size,
+    const bool writing) noexcept
 {
+    thread_local unique_handle completion(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!completion) return false;
     std::size_t completed{};
-    while (completed < destination.size())
+    while (completed < size)
     {
         const DWORD requested = static_cast<DWORD>(std::min<std::size_t>(
-            destination.size() - completed,
+            size - completed,
             std::numeric_limits<DWORD>::max()));
+        OVERLAPPED overlapped{};
+        overlapped.hEvent = completion.get();
+        if (ResetEvent(overlapped.hEvent) == FALSE) return false;
         DWORD transferred{};
-        if (!ReadFile(handle, destination.data() + completed, requested, &transferred, nullptr) ||
-            transferred == 0U)
+        const BOOL started = writing
+            ? WriteFile(handle, buffer + completed, requested, &transferred, &overlapped)
+            : ReadFile(handle, buffer + completed, requested, &transferred, &overlapped);
+        if (started == FALSE)
         {
-            return false;
+            if (GetLastError() != ERROR_IO_PENDING) return false;
+            if (GetOverlappedResult(handle, &overlapped, &transferred, TRUE) == FALSE)
+                return false;
         }
+        if (transferred == 0U) return false;
         completed += transferred;
     }
     return true;
 }
 
+bool read_exact(HANDLE handle, const std::span<std::byte> destination) noexcept
+{
+    return transfer_exact(handle, destination.data(), destination.size(), false);
+}
+
 bool write_exact(HANDLE handle, const std::span<const std::byte> source) noexcept
 {
-    std::size_t completed{};
-    while (completed < source.size())
-    {
-        const DWORD requested = static_cast<DWORD>(std::min<std::size_t>(
-            source.size() - completed,
-            std::numeric_limits<DWORD>::max()));
-        DWORD transferred{};
-        if (!WriteFile(handle, source.data() + completed, requested, &transferred, nullptr) ||
-            transferred == 0U)
-        {
-            return false;
-        }
-        completed += transferred;
-    }
-    return true;
+    return transfer_exact(
+        handle, const_cast<std::byte*>(source.data()), source.size(), true);
 }
 
 std::uint64_t utc_ticks() noexcept
@@ -288,13 +300,29 @@ unique_handle create_pipe(const BootstrapConfig& config) noexcept
         std::wstring(config.pipe_name.begin(), config.pipe_name.end());
     return unique_handle(CreateNamedPipeW(
         pipe_name.c_str(),
-        PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
         1U,
         64U * 1024U,
         64U * 1024U,
         0U,
         &attributes));
+}
+
+// An overlapped pipe rejects a null OVERLAPPED on ConnectNamedPipe, so the connection is awaited
+// explicitly. A client that beat the server to the handle reports ERROR_PIPE_CONNECTED instead.
+bool await_client(HANDLE pipe) noexcept
+{
+    unique_handle completion(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!completion) return false;
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = completion.get();
+    if (ConnectNamedPipe(pipe, &overlapped) != FALSE) return true;
+    const DWORD status = GetLastError();
+    if (status == ERROR_PIPE_CONNECTED) return true;
+    if (status != ERROR_IO_PENDING) return false;
+    DWORD transferred{};
+    return GetOverlappedResult(pipe, &overlapped, &transferred, TRUE) != FALSE;
 }
 
 bool authenticate_and_respond(HANDLE pipe, BootstrapConfig& config) noexcept
@@ -769,7 +797,8 @@ bool write_ocr_result_event(
     write_u32(bytes, 56U, static_cast<std::uint32_t>(payload.size()));
     std::ranges::copy(payload, event.begin() + sizeof(std::uint32_t) + wire_header_bytes);
     std::scoped_lock lock(write_gate);
-    const bool written = write_exact(pipe, event) && FlushFileBuffers(pipe) != FALSE;
+    const bool ok = write_exact(pipe, event);
+    const bool written = ok && FlushFileBuffers(pipe) != FALSE;
     SecureZeroMemory(event.data(), event.size());
     return written;
 }
@@ -843,14 +872,14 @@ bool write_target_lifecycle_event(
     return written;
 }
 
-bool write_cloud_ocr_crop_event(
+bool write_ocr_crop_event(
     HANDLE pipe,
     const BootstrapConfig& config,
-    const CloudOcrCropEvent& event,
+    const std::uint32_t message_kind,
+    const std::uint64_t deadline_utc_ticks,
+    std::optional<std::vector<std::byte>> payload,
     std::mutex& write_gate) noexcept
 {
-    constexpr std::uint32_t cloud_ocr_crop_request_kind = 7U;
-    auto payload = encode_cloud_ocr_crop_request(event);
     if (!payload.has_value()) return false;
     std::vector<std::byte> response(
         sizeof(std::uint32_t) + wire_header_bytes + payload->size());
@@ -858,7 +887,7 @@ bool write_cloud_ocr_crop_event(
     write_u32(bytes, 0U, static_cast<std::uint32_t>(wire_header_bytes + payload->size()));
     write_u32(bytes, 4U, wire_magic);
     write_u32(bytes, 8U, protocol_version);
-    write_u32(bytes, 12U, cloud_ocr_crop_request_kind);
+    write_u32(bytes, 12U, message_kind);
     GUID event_id{};
     if (FAILED(CoCreateGuid(&event_id)))
     {
@@ -867,7 +896,7 @@ bool write_cloud_ocr_crop_event(
     }
     std::ranges::copy(std::as_bytes(std::span{&event_id, 1U}), response.begin() + 16U);
     std::ranges::copy(config.runtime_epoch, response.begin() + 32U);
-    write_u64(bytes, 48U, event.deadline_utc_ticks);
+    write_u64(bytes, 48U, deadline_utc_ticks);
     write_u32(bytes, 56U, static_cast<std::uint32_t>(payload->size()));
     std::ranges::copy(*payload, response.begin() + sizeof(std::uint32_t) + wire_header_bytes);
     SecureZeroMemory(payload->data(), payload->size());
@@ -875,6 +904,36 @@ bool write_cloud_ocr_crop_event(
     const bool written = write_exact(pipe, response) && FlushFileBuffers(pipe) != FALSE;
     SecureZeroMemory(response.data(), response.size());
     return written;
+}
+
+bool write_cloud_ocr_crop_event(
+    HANDLE pipe,
+    const BootstrapConfig& config,
+    const CloudOcrCropEvent& event,
+    std::mutex& write_gate) noexcept
+{
+    return write_ocr_crop_event(
+        pipe,
+        config,
+        7U,
+        event.deadline_utc_ticks,
+        encode_cloud_ocr_crop_request(event),
+        write_gate);
+}
+
+bool write_local_ocr_crop_event(
+    HANDLE pipe,
+    const BootstrapConfig& config,
+    const LocalOcrCropEvent& event,
+    std::mutex& write_gate) noexcept
+{
+    return write_ocr_crop_event(
+        pipe,
+        config,
+        local_ocr_crop_request_kind,
+        event.deadline_utc_ticks,
+        encode_local_ocr_crop_request(event),
+        write_gate);
 }
 
 bool write_runtime_budget_event(
@@ -993,6 +1052,10 @@ ServerExitCode process_messages(HANDLE pipe, const BootstrapConfig& config) noex
         [pipe, &config, &write_gate](const CloudOcrCropEvent& event) noexcept
         {
             return write_cloud_ocr_crop_event(pipe, config, event, write_gate);
+        },
+        [pipe, &config, &write_gate](const LocalOcrCropEvent& event) noexcept
+        {
+            return write_local_ocr_crop_event(pipe, config, event, write_gate);
         },
         [pipe, &config, &write_gate](const OcrResultCommand& result) noexcept
         {
@@ -1199,8 +1262,7 @@ ServerExitCode run_server(HANDLE bootstrap_read_handle) noexcept
     {
         return ServerExitCode::pipe_creation_failed;
     }
-    const BOOL connected = ConnectNamedPipe(pipe.get(), nullptr);
-    if (!connected && GetLastError() != ERROR_PIPE_CONNECTED)
+    if (!await_client(pipe.get()))
     {
         return ServerExitCode::pipe_creation_failed;
     }

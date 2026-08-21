@@ -113,13 +113,14 @@ internal static partial class WorkerMain
     {
         byte[] identity = Encoding.UTF8.GetBytes($"{epoch:D}:{Environment.ProcessId}");
         byte[] proof = HMACSHA256.HashData(secret, identity);
-        await WriteFrameAsync(stream, new
-        {
-            protocolVersion = LocalWorkerProtocol.Version,
-            workerSessionEpoch = epoch,
-            workerProcessId = Environment.ProcessId,
-            proof = Convert.ToBase64String(proof),
-        }, cancellationToken);
+        await WriteFrameAsync(
+            stream,
+            new LocalWorkerHandshake(
+                LocalWorkerProtocol.Version,
+                epoch,
+                Environment.ProcessId,
+                Convert.ToBase64String(proof)),
+            cancellationToken);
         CryptographicOperations.ZeroMemory(proof);
     }
 

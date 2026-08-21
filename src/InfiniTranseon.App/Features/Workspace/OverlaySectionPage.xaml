@@ -1,7 +1,8 @@
-<Page
+﻿<Page
     x:Class="InfiniTranseon.App.Features.Workspace.OverlaySectionPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
     Loaded="OnLoaded"
     IsTabStop="True">
 
@@ -12,45 +13,40 @@
       cannot return pixels (see Core/Probes/OverlayPreviewRenderer.cs) — the layered, capture-
       excluded overlay window is drawn by the runtime, not this UI.
     -->
+    <!-- No page heading: the workspace breadcrumb already names the section, so a second copy only
+         pushed the controls down the page. -->
     <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource SpaceM}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="{StaticResource SpaceXS}">
-            <TextBlock x:Uid="WorkspaceOverlayTitle" Style="{StaticResource PageTitleStyle}" />
-            <TextBlock
-                x:Uid="WorkspaceOverlaySubtitle"
-                Style="{StaticResource CaptionTextStyle}"
-                TextWrapping="Wrap"
-                MaxWidth="760"
-                HorizontalAlignment="Left" />
-        </StackPanel>
+        <InfoBar x:Name="PageInfoBar" IsOpen="False" IsClosable="True" />
 
-        <InfoBar x:Name="PageInfoBar" Grid.Row="1" IsOpen="False" IsClosable="True" />
-
-        <Grid Grid.Row="2" ColumnSpacing="{StaticResource SpaceM}">
+        <Grid Grid.Row="1" ColumnSpacing="{StaticResource SpaceM}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <ComboBox
+            <controls:SelectBox
                 x:Uid="WorkbenchTargetSelector"
                 x:Name="TargetSelector"
+                DisplayMemberPath="Name"
                 HorizontalAlignment="Stretch"
+                VerticalAlignment="Center"
                 SelectionChanged="OnTargetSelectionChanged" />
-            <ComboBox
+            <controls:SelectBox
                 x:Uid="ChannelsRegionSelector"
                 x:Name="RegionSelector"
+                DisplayMemberPath="Name"
                 Grid.Column="1"
                 HorizontalAlignment="Stretch"
+                VerticalAlignment="Center"
                 SelectionChanged="OnRegionSelectionChanged" />
         </Grid>
 
-        <Grid Grid.Row="3" ColumnSpacing="{StaticResource SpaceL}">
+        <Grid Grid.Row="2" ColumnSpacing="{StaticResource SpaceL}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="360" />
                 <ColumnDefinition Width="*" />
@@ -73,17 +69,17 @@
 
                     <Border Style="{StaticResource CardBorderStyle}" Padding="{StaticResource CardPadding}">
                         <StackPanel Spacing="{StaticResource SpaceM}">
-                            <ComboBox
+                            <controls:SelectBox
                                 x:Name="BackgroundModeBox"
                                 x:Uid="WorkbenchOverlayBackgroundModeBox"
                                 HorizontalAlignment="Stretch"
                                 SelectionChanged="OnBackgroundModeChanged">
-                                <ComboBoxItem x:Uid="BackgroundOptionAutomatic" Tag="AutomaticContrastBlur" />
-                                <ComboBoxItem x:Uid="BackgroundOptionSolid" Tag="Solid" />
-                                <ComboBoxItem x:Uid="BackgroundOptionTransparent" Tag="Transparent" />
-                                <ComboBoxItem x:Uid="BackgroundOptionTranslucent" Tag="Translucent" />
-                                <ComboBoxItem x:Uid="BackgroundOptionCached" Tag="CachedCleanBackground" />
-                            </ComboBox>
+                                <ListViewItem x:Uid="BackgroundOptionAutomatic" Tag="AutomaticContrastBlur" />
+                                <ListViewItem x:Uid="BackgroundOptionSolid" Tag="Solid" />
+                                <ListViewItem x:Uid="BackgroundOptionTransparent" Tag="Transparent" />
+                                <ListViewItem x:Uid="BackgroundOptionTranslucent" Tag="Translucent" />
+                                <ListViewItem x:Uid="BackgroundOptionCached" Tag="CachedCleanBackground" />
+                            </controls:SelectBox>
                             <TextBox
                                 x:Name="BackgroundColorBox"
                                 x:Uid="WorkbenchBackgroundColorBox"
@@ -174,7 +170,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <ComboBox
+                <controls:SelectBox
                     x:Uid="OverlayPreviewStateSelector"
                     x:Name="PreviewStateBox"
                     HorizontalAlignment="Left"

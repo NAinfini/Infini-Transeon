@@ -80,9 +80,9 @@
     "unsupportedMessageBehavior": "explicit protocol failure and connection termination"
   },
   "payloadSchemas": {
-    "OverlayDesiredState": 4,
+    "OverlayDesiredState": 5,
     "PolicyRevision": 2,
-    "ProcessingConfiguration": 3
+    "ProcessingConfiguration": 4
   },
   "backpressure": {
     "controlMaxItems": 64,
@@ -92,6 +92,7 @@
     "sharedMaxBytes": 33554432,
     "dataLaneKinds": [
       "CloudOcrCropRequest",
+      "LocalOcrCropRequest",
       "OcrResult",
       "Thumbnail"
     ],
@@ -139,7 +140,8 @@
     "OcrResultAcknowledgement",
     "RuntimeBudgetSnapshot",
     "ThumbnailRequest",
-    "ThumbnailAcknowledgement"
+    "ThumbnailAcknowledgement",
+    "LocalOcrCropRequest"
   ],
   "ordering": "request-scoped sequence and runtime epoch",
   "reconnect": "full state snapshot; never replay text or provider completions"

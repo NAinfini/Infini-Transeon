@@ -52,9 +52,17 @@ public sealed class AppStatusLog : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Drains the channel on the thread pool. The context matters: this log is constructed while the
+    /// dependency graph is resolved on the UI thread, so a captured context would schedule every
+    /// resumption of this loop back onto the dispatcher. <see cref="Record"/> blocks its caller once
+    /// the channel is full, so a UI-thread caller would then be waiting for a continuation only the
+    /// UI thread could run — a permanent freeze with no exception and no log line to show for it.
+    /// </summary>
     private async Task WriteLoopAsync()
     {
-        await foreach (StatusEvent statusEvent in _events.Reader.ReadAllAsync())
+        await foreach (StatusEvent statusEvent in
+            _events.Reader.ReadAllAsync().ConfigureAwait(false))
             await _log.WriteAsync(statusEvent, CancellationToken.None).ConfigureAwait(false);
     }
 }

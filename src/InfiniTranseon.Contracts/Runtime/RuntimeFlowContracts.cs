@@ -80,6 +80,40 @@ public sealed record OcrResultSnapshot(
     bool IsStable,
     string? TerminalErrorCode);
 
+public static class OcrRecognitionLanguage
+{
+    public const string Automatic = "auto";
+
+    public static bool IsAutomatic(string value) =>
+        string.Equals(value, Automatic, StringComparison.OrdinalIgnoreCase);
+
+    public static void Validate(string value, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
+        if (value.Length > 64 || value[0] == '-' || value[^1] == '-')
+            throw new ArgumentException("Recognition language is invalid.", parameterName);
+
+        bool previousHyphen = false;
+        foreach (char character in value)
+        {
+            if (character == '-')
+            {
+                if (previousHyphen)
+                    throw new ArgumentException("Recognition language is invalid.", parameterName);
+                previousHyphen = true;
+            }
+            else if (!char.IsAsciiLetterOrDigit(character))
+            {
+                throw new ArgumentException("Recognition language is invalid.", parameterName);
+            }
+            else
+            {
+                previousHyphen = false;
+            }
+        }
+    }
+}
+
 public sealed record CloudOcrCropRequest : IDisposable
 {
     private readonly byte[] _encodedCrop;
@@ -92,6 +126,7 @@ public sealed record CloudOcrCropRequest : IDisposable
         int pixelWidth,
         int pixelHeight,
         bool explicitCloudConsent,
+        string recognitionLanguage,
         long consentPolicyRevision = 1,
         int? encodedByteCeiling = null,
         DateTimeOffset? deadlineUtc = null,
@@ -103,6 +138,7 @@ public sealed record CloudOcrCropRequest : IDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(pixelHeight, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(consentPolicyRevision, 1);
         ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
+        OcrRecognitionLanguage.Validate(recognitionLanguage, nameof(recognitionLanguage));
         if (providerId.Length > 128 || providerId.Any(char.IsControl))
             throw new ArgumentException("Cloud OCR provider identifier is invalid.", nameof(providerId));
         if (!explicitCloudConsent)
@@ -129,6 +165,7 @@ public sealed record CloudOcrCropRequest : IDisposable
         if (DeadlineUtc.Offset != TimeSpan.Zero || DeadlineUtc <= DateTimeOffset.UtcNow)
             throw new ArgumentOutOfRangeException(nameof(deadlineUtc));
         ProviderId = providerId;
+        RecognitionLanguage = recognitionLanguage;
     }
 
     public OcrExecutionToken ExecutionToken { get; }
@@ -148,6 +185,74 @@ public sealed record CloudOcrCropRequest : IDisposable
     public int EncodedByteCeiling { get; }
     public DateTimeOffset DeadlineUtc { get; }
     public string ProviderId { get; }
+    public string RecognitionLanguage { get; }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        Array.Clear(_encodedCrop);
+        _disposed = true;
+    }
+}
+
+public sealed record LocalOcrCropRequest : IDisposable
+{
+    private readonly byte[] _encodedCrop;
+    private bool _disposed;
+
+    public LocalOcrCropRequest(
+        OcrExecutionToken executionToken,
+        string mimeType,
+        ReadOnlySpan<byte> encodedCrop,
+        int pixelWidth,
+        int pixelHeight,
+        string recognitionLanguage,
+        int? encodedByteCeiling = null,
+        DateTimeOffset? deadlineUtc = null)
+    {
+        ArgumentNullException.ThrowIfNull(executionToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mimeType);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pixelWidth, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pixelHeight, 1);
+        ArgumentException.ThrowIfNullOrWhiteSpace(recognitionLanguage);
+        if (recognitionLanguage.Length > 64 || recognitionLanguage.Any(char.IsControl) ||
+            string.Equals(recognitionLanguage, "auto", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                "Local OCR requires an explicit recognition language.",
+                nameof(recognitionLanguage));
+        int byteCeiling = encodedByteCeiling ?? RuntimeProtocol.MaxPayloadBytes;
+        if (byteCeiling is < 1 or > RuntimeProtocol.MaxPayloadBytes)
+            throw new ArgumentOutOfRangeException(nameof(encodedByteCeiling));
+        if (encodedCrop.IsEmpty || encodedCrop.Length > byteCeiling)
+            throw new ArgumentOutOfRangeException(nameof(encodedCrop));
+
+        ExecutionToken = executionToken;
+        MimeType = mimeType;
+        _encodedCrop = encodedCrop.ToArray();
+        PixelWidth = pixelWidth;
+        PixelHeight = pixelHeight;
+        RecognitionLanguage = recognitionLanguage;
+        EncodedByteCeiling = byteCeiling;
+        DeadlineUtc = deadlineUtc ?? DateTimeOffset.UtcNow.AddSeconds(30);
+        if (DeadlineUtc.Offset != TimeSpan.Zero || DeadlineUtc <= DateTimeOffset.UtcNow)
+            throw new ArgumentOutOfRangeException(nameof(deadlineUtc));
+    }
+
+    public OcrExecutionToken ExecutionToken { get; }
+    public string MimeType { get; }
+    public ReadOnlyMemory<byte> EncodedCrop
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _encodedCrop;
+        }
+    }
+    public int PixelWidth { get; }
+    public int PixelHeight { get; }
+    public string RecognitionLanguage { get; }
+    public int EncodedByteCeiling { get; }
+    public DateTimeOffset DeadlineUtc { get; }
 
     public void Dispose()
     {
@@ -300,13 +405,47 @@ public enum OverlaySlotState
     Cancelled,
 }
 
-public sealed record OverlaySlotSnapshot(
-    Guid SlotId,
-    int Order,
-    OverlaySlotState State,
-    string Text,
-    string Label)
+/// <summary>
+/// One drawn piece of a slot together with the pixels it occupies on the target. The rectangle is
+/// the captured text this piece replaces, so the overlay lands on the words it is translating
+/// instead of at the corner of the region. <paramref name="SourceLineCount"/> is how many captured
+/// lines the rectangle spans, which is what tells the renderer how tall a line of it should be.
+/// </summary>
+public sealed record OverlayTextLine(string Text, OverlayPixelRect Bounds, int SourceLineCount = 1);
+
+public sealed record OverlaySlotSnapshot
 {
+    public OverlaySlotSnapshot(
+        Guid slotId,
+        int order,
+        OverlaySlotState state,
+        IReadOnlyList<OverlayTextLine> lines,
+        string label)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        ArgumentNullException.ThrowIfNull(label);
+        if (!Enum.IsDefined(state) ||
+            lines.Any(line => line.Text is null || line.Bounds is null || line.SourceLineCount < 1))
+            throw new ArgumentException("Overlay slot content is invalid.", nameof(lines));
+        SlotId = slotId;
+        Order = order;
+        State = state;
+        Lines = lines is OverlayTextLine[] array
+            ? Array.AsReadOnly(array)
+            : Array.AsReadOnly(lines.ToArray());
+        Label = label;
+        Text = string.Join('\n', Lines.Select(line => line.Text));
+    }
+
+    public Guid SlotId { get; }
+    public int Order { get; }
+    public OverlaySlotState State { get; }
+    public IReadOnlyList<OverlayTextLine> Lines { get; }
+    public string Label { get; }
+
+    /// <summary>The whole translation, which is the placed pieces read back in order.</summary>
+    public string Text { get; }
+
     public int StageIndex { get; init; }
 }
 

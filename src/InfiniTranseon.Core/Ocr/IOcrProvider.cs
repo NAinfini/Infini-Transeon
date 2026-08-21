@@ -7,7 +7,8 @@ public sealed record CloudOcrProviderRequest(
     string MimeType,
     ReadOnlyMemory<byte> EncodedCrop,
     int PixelWidth,
-    int PixelHeight);
+    int PixelHeight,
+    string RecognitionLanguage);
 
 public interface IOcrProvider
 {
@@ -43,6 +44,7 @@ public sealed record CloudOcrRouteRequest
         int pixelWidth,
         int pixelHeight,
         bool explicitCloudConsent,
+        string recognitionLanguage,
         long consentPolicyRevision = 1,
         int? encodedByteCeiling = null,
         DateTimeOffset? deadlineUtc = null)
@@ -52,6 +54,7 @@ public sealed record CloudOcrRouteRequest
         ArgumentOutOfRangeException.ThrowIfLessThan(pixelWidth, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(pixelHeight, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(consentPolicyRevision, 1);
+        OcrRecognitionLanguage.Validate(recognitionLanguage, nameof(recognitionLanguage));
         int byteCeiling = encodedByteCeiling ?? RuntimeProtocol.MaxPayloadBytes;
         if (byteCeiling is < 1 or > RuntimeProtocol.MaxPayloadBytes)
             throw new ArgumentOutOfRangeException(nameof(encodedByteCeiling));
@@ -63,6 +66,7 @@ public sealed record CloudOcrRouteRequest
         PixelWidth = pixelWidth;
         PixelHeight = pixelHeight;
         ExplicitCloudConsent = explicitCloudConsent;
+        RecognitionLanguage = recognitionLanguage;
         ConsentPolicyRevision = consentPolicyRevision;
         EncodedByteCeiling = byteCeiling;
         DeadlineUtc = deadlineUtc ?? DateTimeOffset.UtcNow.AddSeconds(30);
@@ -74,6 +78,7 @@ public sealed record CloudOcrRouteRequest
     public int PixelWidth { get; }
     public int PixelHeight { get; }
     public bool ExplicitCloudConsent { get; }
+    public string RecognitionLanguage { get; }
     public long ConsentPolicyRevision { get; }
     public int EncodedByteCeiling { get; }
     public DateTimeOffset DeadlineUtc { get; }

@@ -70,17 +70,15 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox
+                                <!-- Selectors, not text: the stored value is a BCP-47 tag, so a text
+                                     box asked the user to know that "zh-Hans" is their own language. -->
+                                <controls:SelectBox
                                     x:Name="ContextSourceLanguageBox"
-                                    x:Uid="ContextSourceLanguageBox"
-                                    MaxLength="64"
-                                    TextChanged="OnGameContextTextChanged" />
-                                <TextBox
+                                    SelectionChanged="OnGameContextSelectionChanged" />
+                                <controls:SelectBox
                                     x:Name="ContextTargetLanguageBox"
-                                    x:Uid="ContextTargetLanguageBox"
                                     Grid.Column="1"
-                                    MaxLength="64"
-                                    TextChanged="OnGameContextTextChanged" />
+                                    SelectionChanged="OnGameContextSelectionChanged" />
                             </Grid>
                             <TextBox
                                 x:Name="ContextGameNameBox"
@@ -276,13 +274,13 @@
                         <StackPanel Spacing="10">
                             <StackPanel Spacing="10">
                                 <TextBlock x:Name="StylePromptVersionLabel" x:Uid="StylePromptVersionLabel" Style="{StaticResource BodyTextStyle}" />
-                                <ComboBox
+                                <controls:SelectBox
                                     x:Name="StylePromptVersionSelector"
                                     AutomationProperties.LabeledBy="{x:Bind StylePromptVersionLabel}"
                                     HorizontalAlignment="Stretch"
+                                    DisplayMemberPath="DisplayName"
                                     ItemsSource="{x:Bind ViewModel.StylePromptVersions}"
                                     SelectedItem="{x:Bind ViewModel.SelectedStylePromptVersion, Mode=TwoWay}"
-                                    DisplayMemberPath="DisplayName"
                                     SelectionChanged="OnStylePromptVersionChanged" />
                                 <Button
                                     x:Uid="SavePromptVersionButton"

@@ -60,6 +60,10 @@
   <data name="InstallLocalModelConfirm" xml:space="preserve"><value>下载并安装</value></data>
   <data name="InstallLocalModelCancel" xml:space="preserve"><value>取消</value></data>
   <data name="LocalModelInstalledTitle" xml:space="preserve"><value>模型包已安装</value></data>
+  <data name="LocalModelInstallFailedTitle" xml:space="preserve"><value>模型包安装失败</value></data>
+  <!-- {0} model name, {1} download size. Offered in the translator dropdown so an offline translator
+       is discoverable from the channel that would use it, not only from the settings page. -->
+  <data name="ChannelsInstallableProviderOption" xml:space="preserve"><value>{0}(离线,需下载 {1})</value></data>
   <data name="RemoveLocalModelTitle" xml:space="preserve"><value>移除本地模型？</value></data>
   <data name="RemoveLocalModelBody" xml:space="preserve"><value>要从 {1} 移除 {0} 吗？模型包文件将从应用管理的存储中删除。</value></data>
   <data name="RemoveLocalModelConfirm" xml:space="preserve"><value>移除</value></data>
@@ -146,17 +150,38 @@
   <data name="WorkbenchZoomFitButton.Label" xml:space="preserve"><value>适应预览</value></data>
   <data name="WorkbenchRegionEnabledToggle.Header" xml:space="preserve"><value>启用此区域</value></data>
   <data name="WorkbenchContextRoleBox.Header" xml:space="preserve"><value>上下文角色</value></data>
-  <data name="WorkbenchPriorityHint.Text" xml:space="preserve"><value>P0 立即更新；系统繁忙时，P1–P3 可逐级降低调度频率。若该区域绝不能降速，请锁定性能降级。</value></data>
+  <data name="RegionPriorityHighest.Content" xml:space="preserve">
+    <value>最高 — 从不降速</value>
+  </data>
+  <data name="RegionPriorityHigh.Content" xml:space="preserve">
+    <value>高 — 从不降速</value>
+  </data>
+  <data name="RegionPriorityNormal.Content" xml:space="preserve">
+    <value>中 — 繁忙时可能降低更新频率</value>
+  </data>
+  <data name="RegionPriorityLow.Content" xml:space="preserve">
+    <value>低 — 繁忙时可能降低更新频率</value>
+  </data>
+  <data name="WorkbenchPriorityHint.Text" xml:space="preserve"><value>机器负载较高时，仅“中”和“低”优先级的区域会降低更新频率；“最高”和“高”保持原有间隔。</value></data>
+  <!-- Badge vocabulary for the region list: the selector above spells out the consequence because
+       that is where the user chooses; the list column only has to identify the level. -->
+  <data name="RegionPriorityBadgeHighest" xml:space="preserve"><value>最高</value></data>
+  <data name="RegionPriorityBadgeHigh" xml:space="preserve"><value>高</value></data>
+  <data name="RegionPriorityBadgeNormal" xml:space="preserve"><value>中</value></data>
+  <data name="RegionPriorityBadgeLow" xml:space="preserve"><value>低</value></data>
   <data name="WorkbenchRoleNone.Content" xml:space="preserve"><value>无上下文角色</value></data>
   <data name="WorkbenchRoleSpeaker.Content" xml:space="preserve"><value>说话者名称</value></data>
   <data name="WorkbenchRoleScene.Content" xml:space="preserve"><value>场景或地点</value></data>
   <data name="WorkbenchRoleDialogue.Content" xml:space="preserve"><value>对话正文</value></data>
   <data name="WorkbenchContextRoleHint.Text" xml:space="preserve"><value>说话者与场景区域会为其他翻译区域提供上下文；对话正文作为主要语句翻译。</value></data>
   <data name="WorkbenchOcrProviderBox.Header" xml:space="preserve"><value>OCR 服务</value></data>
+  <data name="WorkbenchOcrProviderBox.PlaceholderText" xml:space="preserve"><value>搜索已配置的云端 OCR 服务</value></data>
+  <data name="WorkbenchOcrCatalogErrorTitle" xml:space="preserve"><value>无法加载 OCR 服务</value></data>
   <data name="WorkbenchRecognitionLanguageBox.Header" xml:space="preserve"><value>识别语言</value></data>
+  <data name="WorkbenchRecognitionLanguageBox.PlaceholderText" xml:space="preserve"><value>搜索语言</value></data>
   <data name="WorkbenchDetectOrientationToggle.Header" xml:space="preserve"><value>检测文字方向</value></data>
   <data name="WorkbenchCloudOcrToggle.Header" xml:space="preserve"><value>此区域使用云端 OCR</value></data>
-  <data name="WorkbenchTranslationEnabledToggle.Header" xml:space="preserve"><value>翻译识别文本</value></data>
+  <data name="WorkbenchTranslationEnabledToggle.Header" xml:space="preserve"><value>翻译此区域</value></data>
   <data name="WorkbenchLineBreakModeBox.Header" xml:space="preserve"><value>换行策略</value></data>
   <data name="LineBreakPreserve.Content" xml:space="preserve"><value>保留检测到的行</value></data>
   <data name="LineBreakJoin.Content" xml:space="preserve"><value>合并为一个段落</value></data>
@@ -228,7 +253,7 @@
   <data name="ChannelsEmptyNoRegionTitle" xml:space="preserve"><value>未选择区域</value></data>
   <data name="ChannelsEmptyNoRegionBody" xml:space="preserve"><value>请先在上方选择目标和区域，以编辑其翻译通道。</value></data>
   <data name="ChannelsEmptyDisabledTitle" xml:space="preserve"><value>此区域未启用翻译</value></data>
-  <data name="ChannelsEmptyDisabledBody" xml:space="preserve"><value>打开“翻译识别文本”后即可配置翻译通道。</value></data>
+  <data name="ChannelsEmptyDisabledBody" xml:space="preserve"><value>打开上方的“翻译此区域”后即可配置翻译通道。</value></data>
   <data name="ChannelsEmptyNoChannelsTitle" xml:space="preserve"><value>尚无翻译通道</value></data>
   <data name="ChannelsEmptyNoChannelsBody" xml:space="preserve"><value>添加一个通道，为此区域配置翻译服务商和可选的精修步骤。</value></data>
   <data name="ChannelsProviderUnavailableBadge" xml:space="preserve"><value>服务商不可用 — 请选择其他服务商以继续</value></data>
@@ -277,13 +302,11 @@
   <data name="ThemeDark.Content" xml:space="preserve"><value>深色</value></data>
   <data name="LanguageSettingLabel.Text" xml:space="preserve"><value>界面语言</value></data>
   <data name="LanguageSettingHint.Text" xml:space="preserve"><value>数字与日期格式默认跟随系统</value></data>
-  <data name="LanguageRestartBar.Title" xml:space="preserve"><value>界面语言已切换</value></data>
-  <data name="LanguageRestartBar.Message" xml:space="preserve"><value>已经打开的页面仍显示切换前的语言，重启应用后全部生效。</value></data>
   <data name="PrivacyHeader.Text" xml:space="preserve"><value>隐私与历史</value></data>
   <data name="OfflineModeLabel.Text" xml:space="preserve"><value>严格离线模式</value></data>
   <data name="OfflineModeHint.Text" xml:space="preserve"><value>禁用云翻译提供商、模型下载与更新检查；仅本地 OCR 与本地模型仍可使用。</value></data>
   <data name="HistoryRetentionLabel.Text" xml:space="preserve"><value>历史保留</value></data>
-  <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>纯文本历史，按档案单独开启</value></data>
+  <data name="HistoryRetentionHint.Text" xml:space="preserve"><value>纯文本历史的全局上限；每个档案仍需单独开启</value></data>
   <data name="HistoryOff.Content" xml:space="preserve"><value>关闭</value></data>
   <data name="History30Days.Content" xml:space="preserve"><value>30 天</value></data>
   <data name="History90Days.Content" xml:space="preserve"><value>90 天</value></data>
@@ -321,12 +344,29 @@
 
   <data name="SetupWizardTitle.Text" xml:space="preserve"><value>新建档案</value></data>
   <data name="SetupWizardSubtitle.Text" xml:space="preserve"><value>四步引导——捕获目标、语言与服务、区域，最后测试并保存。</value></data>
+  <data name="SetupEditTitle" xml:space="preserve"><value>管理档案</value></data>
+  <data name="SetupEditSubtitle" xml:space="preserve"><value>添加、删除或重绑捕获目标，同时保留其区域设置。</value></data>
   <data name="SetupStep1Caption.Text" xml:space="preserve"><value>捕获目标</value></data>
   <data name="SetupStep2Caption.Text" xml:space="preserve"><value>语言与服务</value></data>
   <data name="SetupStep3Caption.Text" xml:space="preserve"><value>区域</value></data>
   <data name="SetupStep4Caption.Text" xml:space="preserve"><value>测试并保存</value></data>
   <data name="SetupStep1Heading.Text" xml:space="preserve"><value>选择捕获目标</value></data>
-  <data name="SetupStep1Body.Text" xml:space="preserve"><value>选择要翻译的窗口、显示器或桌面区域。每个目标保留真实分辨率与缩放；第 9 个目标会以禁用状态留在草稿中并标明原因。</value></data>
+  <data name="SetupStep1Body.Text" xml:space="preserve"><value>勾选窗口、显示器或桌面区域即可添加；取消勾选即可删除。每个目标保留真实分辨率与缩放。</value></data>
+  <data name="SetupMissingTargetsBar.Title" xml:space="preserve"><value>一个或多个已保存目标当前离线</value></data>
+  <data name="SetupMissingTargetsBar.Message" xml:space="preserve"><value>它们仍保留在此档案中。保存前请将每个目标重绑到当前窗口，或明确删除。</value></data>
+  <data name="SetupMissingTargetSelector.Header" xml:space="preserve"><value>已保存目标</value></data>
+  <data name="SetupRebindTargetButton.Content" xml:space="preserve"><value>重绑</value></data>
+  <data name="SetupRemoveTargetButton.Content" xml:space="preserve"><value>删除</value></data>
+  <data name="SetupRebindNoTargetTitle" xml:space="preserve"><value>没有可用的捕获目标</value></data>
+  <data name="SetupRebindNoTargetMessage" xml:space="preserve"><value>请先打开游戏窗口或连接显示器，然后重新打开目标管理。</value></data>
+  <data name="SetupRebindTargetSelectorHeader" xml:space="preserve"><value>新的捕获目标</value></data>
+  <data name="SetupRebindTargetTitle" xml:space="preserve"><value>重绑“{0}”</value></data>
+  <data name="SetupRebindTargetConfirm" xml:space="preserve"><value>重绑</value></data>
+  <data name="SetupRebindTargetCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="SetupRemoveTargetTitle" xml:space="preserve"><value>删除已保存目标？</value></data>
+  <data name="SetupRemoveTargetMessage" xml:space="preserve"><value>保存后，“{0}”及其区域设置将从此档案删除。</value></data>
+  <data name="SetupRemoveTargetConfirm" xml:space="preserve"><value>删除</value></data>
+  <data name="SetupRemoveTargetCancel" xml:space="preserve"><value>保留目标</value></data>
   <data name="SetupStep2Heading.Text" xml:space="preserve"><value>语言与服务</value></data>
   <data name="SetupStep3Heading.Text" xml:space="preserve"><value>区域</value></data>
   <data name="SetupStep4Heading.Text" xml:space="preserve"><value>测试并保存</value></data>
@@ -351,6 +391,19 @@
   <data name="HistoryEmptyBody.Text" xml:space="preserve"><value>捕获运行后，当前档案的翻译事件会显示在这里。</value></data>
   <data name="HistoryDisabledBar.Title" xml:space="preserve"><value>历史记录已关闭</value></data>
   <data name="HistoryDisabledBar.Message" xml:space="preserve"><value>历史保留已设置为“关闭”，因此不会记录任何翻译事件。可在“设置”中启用以保留纯文本历史。</value></data>
+  <data name="ProfileHistoryDisabledBar.Title" xml:space="preserve"><value>当前档案的历史记录已关闭</value></data>
+  <data name="ProfileHistoryDisabledBar.Message" xml:space="preserve"><value>在下方启用前，此档案不会记录原文或译文；已有记录会继续保留。</value></data>
+  <data name="ProfileHistorySettingsTitle.Text" xml:space="preserve"><value>当前档案的历史记录</value></data>
+  <data name="ProfileHistorySettingsHint.Text" xml:space="preserve"><value>只保存识别出的原文和译文，不保存截图；全局保留设置仍是上限。</value></data>
+  <data name="ProfileHistoryEnabledToggle.OnContent" xml:space="preserve"><value>开</value></data>
+  <data name="ProfileHistoryEnabledToggle.OffContent" xml:space="preserve"><value>关</value></data>
+  <data name="ProfileHistoryEnabledToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存当前档案的历史记录</value></data>
+  <data name="HistoryAgeDaysBox.Header" xml:space="preserve"><value>保留天数</value></data>
+  <data name="HistoryAgeDaysBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>当前档案历史记录的保留天数</value></data>
+  <data name="HistoryMaximumMegabytesBox.Header" xml:space="preserve"><value>最大存储空间（MB）</value></data>
+  <data name="HistoryMaximumMegabytesBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>当前档案历史记录的最大存储空间（MB）</value></data>
+  <data name="SaveProfileHistoryButton.Content" xml:space="preserve"><value>保存历史设置</value></data>
+  <data name="SaveProfileHistoryButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>保存当前档案的历史设置</value></data>
 
 
   <data name="GlossaryNoProfileTitle.Text" xml:space="preserve"><value>未选择档案</value></data>
@@ -495,7 +548,7 @@
   <data name="PerformanceBalanced.Content" xml:space="preserve"><value>均衡</value></data>
   <data name="PerformanceHigh.Content" xml:space="preserve"><value>高性能</value></data>
   <data name="OcrBackendLabel.Text" xml:space="preserve"><value>文字识别引擎</value></data>
-  <data name="OcrBackendHint.Text" xml:space="preserve"><value>自动模式对本机已能识别的语言使用 Windows 识别器，其余语言使用下载的模型。下载的模型会自行获取并保持最新；离线模式会停止该行为。</value></data>
+  <data name="OcrBackendHint.Text" xml:space="preserve"><value>自动模式对本机已能识别的语言使用 Windows 识别器，其余语言仅使用你明确安装的 OCR 模型。每次下载或更新模型都必须由你确认。</value></data>
   <data name="OcrBackendAutomatic.Content" xml:space="preserve"><value>自动</value></data>
   <data name="OcrBackendWindows.Content" xml:space="preserve"><value>Windows</value></data>
   <data name="OcrBackendLocal.Content" xml:space="preserve"><value>下载的模型</value></data>
@@ -542,7 +595,7 @@
   <data name="WorkspaceStartButton.Content" xml:space="preserve"><value>启动</value></data>
   <data name="WorkspaceReadinessHeader.Text" xml:space="preserve"><value>就绪状态</value></data>
   <data name="WorkspaceTargetsHeader.Text" xml:space="preserve"><value>捕获目标</value></data>
-  <data name="WorkspaceEditCaptureButton.Content" xml:space="preserve"><value>编辑捕获</value></data>
+  <data name="WorkspaceEditCaptureButton.Content" xml:space="preserve"><value>管理目标</value></data>
   <data name="WorkspaceProfileMissing" xml:space="preserve"><value>此档案已不存在。请返回启动台并选择其他档案。</value></data>
   <data name="WorkspaceOverviewSubtitle" xml:space="preserve"><value>进入游戏前检查就绪状态、捕获目标和运行控制。</value></data>
   <data name="WorkspaceTargetReady" xml:space="preserve"><value>捕获目标：{0}</value></data>
@@ -554,6 +607,24 @@
   <data name="HomeStartUnavailable" xml:space="preserve"><value>引擎当前无法启动此档案:{0}</value></data>
   <data name="HomePinUnavailable" xml:space="preserve"><value>设置未能加载,置顶无法保存。</value></data>
   <data name="HomeProfileFileType" xml:space="preserve"><value>Infini-Transeon 档案</value></data>
+  <!-- Profile card vocabulary. RealProfileService resolves these while building a card, so a card
+       carries finished text and the pages that show one stay free of formatting rules.
+       {0} target name, {1} target kind, {2} how many further targets the profile also captures. -->
+  <data name="ProfileTargetDescription" xml:space="preserve"><value>{0}({1})</value></data>
+  <data name="ProfileTargetDescriptionMore" xml:space="preserve"><value>{0}({1}) +{2}</value></data>
+  <data name="ProfileTargetNone" xml:space="preserve"><value>尚未设置捕获目标</value></data>
+  <data name="ProfileTargetKindWindow" xml:space="preserve"><value>窗口</value></data>
+  <data name="ProfileTargetKindDisplay" xml:space="preserve"><value>显示器</value></data>
+  <data name="ProfileTargetKindDesktopRegion" xml:space="preserve"><value>屏幕区域</value></data>
+  <data name="ProfileLanguagePair" xml:space="preserve"><value>{0} → {1}</value></data>
+  <data name="ProfileMatchStateMatched" xml:space="preserve"><value>已找到目标</value></data>
+  <data name="ProfileMatchStateMissing" xml:space="preserve"><value>目标未运行</value></data>
+  <data name="ProfileMatchStateNotConfigured" xml:space="preserve"><value>尚未设置目标</value></data>
+  <data name="ProfileActionStart" xml:space="preserve"><value>开始</value></data>
+  <!-- Not prose: the BCP-47 tag of the language this table is written in. LanguageCatalog holds the
+       language names in both languages and must be told which set to use; the resource table in
+       effect is the only thing that always agrees with the words around the name on screen. -->
+  <data name="UiLanguageTag" xml:space="preserve"><value>zh-CN</value></data>
   <data name="HomeExportProfileMenuItem.Text" xml:space="preserve"><value>导出…</value></data>
   <data name="HomeDeleteProfileMenuItem.Text" xml:space="preserve"><value>删除…</value></data>
   <data name="HomeDeleteProfileTitle" xml:space="preserve"><value>删除此档案?</value></data>
@@ -593,7 +664,12 @@
   <data name="WorkspaceCredentialsReady" xml:space="preserve"><value>凭据已就绪：{0}</value></data>
   <data name="WorkspaceCredentialsNotReady" xml:space="preserve"><value>{0} 尚未保存凭据 —— 请到「服务商」页填写密钥</value></data>
   <data name="WorkspaceCredentialsNoProvider" xml:space="preserve"><value>还没有任何通道指定翻译服务商</value></data>
-  <data name="WorkspaceStartBlocked" xml:space="preserve"><value>完成就绪清单后才能启动。</value></data>
+  <data name="WorkspaceStartBlocked" xml:space="preserve"><value>还不能启动 —— 仍缺少：{0}</value></data>
+  <data name="WorkspaceStepTarget" xml:space="preserve"><value>一个要捕获的窗口</value></data>
+  <data name="WorkspaceStepLanguage" xml:space="preserve"><value>要识别和译成的语言</value></data>
+  <data name="WorkspaceStepRegions" xml:space="preserve"><value>至少一个区域和一个翻译器</value></data>
+  <data name="WorkspaceStepCredentials" xml:space="preserve"><value>所选服务的 API 密钥</value></data>
+  <data name="ListSeparator" xml:space="preserve"><value>、</value></data>
   <data name="WorkspaceStartUnavailable" xml:space="preserve"><value>引擎当前无法启动此档案:{0}</value></data>
   <data name="TrayTooltip" xml:space="preserve"><value>Infini-Transeon 游戏翻译</value></data>
   <data name="TrayPauseAll" xml:space="preserve"><value>暂停全部</value></data>
@@ -610,12 +686,6 @@
   <data name="CloseToTrayCancel" xml:space="preserve"><value>取消</value></data>
   <data name="HomeProfileMoreButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>更多档案操作</value></data>
   <data name="HomeTogglePinMenuItem.Text" xml:space="preserve"><value>置顶或取消置顶档案</value></data>
-  <data name="WorkspaceCaptureTitle" xml:space="preserve"><value>捕获与区域</value></data>
-  <data name="WorkspaceCaptureSubtitle" xml:space="preserve"><value>选择目标、绘制归一化翻译区域，并调整 OCR 与换行布局。</value></data>
-  <data name="WorkspaceChannelsTitle" xml:space="preserve"><value>翻译通道</value></data>
-  <data name="WorkspaceChannelsSubtitle" xml:space="preserve"><value>为每个区域配置一至四个固定结果槽位，以及可选的顺序 LLM 润色步骤。</value></data>
-  <data name="WorkspaceOverlayTitle" xml:space="preserve"><value>覆盖样式</value></data>
-  <data name="WorkspaceOverlaySubtitle" xml:space="preserve"><value>决定每个区域如何覆盖、偏移或悬浮显示游戏译文。</value></data>
   <data name="BudgetPreviewSummary" xml:space="preserve"><value>已用 {0}/{1} 个槽位 · 每行最多 {2} 次请求</value></data>
   <data name="BudgetPreviewHint.Text" xml:space="preserve"><value>并行槽位会增加覆盖范围、费用、延迟和覆盖层空间；润色步骤在各自槽位内依次执行。</value></data>
   <data name="ActivityTitle" xml:space="preserve"><value>活动</value></data>
@@ -640,9 +710,151 @@
   <data name="ActivityKindDiagnosticLabel" xml:space="preserve"><value>诊断</value></data>
   <data name="ActivityOcrTitle" xml:space="preserve"><value>已识别文字</value></data>
   <data name="ActivityOcrDetail" xml:space="preserve"><value>{0} 行 · 模型 {1}</value></data>
-  <data name="ActivityTranslationDetail" xml:space="preserve"><value>{0} · {1:0} 毫秒 · {2}</value></data>
+  <data name="ActivityTranslationDetail" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
+  <data name="ActivityTranslationFailureDetail" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
   <data name="ActivityCacheHit" xml:space="preserve"><value>命中缓存</value></data>
   <data name="ActivityCacheMiss" xml:space="preserve"><value>实时请求</value></data>
+  <data name="ActivityScopeUserRegion" xml:space="preserve"><value>自定义区域</value></data>
+  <data name="ActivityScopeFullTarget" xml:space="preserve"><value>整个画面</value></data>
+  <data name="ActivityScopeRemainingArea" xml:space="preserve"><value>其余画面</value></data>
+  <data name="ActivityStageInitial" xml:space="preserve"><value>首次翻译</value></data>
+  <data name="ActivityStageFallback" xml:space="preserve"><value>备用通道</value></data>
+  <data name="ActivityStageRefinement" xml:space="preserve"><value>润色</value></data>
+  <data name="ActivityLatencyMilliseconds" xml:space="preserve"><value>{0:0} 毫秒</value></data>
+  <data name="ActivityLatencySeconds" xml:space="preserve"><value>{0:0.0} 秒</value></data>
+  <data name="ActivityLocalProviderName" xml:space="preserve"><value>本地模型 {0}</value></data>
+  <data name="ActivityRepeatCount" xml:space="preserve"><value>×{0}</value></data>
+  <!-- Status-log vocabulary (StatusEventPresenter). Categories name the subsystem that emitted an
+       event; messages say what happened. The event's error code is shown verbatim beside them and
+       is deliberately not translated. -->
+  <data name="StatusCategoryUnknown" xml:space="preserve"><value>其他</value></data>
+  <data name="StatusCategoryAppStartup" xml:space="preserve"><value>启动</value></data>
+  <data name="StatusCategoryAppLifecycle" xml:space="preserve"><value>应用</value></data>
+  <data name="StatusCategoryAppActivation" xml:space="preserve"><value>激活</value></data>
+  <data name="StatusCategoryAppModel" xml:space="preserve"><value>本地模型</value></data>
+  <data name="StatusCategoryAppUpdate" xml:space="preserve"><value>应用更新</value></data>
+  <data name="StatusCategoryHotkey" xml:space="preserve"><value>热键</value></data>
+  <data name="StatusCategoryTray" xml:space="preserve"><value>通知区域</value></data>
+  <data name="StatusCategoryRuntimeControl" xml:space="preserve"><value>运行控制</value></data>
+  <data name="StatusCategoryRuntimeTranslationGroup" xml:space="preserve"><value>翻译分组</value></data>
+  <data name="StatusCategoryRuntimeConfiguration" xml:space="preserve"><value>运行配置</value></data>
+  <data name="StatusCategoryRuntimeEngine" xml:space="preserve"><value>引擎</value></data>
+  <data name="StatusCategoryRuntimeCapture" xml:space="preserve"><value>捕获</value></data>
+  <data name="StatusCategoryRuntimePerformance" xml:space="preserve"><value>性能</value></data>
+  <data name="StatusCategoryRuntimeDiagnostic" xml:space="preserve"><value>诊断</value></data>
+  <data name="StatusCategoryRuntimeState" xml:space="preserve"><value>运行状态</value></data>
+  <data name="StatusCategoryRuntimePipeline" xml:space="preserve"><value>流水线</value></data>
+  <data name="StatusMessageUnknown" xml:space="preserve"><value>未识别的状态事件</value></data>
+  <data name="StatusMessageCaptureBorderlessAuthorization" xml:space="preserve"><value>已检查无边框捕获授权</value></data>
+  <data name="StatusMessageAppSingleInstanceRedirectTimedOut" xml:space="preserve"><value>移交给已运行实例超时</value></data>
+  <data name="StatusMessageAppShutdownRequested" xml:space="preserve"><value>已请求退出应用</value></data>
+  <data name="StatusMessageAppCloseToTrayFailed" xml:space="preserve"><value>最小化到通知区域失败</value></data>
+  <data name="StatusMessageAppActivationUnroutable" xml:space="preserve"><value>深层链接到达时没有可路由的窗口</value></data>
+  <data name="StatusMessageAppActivationRejected" xml:space="preserve"><value>激活请求已被拒绝</value></data>
+  <data name="StatusMessageAppActivationStartFailed" xml:space="preserve"><value>按激活请求启动翻译失败</value></data>
+  <data name="StatusMessageAppModel" xml:space="preserve"><value>本地模型包活动</value></data>
+  <data name="StatusMessageAppUpdate" xml:space="preserve"><value>应用更新活动</value></data>
+  <data name="StatusMessageHotkeyInitializationFailed" xml:space="preserve"><value>无法注册全局热键</value></data>
+  <data name="StatusMessageHotkeyExecuted" xml:space="preserve"><value>已执行热键</value></data>
+  <data name="StatusMessageHotkeyNoMatchingTarget" xml:space="preserve"><value>热键未匹配到活动目标</value></data>
+  <data name="StatusMessageHotkeyFailed" xml:space="preserve"><value>热键操作失败</value></data>
+  <data name="StatusMessageTrayOperationFailed" xml:space="preserve"><value>通知区域操作失败</value></data>
+  <data name="StatusMessageRuntimeControlPause" xml:space="preserve"><value>翻译已暂停或恢复</value></data>
+  <data name="StatusMessageRuntimeControlOverlay" xml:space="preserve"><value>覆盖层已显示或隐藏</value></data>
+  <data name="StatusMessageRuntimeControlManualOcr" xml:space="preserve"><value>已安排手动识别</value></data>
+  <data name="StatusMessageRuntimeControlManualOcrRejected" xml:space="preserve"><value>手动识别请求已被拒绝</value></data>
+  <data name="StatusMessageRuntimeControlManualOcrFailed" xml:space="preserve"><value>手动识别失败</value></data>
+  <data name="StatusMessageRuntimeControlNoMatchingTarget" xml:space="preserve"><value>该命令未匹配到活动目标</value></data>
+  <data name="StatusMessageRuntimeControlScopedApplied" xml:space="preserve"><value>命令已应用到所选目标</value></data>
+  <data name="StatusMessageRuntimeTranslationGroup" xml:space="preserve"><value>翻译分组已变更</value></data>
+  <data name="StatusMessageRuntimeConfigurationHotApplied" xml:space="preserve"><value>配置已热应用，无需重启</value></data>
+  <data name="StatusMessageRuntimeConfigurationRestartFallback" xml:space="preserve"><value>配置变更需要重启引擎</value></data>
+  <data name="StatusMessageRuntimeEngineLifecycle" xml:space="preserve"><value>引擎状态已变化</value></data>
+  <data name="StatusMessageRuntimeCaptureLifecycle" xml:space="preserve"><value>捕获目标状态已变化</value></data>
+  <data name="StatusMessageRuntimePipelineFailure" xml:space="preserve"><value>翻译流水线失败</value></data>
+  <data name="StatusMessageRuntimePerformanceBudget" xml:space="preserve"><value>性能预算已更新</value></data>
+  <data name="StatusMessageRuntimePerformanceDegradation" xml:space="preserve"><value>为保持速度已降低质量</value></data>
+  <data name="StatusMessageRuntimeDiagnostic" xml:space="preserve"><value>引擎发出了诊断信息</value></data>
+  <data name="StatusMessageRuntimeStateAdmissionRejected" xml:space="preserve"><value>已丢弃过期结果</value></data>
+  <!-- Engine diagnostic vocabulary. The engine states a machine error code; the sentence a user
+       reads is authored here (see RuntimeDiagnosticPresenter) rather than sent up from the engine. -->
+  <data name="RuntimeDiagnosticCategoryPipeline" xml:space="preserve"><value>翻译流水线</value></data>
+  <data name="RuntimeDiagnosticCategoryPerformance" xml:space="preserve"><value>性能</value></data>
+  <data name="RuntimeDiagnosticCategoryEngine" xml:space="preserve"><value>引擎</value></data>
+  <data name="RuntimeDiagnosticCategoryUnknown" xml:space="preserve"><value>运行时</value></data>
+  <data name="RuntimeDiagnosticUnknown" xml:space="preserve"><value>引擎报告了本版本无法识别的问题</value></data>
+  <data name="RuntimeDiagnosticTargetBinding" xml:space="preserve"><value>捕获目标已解绑,本次结果被丢弃。请重新启动该档案。</value></data>
+  <data name="RuntimeDiagnosticStaleSource" xml:space="preserve"><value>设置变更后才返回的结果已被丢弃</value></data>
+  <data name="RuntimeDiagnosticRegionBinding" xml:space="preserve"><value>某个区域与正在运行的档案不再匹配,已跳过其文字</value></data>
+  <data name="RuntimeDiagnosticOcrPostProcessingFailed" xml:space="preserve"><value>识别文字无法整理,已跳过</value></data>
+  <data name="RuntimeDiagnosticChannelsInvalid" xml:space="preserve"><value>某个区域没有可用的翻译通道,请检查该区域的通道设置。</value></data>
+  <data name="RuntimeDiagnosticOverlayFailed" xml:space="preserve"><value>叠加层未能刷新,屏幕上显示的内容可能已过期</value></data>
+  <data name="RuntimeDiagnosticTranslationFailed" xml:space="preserve"><value>某个区域翻译失败,请检查服务商及其密钥。</value></data>
+  <data name="RuntimeDiagnosticEngineRestarting" xml:space="preserve"><value>引擎意外停止,正在重启</value></data>
+  <data name="RuntimeDiagnosticEngineRestartFailed" xml:space="preserve"><value>引擎重启失败,请停止后重新启动该档案。</value></data>
+  <data name="RuntimeDiagnosticEngineStopTeardownFailed" xml:space="preserve"><value>引擎已停止,但部分资源未能干净释放</value></data>
+  <data name="RuntimeDiagnosticPerformanceDegraded" xml:space="preserve"><value>为跟上画面速度已降低质量</value></data>
+  <data name="RuntimeDiagnosticPerformanceRecovered" xml:space="preserve"><value>已恢复完整质量</value></data>
+  <!-- Provider catalog vocabulary. A catalog entry names its taxonomy, description and state by
+       resource key (see ProviderCatalog); RealSettingsService resolves them when it builds a row. -->
+  <data name="ProviderKindNmtCloud" xml:space="preserve"><value>神经翻译 · 云端</value></data>
+  <data name="ProviderKindNmtCloudChina" xml:space="preserve"><value>神经翻译 · 云端 · 中国</value></data>
+  <data name="ProviderKindNmtLocal" xml:space="preserve"><value>神经翻译 · 本地</value></data>
+  <data name="ProviderKindLlmCloud" xml:space="preserve"><value>大模型 · 云端</value></data>
+  <data name="ProviderKindLlmCloudChina" xml:space="preserve"><value>大模型 · 云端 · 中国</value></data>
+  <data name="ProviderKindOcrCloud" xml:space="preserve"><value>文字识别 · 云端</value></data>
+  <data name="ProviderKindOcrCloudChina" xml:space="preserve"><value>文字识别 · 云端 · 中国</value></data>
+  <data name="ProviderKindOcrLocal" xml:space="preserve"><value>文字识别 · 本地</value></data>
+  <data name="ProviderKindRestCustom" xml:space="preserve"><value>REST · 自定义</value></data>
+  <data name="ProviderStateUnavailable" xml:space="preserve"><value>不可用</value></data>
+  <data name="ProviderStateAvailable" xml:space="preserve"><value>可用</value></data>
+  <data name="ProviderStateAvailableOffline" xml:space="preserve"><value>可用（离线）</value></data>
+  <data name="ProviderStateConnected" xml:space="preserve"><value>已连接</value></data>
+  <data name="ProviderStateCredentialMissing" xml:space="preserve"><value>缺少凭据</value></data>
+  <data name="ProviderStateEndpointMissing" xml:space="preserve"><value>缺少接入点</value></data>
+  <data name="ProviderStateCatalogInvalid" xml:space="preserve"><value>目录校验失败</value></data>
+  <data name="ProviderStateCatalogMissing" xml:space="preserve"><value>尚未发布模型包目录</value></data>
+  <data name="ProviderStateCatalogEmpty" xml:space="preserve"><value>目录中没有已发布的模型包</value></data>
+  <data name="ProviderStateModelReady" xml:space="preserve"><value>已安装 · 可用</value></data>
+  <data name="ProviderStateModelRuntimeUnavailable" xml:space="preserve"><value>已安装 · 运行时不可用</value></data>
+  <data name="ProviderStateModelCorrupt" xml:space="preserve"><value>已安装的模型包已损坏</value></data>
+  <data name="ProviderStateModelUncatalogued" xml:space="preserve"><value>已安装 · 不在签名目录中</value></data>
+  <data name="ProviderStateModelBlockedByStrictOffline" xml:space="preserve"><value>未安装 · 严格离线模式禁止下载</value></data>
+  <data name="ProviderStateModelNotInstalled" xml:space="preserve"><value>未安装 · 仅在请求时下载</value></data>
+  <data name="ProviderLocalCatalogName" xml:space="preserve"><value>本地模型目录</value></data>
+  <data name="ProviderDetailDeepL" xml:space="preserve"><value>API 密钥保存在 Windows 凭据管理器中</value></data>
+  <data name="ProviderDetailDeepLFree" xml:space="preserve"><value>DeepL API Free 密钥（以 :fx 结尾）· Pro 接入点会拒绝免费密钥</value></data>
+  <data name="ProviderDetailNiuTrans" xml:space="preserve"><value>文本翻译 · 自动识别源语言 · 可选控制台术语表与翻译记忆</value></data>
+  <data name="ProviderDetailYandex" xml:space="preserve"><value>Translate v2 · 自动识别源语言 · 支持术语表</value></data>
+  <data name="ProviderDetailBaidu" xml:space="preserve"><value>通用文本翻译 · 凭据保存在 Windows 凭据管理器中</value></data>
+  <data name="ProviderDetailAlibaba" xml:space="preserve"><value>TranslateGeneral · 可选游戏上下文 · 建议使用 RAM 子账号凭据</value></data>
+  <data name="ProviderDetailAzureTranslator" xml:space="preserve"><value>Translator v3 全球接入点 · API 密钥保存在 Windows 凭据管理器中</value></data>
+  <data name="ProviderDetailYoudao" xml:space="preserve"><value>文本翻译 v3 · 游戏领域 · 自动识别源语言</value></data>
+  <data name="ProviderDetailGoogleCloud" xml:space="preserve"><value>Translation v3 · 服务账号 JSON · 项目 ID 从凭据中读取</value></data>
+  <data name="ProviderDetailOpenAi" xml:space="preserve"><value>OpenAI 接入点 · 流式输出 · 密钥保存在 Windows 凭据管理器中</value></data>
+  <data name="ProviderDetailDeepSeek" xml:space="preserve"><value>OpenAI 兼容流式输出 · 已启用游戏上下文</value></data>
+  <data name="ProviderDetailQwen" xml:space="preserve"><value>阿里云百炼 · OpenAI 兼容流式输出</value></data>
+  <data name="ProviderDetailQianfan" xml:space="preserve"><value>文心一言 · OpenAI 兼容流式输出</value></data>
+  <data name="ProviderDetailAnthropic" xml:space="preserve"><value>Claude Messages API · 流式输出 · 已启用游戏上下文</value></data>
+  <data name="ProviderDetailGemini" xml:space="preserve"><value>Gemini 流式 API · 已启用游戏上下文</value></data>
+  <data name="ProviderDetailAzureVisionOcr" xml:space="preserve"><value>Image Analysis 4.0 Read · 需要资源接入点，并逐区域明确授权</value></data>
+  <data name="ProviderDetailGoogleVisionOcr" xml:space="preserve"><value>云端 OCR · 需逐区域明确授权</value></data>
+  <data name="ProviderDetailBaiduOcr" xml:space="preserve"><value>百度通用 OCR · 需逐区域明确授权</value></data>
+  <data name="ProviderDetailTencentOcr" xml:space="preserve"><value>腾讯 GeneralBasicOCR · 需逐区域明确授权</value></data>
+  <data name="ProviderDetailLocalCatalogEmpty" xml:space="preserve"><value>当前没有可用的本地模型包。</value></data>
+  <data name="ProviderDetailModelUncatalogued" xml:space="preserve"><value>该由应用管理的模型包已不在签名目录中，无法选用，但仍可删除。</value></data>
+  <data name="ProviderDetailModelLanguagesUndeclared" xml:space="preserve"><value>语言覆盖范围由模型包声明</value></data>
+  <!-- Windows recognition listed among the local packages: nothing to download, nothing to remove. -->
+  <data name="ProviderWindowsOcrName" xml:space="preserve"><value>Windows 文字识别</value></data>
+  <data name="ProviderStateWindowsOcrBuiltIn" xml:space="preserve"><value>Windows 自带 · 无需下载</value></data>
+  <data name="ProviderStateWindowsOcrNoLanguages" xml:space="preserve"><value>Windows 自带 · 未安装任何语言</value></data>
+  <!-- {0} the languages Windows currently holds a recognizer for -->
+  <data name="ProviderDetailWindowsOcr" xml:space="preserve"><value>默认 OCR 后端 · 可识别 {0}</value></data>
+  <data name="ProviderDetailWindowsOcrNoLanguages" xml:space="preserve"><value>本机 Windows 没有任何识别器。请在 Windows 设置中添加语言，或安装下方的 PP-OCR 模型包。</value></data>
+  <!-- {0} download size · {1} SPDX license · {2} runtime · {3} language coverage -->
+  <data name="ProviderDetailModelSummary" xml:space="preserve"><value>{0} · {1} · {2} · {3}</value></data>
+  <!-- {0} HTTP method · {1} endpoint host -->
+  <data name="ProviderDetailCustomRest" xml:space="preserve"><value>{0} · {1}</value></data>
   <data name="ProvidersTitle" xml:space="preserve"><value>提供商与模型</value></data>
   <data name="ProvidersSubtitle" xml:space="preserve"><value>配置云翻译、云 OCR、本地模型与自定义 REST 适配器。</value></data>
   <data name="ProvidersOfflineModeBar.Title" xml:space="preserve"><value>严格离线模式已开启</value></data>
@@ -734,8 +946,8 @@
   <data name="GameContextSavedMessage" xml:space="preserve"><value>运行中的档案会通过配置应用接收更新后的语境。</value></data>
   <data name="GameContextSaveFailedTitle" xml:space="preserve"><value>游戏语境未保存</value></data>
   <data name="EditTermButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>编辑术语</value></data>
-  <data name="ChannelsTranslationGroupSelector.Header" xml:space="preserve"><value>翻译器组</value></data>
-  <data name="ChannelsTranslationGroupNameBox.Header" xml:space="preserve"><value>组名称</value></data>
+  <data name="ChannelsTranslationGroupSelector.Header" xml:space="preserve"><value>要编辑的翻译器组</value></data>
+  <data name="ChannelsTranslationGroupNameBox.Header" xml:space="preserve"><value>将所选组改名为</value></data>
   <data name="ChannelsTranslationGroupAddButton.Content" xml:space="preserve"><value>复制组</value></data>
   <data name="ChannelsTranslationGroupRenameButton.Content" xml:space="preserve"><value>重命名</value></data>
   <data name="ChannelsTranslationGroupDeleteButton.Content" xml:space="preserve"><value>删除</value></data>

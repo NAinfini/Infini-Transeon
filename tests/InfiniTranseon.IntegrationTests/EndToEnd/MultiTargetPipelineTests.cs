@@ -82,6 +82,7 @@ public sealed class MultiTargetPipelineTests
             currentSource.SourceToken,
             new OverlayPixelRect(100, 700, 800, 200),
             Style(),
+            [new OverlayPixelRect(100, 700, 800, 200)],
             channels);
 
         await foreach (TranslationOutput output in orchestrator.RunAsync(
@@ -164,6 +165,7 @@ public sealed class MultiTargetPipelineTests
             source.SourceToken,
             new OverlayPixelRect(100, 700, 800, 200),
             Style(),
+            [new OverlayPixelRect(100, 700, 800, 200)],
             channels);
         await foreach (TranslationOutput output in orchestrator.RunAsync(
                            source, channels, Options(), TestContext.Current.CancellationToken))

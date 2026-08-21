@@ -277,12 +277,26 @@ public sealed class EngineRuntimeService :
             _lifecycleGate.Release();
         }
 
-        if (loop is not null)
+        try
         {
-            try { await loop.ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
+            if (loop is not null)
+            {
+                try { await loop.ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+            }
+            await DisposeCurrentAsync().ConfigureAwait(false);
         }
-        await DisposeCurrentAsync().ConfigureAwait(false);
+        catch (Exception exception)
+        {
+            // Stopping is convergent: the EngineHost is gone by the time teardown releases the
+            // backend, so trouble reported while releasing it is a diagnostic. Letting it escape
+            // instead skipped the Stopped transition and parked the service — and the profile —
+            // in Stopping, where nothing could start it again.
+            PublishRuntimeDiagnostic(
+                "engine.runtime.stopTeardownFailed",
+                RuntimeDiagnosticSeverity.Warning,
+                exception);
+        }
         SetStatus(EngineRuntimeStatus.Stopped);
     }
 
@@ -390,10 +404,14 @@ public sealed class EngineRuntimeService :
             catch (OperationCanceledException) { }
             catch (Exception) { /* teardown must not throw from the supervise loop */ }
         }
-        await DisposeCurrentAsync().ConfigureAwait(false);
-        _lifetimeResource?.Dispose();
-        _lifecycleGate.Dispose();
-        _stop.Dispose();
+        try { await DisposeCurrentAsync().ConfigureAwait(false); }
+        catch (Exception) { /* teardown must not throw from backend disposal */ }
+        finally
+        {
+            _lifetimeResource?.Dispose();
+            _lifecycleGate.Dispose();
+            _stop.Dispose();
+        }
     }
 
     private static void ValidateTargetSelection(

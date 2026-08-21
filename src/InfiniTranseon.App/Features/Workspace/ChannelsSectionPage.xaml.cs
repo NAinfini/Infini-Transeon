@@ -1,4 +1,6 @@
-using System.Linq;
+﻿using System.Linq;
+using InfiniTranseon.App.Controls;
+using InfiniTranseon.App.Controls.Dialogs;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.State;
@@ -19,17 +21,33 @@ namespace InfiniTranseon.App.Features.Workspace;
 /// </summary>
 public sealed partial class ChannelsSectionPage : Page
 {
-    private sealed record ProviderChoice(string Id, string Name)
+    /// <summary>
+    /// One entry of the translator dropdown. <see cref="Installable"/> is set only for a local model
+    /// this machine could run but has not downloaded yet: the channel cannot point at it, so choosing
+    /// it starts the download instead of a save.
+    /// </summary>
+    /// <param name="Category">
+    /// The provider's kind as the providers page words it, shown under the name: a list of bare names
+    /// gave no way to tell a cloud translator from a model running on this machine.
+    /// </param>
+    private sealed record ProviderChoice(
+        string Id,
+        string Name,
+        string Category,
+        ProviderRow? Installable = null)
     {
+        public bool IsReady => Installable is null;
+
         public override string ToString() => Name;
     }
 
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
     private readonly IProfileService _profiles;
     private readonly ISettingsService _settings;
+    private readonly ServicesModelsViewModel _models;
+    private readonly DialogService _dialogs;
     private Guid _requestedProfileId;
     private ProviderChoice[] _providerCatalog = [];
     private bool _rendering;
@@ -39,6 +57,8 @@ public sealed partial class ChannelsSectionPage : Page
         ViewModel = App.GetService<WorkbenchViewModel>();
         _profiles = App.GetService<IProfileService>();
         _settings = App.GetService<ISettingsService>();
+        _models = App.GetService<ServicesModelsViewModel>();
+        _dialogs = new DialogService(() => XamlRoot);
         InitializeComponent();
     }
 
@@ -79,12 +99,7 @@ public sealed partial class ChannelsSectionPage : Page
             return;
         }
 
-        IReadOnlyList<ProviderRow> providerRows = await _settings.GetProvidersAsync();
-        _providerCatalog = providerRows
-            .Where(provider => provider.IsSelectable && provider.IsTranslationProvider)
-            .Select(provider => new ProviderChoice(provider.Id, provider.Name))
-            .OrderBy(provider => provider.Name, StringComparer.CurrentCultureIgnoreCase)
-            .ToArray();
+        await ReloadProviderCatalogAsync();
 
         TargetSelector.ItemsSource = ViewModel.Targets;
         TargetSelector.SelectedItem = ViewModel.SelectedTarget;
@@ -94,7 +109,7 @@ public sealed partial class ChannelsSectionPage : Page
         RefreshRegionSelector();
     }
 
-    private void OnTargetSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnTargetSelectionChanged(object? sender, EventArgs e)
     {
         if (TargetSelector.SelectedItem is WorkbenchTargetItem target)
         {
@@ -112,7 +127,7 @@ public sealed partial class ChannelsSectionPage : Page
         RefreshPage();
     }
 
-    private void OnRegionSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnRegionSelectionChanged(object? sender, EventArgs e)
     {
         if (RegionSelector.SelectedItem is WorkbenchRegionItem region)
         {
@@ -121,7 +136,7 @@ public sealed partial class ChannelsSectionPage : Page
         RefreshPage();
     }
 
-    private void OnTranslationGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnTranslationGroupSelectionChanged(object? sender, EventArgs e)
     {
         if (TranslationGroupSelector.SelectedItem is WorkbenchTranslationGroupDraft group)
         {
@@ -169,7 +184,7 @@ public sealed partial class ChannelsSectionPage : Page
         {
             return;
         }
-        ViewModel.MarkEditorChanged(createUndoPoint: true);
+        ViewModel.BeginEdit();
         region.TranslationEnabled = TranslationEnabledToggle.IsOn;
         RefreshPage();
     }
@@ -257,6 +272,81 @@ public sealed partial class ChannelsSectionPage : Page
     private IReadOnlyList<WorkbenchChannelDraft> SelectedChannels(WorkbenchRegionItem? region) =>
         region?.Channels.Where(ViewModel.IsInActiveGroup).ToArray() ?? [];
 
+    /// <summary>
+    /// Rebuilds the translator dropdown from the provider list.
+    ///
+    /// Local models that are not downloaded yet are listed alongside the ready providers rather than
+    /// filtered out. Hiding them meant a user with no cloud key saw a translator list that offered
+    /// nothing they could use and no sign that an offline translator existed at all.
+    /// </summary>
+    private async Task ReloadProviderCatalogAsync()
+    {
+        IReadOnlyList<ProviderRow> providerRows = await _settings.GetProvidersAsync();
+        _providerCatalog = providerRows
+            .Where(provider => provider.IsTranslationProvider &&
+                (provider.IsSelectable || IsInstallable(provider)))
+            .Select(provider => provider.IsSelectable
+                ? new ProviderChoice(provider.Id, provider.Name, provider.Kind)
+                : new ProviderChoice(
+                    provider.Id,
+                    string.Format(
+                        Strings.GetString("ChannelsInstallableProviderOption"),
+                        provider.Name,
+                        provider.ModelDownloadSize),
+                    provider.Kind,
+                    provider))
+            .OrderBy(provider => provider.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsInstallable(ProviderRow provider) =>
+        provider is { CanDownloadModel: true, ModelId: not null, ModelVersion: not null };
+
+    /// <summary>
+    /// Downloads the local model the user just picked, then rebuilds the cards so the channel can be
+    /// pointed at it. Returns false when the user declined or the download failed, so the caller can
+    /// put the dropdown back on the provider the channel actually uses.
+    /// </summary>
+    private async Task<bool> TryInstallAsync(ProviderRow model)
+    {
+        if (_models.IsModelOperationInProgress)
+        {
+            return false;
+        }
+
+        bool confirmed = await _dialogs.ConfirmAsync(new ConfirmDialogOptions(
+            Strings.GetString("InstallLocalModelTitle"),
+            string.Format(
+                Strings.GetString("InstallLocalModelBody"),
+                model.Name,
+                model.ModelDownloadSize,
+                model.ModelLicense,
+                model.ModelRuntime),
+            Strings.GetString("InstallLocalModelConfirm"),
+            Strings.GetString("InstallLocalModelCancel")));
+        if (!confirmed)
+        {
+            return false;
+        }
+
+        await _models.InstallLocalModelAsync(model, userApproved: true);
+        if (!_models.ModelOperationSucceeded)
+        {
+            ShowInfo(
+                InfoBarSeverity.Error,
+                Strings.GetString("LocalModelInstallFailedTitle"),
+                _models.ErrorMessage);
+            return false;
+        }
+
+        await ReloadProviderCatalogAsync();
+        ShowInfo(
+            InfoBarSeverity.Success,
+            Strings.GetString("LocalModelInstalledTitle"),
+            model.Name);
+        return true;
+    }
+
     private ProviderChoice[] CatalogWithSaved(WorkbenchChannelDraft channel)
     {
         List<ProviderChoice> choices = [.. _providerCatalog];
@@ -269,13 +359,15 @@ public sealed partial class ChannelsSectionPage : Page
             }
             choices.Add(new ProviderChoice(
                 id,
-                string.Format(Strings.GetString("WorkbenchUnavailableProviderOption"), id)));
+                string.Format(Strings.GetString("WorkbenchUnavailableProviderOption"), id),
+                string.Empty));
         }
         return [.. choices];
     }
 
     private bool IsProviderKnown(string providerId) =>
-        _providerCatalog.Any(choice => string.Equals(choice.Id, providerId, StringComparison.Ordinal));
+        _providerCatalog.Any(choice =>
+            choice.IsReady && string.Equals(choice.Id, providerId, StringComparison.Ordinal));
 
     private UIElement BuildChannelCard(
         WorkbenchRegionItem region,
@@ -284,44 +376,52 @@ public sealed partial class ChannelsSectionPage : Page
         int count)
     {
         ProviderChoice[] catalog = CatalogWithSaved(channel);
-        ProviderChoice none = new(string.Empty, Strings.GetString("WorkbenchNoRefinerOption"));
+        ProviderChoice none = new(string.Empty, Strings.GetString("WorkbenchNoRefinerOption"), string.Empty);
         ProviderChoice[] refinerChoices = [none, .. catalog];
 
         var root = new StackPanel { Spacing = 8 };
 
+        // Three selectors of identical shape stood side by side with nothing to tell them apart, so
+        // the second read as a duplicate of the first rather than as the step after it.
         var pipelineRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var initialBox = new ComboBox
+        SelectBox ProviderBox(string headerKey, ProviderChoice[] choices, ProviderChoice? selected)
         {
-            ItemsSource = catalog,
-            MinWidth = 160,
-        };
-        AutomationProperties.SetName(initialBox, Strings.GetString("WorkbenchInitialTranslatorBox/Header"));
-        initialBox.SelectedItem = catalog.FirstOrDefault(p =>
-            string.Equals(p.Id, channel.ProviderId, StringComparison.Ordinal)) ?? catalog.FirstOrDefault();
-        pipelineRow.Children.Add(initialBox);
+            var box = new SelectBox
+            {
+                Header = Strings.GetString(headerKey),
+                DisplayMemberPath = nameof(ProviderChoice.Name),
+                CategoryMemberPath = nameof(ProviderChoice.Category),
+                MinWidth = 200,
+            };
+            box.ItemsSource = choices;
+            box.SelectedItem = selected;
+            pipelineRow.Children.Add(box);
+            return box;
+        }
 
-        var firstRefinerBox = new ComboBox
-        {
-            ItemsSource = refinerChoices,
-            MinWidth = 160,
-        };
-        AutomationProperties.SetName(firstRefinerBox, Strings.GetString("WorkbenchFirstRefinerBox/Header"));
+        SelectBox initialBox = ProviderBox(
+            "WorkbenchInitialTranslatorBox/Header",
+            catalog,
+            catalog.FirstOrDefault(choice =>
+                string.Equals(choice.Id, channel.ProviderId, StringComparison.Ordinal))
+                ?? catalog.FirstOrDefault());
+
         string? firstRefinerId = channel.EffectiveRefinementProviderIds.ElementAtOrDefault(0);
-        firstRefinerBox.SelectedItem = refinerChoices.FirstOrDefault(p =>
-            string.Equals(p.Id, firstRefinerId, StringComparison.Ordinal)) ?? none;
-        pipelineRow.Children.Add(firstRefinerBox);
+        SelectBox firstRefinerBox = ProviderBox(
+            "WorkbenchFirstRefinerBox/Header",
+            refinerChoices,
+            refinerChoices.FirstOrDefault(choice =>
+                string.Equals(choice.Id, firstRefinerId, StringComparison.Ordinal)) ?? none);
 
-        var secondRefinerBox = new ComboBox
-        {
-            ItemsSource = refinerChoices,
-            MinWidth = 160,
-            Visibility = Equals(firstRefinerBox.SelectedItem, none) ? Visibility.Collapsed : Visibility.Visible,
-        };
-        AutomationProperties.SetName(secondRefinerBox, Strings.GetString("WorkbenchSecondRefinerBox/Header"));
         string? secondRefinerId = channel.EffectiveRefinementProviderIds.ElementAtOrDefault(1);
-        secondRefinerBox.SelectedItem = refinerChoices.FirstOrDefault(p =>
-            string.Equals(p.Id, secondRefinerId, StringComparison.Ordinal)) ?? none;
-        pipelineRow.Children.Add(secondRefinerBox);
+        SelectBox secondRefinerBox = ProviderBox(
+            "WorkbenchSecondRefinerBox/Header",
+            refinerChoices,
+            refinerChoices.FirstOrDefault(choice =>
+                string.Equals(choice.Id, secondRefinerId, StringComparison.Ordinal)) ?? none);
+        secondRefinerBox.Visibility = Equals(firstRefinerBox.SelectedItem, none)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         root.Children.Add(pipelineRow);
 
         if (!IsProviderKnown(channel.ProviderId))
@@ -334,11 +434,19 @@ public sealed partial class ChannelsSectionPage : Page
             });
         }
 
-        void Commit()
+        async void Commit()
         {
             if (_rendering ||
                 initialBox.SelectedItem is not ProviderChoice initial)
             {
+                return;
+            }
+            // Picking a model that is not on this machine yet is a request to fetch it, not a
+            // configuration change: the channel keeps its current translator until the download
+            // succeeds, at which point the same id becomes an ordinary selectable provider.
+            if (initial.Installable is { } model && !await TryInstallAsync(model))
+            {
+                RenderChannelCards(region);
                 return;
             }
             var first = firstRefinerBox.SelectedItem as ProviderChoice;
@@ -402,24 +510,27 @@ public sealed partial class ChannelsSectionPage : Page
             Strings.GetString("ChannelsAttemptTimeoutHeader"));
         advancedPanel.Children.Add(timeoutBox);
 
-        var firstFallbackBox = new ComboBox
+        SelectBox FallbackBox(string headerKey, int slot)
         {
-            Header = Strings.GetString("ChannelsFallbackProviderOneHeader"),
-            ItemsSource = refinerChoices,
-            SelectedItem = refinerChoices.FirstOrDefault(choice =>
-                string.Equals(choice.Id, channel.EffectiveFallbackProviderIds.ElementAtOrDefault(0), StringComparison.Ordinal)) ?? none,
-        };
-        AutomationProperties.SetName(firstFallbackBox, Strings.GetString("ChannelsFallbackProviderOneHeader"));
-        advancedPanel.Children.Add(firstFallbackBox);
-        var secondFallbackBox = new ComboBox
-        {
-            Header = Strings.GetString("ChannelsFallbackProviderTwoHeader"),
-            ItemsSource = refinerChoices,
-            SelectedItem = refinerChoices.FirstOrDefault(choice =>
-                string.Equals(choice.Id, channel.EffectiveFallbackProviderIds.ElementAtOrDefault(1), StringComparison.Ordinal)) ?? none,
-        };
-        AutomationProperties.SetName(secondFallbackBox, Strings.GetString("ChannelsFallbackProviderTwoHeader"));
-        advancedPanel.Children.Add(secondFallbackBox);
+            var box = new SelectBox
+            {
+                Header = Strings.GetString(headerKey),
+                DisplayMemberPath = nameof(ProviderChoice.Name),
+                CategoryMemberPath = nameof(ProviderChoice.Category),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                MinWidth = 240,
+            };
+            box.ItemsSource = refinerChoices;
+            box.SelectedItem = refinerChoices.FirstOrDefault(choice => string.Equals(
+                choice.Id,
+                channel.EffectiveFallbackProviderIds.ElementAtOrDefault(slot),
+                StringComparison.Ordinal)) ?? none;
+            advancedPanel.Children.Add(box);
+            return box;
+        }
+
+        SelectBox firstFallbackBox = FallbackBox("ChannelsFallbackProviderOneHeader", 0);
+        SelectBox secondFallbackBox = FallbackBox("ChannelsFallbackProviderTwoHeader", 1);
 
         ToggleSwitch ContextToggle(string resourceKey, bool value)
         {

@@ -8,6 +8,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:automation="using:Microsoft.UI.Xaml.Automation"
+    xmlns:controls="using:InfiniTranseon.App.Controls"
+    xmlns:viewModels="using:InfiniTranseon.App.Presentation.ViewModels"
     IsTabStop="False">
     <Border
         Style="{StaticResource CardBorderStyle}"
@@ -30,26 +32,30 @@
                 SelectionChanged="OnRegionSelectionChanged"
                 IsItemClickEnabled="True">
                 <ListView.ItemTemplate>
-                    <DataTemplate>
+                    <DataTemplate x:DataType="viewModels:WorkbenchRegionItem">
                         <Grid Padding="4" ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
+                            <!-- MinWidth defeats the ~120px default a bare CheckBox reserves for the
+                                 content it does not have here; that reservation ate the star column
+                                 and left the region name trimmed to two characters. -->
                             <CheckBox
-                                IsChecked="{Binding Enabled, Mode=OneWay}"
+                                MinWidth="0"
+                                IsChecked="{x:Bind Enabled, Mode=OneWay}"
                                 VerticalAlignment="Center"
-                                automation:AutomationProperties.Name="{Binding Name}"
+                                automation:AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
                                 Click="OnRegionEnabledClick" />
                             <TextBlock
                                 Grid.Column="1"
-                                Text="{Binding Name}"
+                                Text="{x:Bind Name, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"
                                 VerticalAlignment="Center" />
                             <TextBlock
                                 Grid.Column="2"
-                                Text="{Binding Priority}"
+                                Text="{x:Bind controls:RegionListPane.DescribePriority(Priority), Mode=OneWay}"
                                 Style="{StaticResource CaptionTextStyle}"
                                 VerticalAlignment="Center" />
                         </Grid>

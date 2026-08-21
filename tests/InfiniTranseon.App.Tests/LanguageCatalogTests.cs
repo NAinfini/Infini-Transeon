@@ -41,4 +41,12 @@ public sealed class LanguageCatalogTests
         Assert.Equal("tlh", custom.Code);
         Assert.Equal("tlh", custom.DisplayName);
     }
+
+    [Fact]
+    public void Language_option_uses_its_display_name_for_accessibility_text()
+    {
+        var option = new LanguageOption("ja", "Japanese / 日本語 · ja", "ja Japanese");
+
+        Assert.Equal(option.DisplayName, option.ToString());
+    }
 }

@@ -37,7 +37,7 @@ public sealed class LocalTranslationProvider : ITranslationProvider
         TranslationRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        LocalTranslationResponse? response = null;
+        LocalTranslationOutcome? response = null;
         ProviderWireEvent? failure = null;
         try
         {

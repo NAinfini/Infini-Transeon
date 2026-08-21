@@ -30,6 +30,7 @@
 #include <compare>
 #include <cstddef>
 #include <functional>
+#include <string>
 #include <limits>
 #include <map>
 #include <memory>
@@ -86,11 +87,12 @@ bool manual_ocr_target_available(
         lifecycle_state == 10U;
 }
 
-bool manual_ocr_allows_signature(
+bool ocr_signature_allows_dispatch(
     const bool manual_requested,
-    const bool meaningfully_changed) noexcept
+    const bool meaningfully_changed,
+    const std::size_t automatic_observations) noexcept
 {
-    return manual_requested || meaningfully_changed;
+    return manual_requested || meaningfully_changed || automatic_observations < 2U;
 }
 
 namespace
@@ -110,7 +112,7 @@ constexpr std::uint32_t state_closed = 8U;
 constexpr std::uint32_t state_waiting_for_match = 9U;
 constexpr std::uint32_t state_running_with_capture_border = 10U;
 constexpr std::uint64_t filetime_to_datetime_ticks = 504'911'232'000'000'000ULL;
-constexpr std::uint64_t cloud_request_lifetime_ticks = 150'000'000ULL;
+constexpr std::uint64_t ocr_request_lifetime_ticks = 150'000'000ULL;
 
 [[nodiscard]] bool preprocess_crop(
     ocr::bgra_image& image,
@@ -380,9 +382,11 @@ struct RuntimeCaptureController::Implementation final
             std::uint64_t generation{};
             std::chrono::steady_clock::time_point outstanding_until{};
             std::optional<imaging::change_signature> last_dispatched_signature;
+            std::size_t automatic_signature_observations{};
+            bool pending_signature_changed{};
         };
 
-        struct ScheduledCloudRegion final
+        struct ScheduledOcrRegion final
         {
             ProcessingRegion region;
             OcrExecutionIdentity token;
@@ -401,11 +405,13 @@ struct RuntimeCaptureController::Implementation final
         std::uint64_t scheduled_regions{};
         std::uint64_t frames_without_configuration{};
         std::uint64_t cloud_requests_sent{};
+        std::uint64_t local_requests_sent{};
         std::uint64_t local_results_sent{};
         std::uint64_t unchanged_regions_skipped{};
         std::uint64_t processing_failures{};
         target_key runtime_epoch{};
         cloud_ocr_callback cloud_ocr;
+        local_ocr_callback local_ocr;
         ocr_result_callback ocr_result;
         bool processing_supported{};
         std::optional<capture::pixel_rect> target_crop;
@@ -421,10 +427,12 @@ struct RuntimeCaptureController::Implementation final
         ProcessingState(
             const target_key epoch,
             cloud_ocr_callback cloud_callback,
+            local_ocr_callback local_callback,
             ocr_result_callback result_callback,
             const bool supported)
             : runtime_epoch(epoch),
               cloud_ocr(std::move(cloud_callback)),
+              local_ocr(std::move(local_callback)),
               ocr_result(std::move(result_callback)),
               processing_supported(supported),
               worker([this](std::shared_ptr<capture::captured_frame> frame)
@@ -641,7 +649,8 @@ struct RuntimeCaptureController::Implementation final
             ocr::bgra_image scaled;
             try
             {
-                scaled = ocr::downscale_bgra(readback.image, maximum_long_edge);
+                scaled = ocr::downscale_bgra(
+                    std::move(readback.image), maximum_long_edge);
             }
             catch (...)
             {
@@ -733,7 +742,11 @@ struct RuntimeCaptureController::Implementation final
                     previous->rows == signature.rows;
                 const bool changed = !comparable ||
                     imaging::meaningfully_changed(*previous, signature);
-                if (!manual_ocr_allows_signature(forced, changed))
+                state->second.pending_signature_changed = changed;
+                if (!ocr_signature_allows_dispatch(
+                    forced,
+                    changed,
+                    state->second.automatic_signature_observations))
                 {
                     state->second.outstanding_until = {};
                     ++unchanged_regions_skipped;
@@ -763,13 +776,24 @@ struct RuntimeCaptureController::Implementation final
             if (state != ocr_regions.end() &&
                 state->second.generation == token.source_generation &&
                 state->second.ocr_run_id == token.ocr_run_id)
+            {
+                // The managed text gate needs one unchanged automatic observation before native
+                // change detection can suppress this static image signature.
+                state->second.automatic_signature_observations = token.manual
+                    ? 2U
+                    : state->second.pending_signature_changed
+                        ? 1U
+                        : (std::min)(
+                            state->second.automatic_signature_observations + 1U,
+                            std::size_t{2U});
                 state->second.last_dispatched_signature = std::move(signature);
+            }
         }
 
         void process(std::shared_ptr<capture::captured_frame> frame) noexcept
         {
             const auto now = std::chrono::steady_clock::now();
-            std::vector<ScheduledCloudRegion> scheduled;
+            std::vector<ScheduledOcrRegion> scheduled;
             std::shared_ptr<const ProcessingConfigurationCommand> active_configuration;
             bool forced_manual{};
             capture::pixel_rect active_crop{
@@ -893,7 +917,7 @@ struct RuntimeCaptureController::Implementation final
                     scheduled.push_back({region, token, binding->second, forced_manual});
                 }
             }
-            for (ScheduledCloudRegion& work : scheduled)
+            for (ScheduledOcrRegion& work : scheduled)
             {
                 const auto fail = [&](const std::string_view error_code = {})
                 {
@@ -976,7 +1000,11 @@ struct RuntimeCaptureController::Implementation final
                     std::lround(active_configuration->detection_long_edge *
                         work.region.detection_scale), 1L, 1920L));
                 ocr::bgra_image scaled;
-                try { scaled = ocr::downscale_bgra(readback.image, requested_edge); }
+                try
+                {
+                    scaled = ocr::downscale_bgra(
+                        std::move(readback.image), requested_edge);
+                }
                 catch (...)
                 {
                     SecureZeroMemory(readback.image.pixels.data(),
@@ -1023,7 +1051,7 @@ struct RuntimeCaptureController::Implementation final
                     fail("ocr.preprocessing.failed");
                     continue;
                 }
-                if (!work.region.use_cloud_ocr)
+                if (work.region.ocr_backend == ProcessingRegion::OcrBackend::windows)
                 {
                     const ocr::windows_media_ocr_result recognized =
                         ocr::windows_media_ocr{}.recognize(
@@ -1090,18 +1118,48 @@ struct RuntimeCaptureController::Implementation final
                 SecureZeroMemory(scaled.pixels.data(), scaled.pixels.size());
                 if (encoded.status != ocr::cloud_crop_encode_status::succeeded)
                 {
-                    fail("ocr.cloud.encodeFailed");
+                    fail(work.region.ocr_backend == ProcessingRegion::OcrBackend::local
+                        ? "ocr.local.encodeFailed"
+                        : "ocr.cloud.encodeFailed");
+                    continue;
+                }
+                if (work.region.ocr_backend == ProcessingRegion::OcrBackend::local)
+                {
+                    LocalOcrCropEvent event{
+                        work.token,
+                        "image/png",
+                        work.region.recognition_language,
+                        std::move(encoded.bytes),
+                        scaled_width,
+                        scaled_height,
+                        utc_datetime_ticks() + ocr_request_lifetime_ticks,
+                        5'242'880U,
+                    };
+                    bool sent{};
+                    try { sent = local_ocr && local_ocr(event); } catch (...) { sent = false; }
+                    SecureZeroMemory(event.encoded_crop.data(), event.encoded_crop.size());
+                    if (!sent)
+                    {
+                        fail();
+                        continue;
+                    }
+                    {
+                        std::scoped_lock lock(gate);
+                        ++local_requests_sent;
+                    }
+                    commit_signature(work.region.region_id, work.token, std::move(signature));
                     continue;
                 }
                 CloudOcrCropEvent event{
                     work.token,
                     "image/png",
                     work.region.ocr_provider_id,
+                    work.region.recognition_language,
                     std::move(encoded.bytes),
                     scaled_width,
                     scaled_height,
                     work.region.cloud_consent_policy_revision,
-                    utc_datetime_ticks() + cloud_request_lifetime_ticks,
+                    utc_datetime_ticks() + ocr_request_lifetime_ticks,
                     5'242'880U,
                 };
                 bool sent{};
@@ -1184,6 +1242,7 @@ struct RuntimeCaptureController::Implementation final
     lifecycle_callback callback;
     target_key runtime_epoch{};
     cloud_ocr_callback cloud_ocr;
+    local_ocr_callback local_ocr;
     ocr_result_callback ocr_result;
     struct PolicyVersion final
     {
@@ -1196,10 +1255,12 @@ struct RuntimeCaptureController::Implementation final
         lifecycle_callback value,
         const target_key epoch,
         cloud_ocr_callback cloud_callback,
+        local_ocr_callback local_callback,
         ocr_result_callback result_callback)
         : callback(std::move(value)),
           runtime_epoch(epoch),
           cloud_ocr(std::move(cloud_callback)),
+          local_ocr(std::move(local_callback)),
           ocr_result(std::move(result_callback))
     {
         try
@@ -1381,6 +1442,7 @@ struct RuntimeCaptureController::Implementation final
         auto processing_state = std::make_shared<ProcessingState>(
             runtime_epoch,
             cloud_ocr,
+            local_ocr,
             ocr_result,
             true);
         status->target_id = command.target_id;
@@ -2085,9 +2147,11 @@ RuntimeCaptureController::RuntimeCaptureController(
     lifecycle_callback callback,
     const std::array<std::byte, 16U> runtime_epoch,
     cloud_ocr_callback cloud_ocr,
+    local_ocr_callback local_ocr,
     ocr_result_callback ocr_result)
     : implementation_(std::make_unique<Implementation>(
         std::move(callback), runtime_epoch, std::move(cloud_ocr),
+        std::move(local_ocr),
         std::move(ocr_result)))
 {
 }

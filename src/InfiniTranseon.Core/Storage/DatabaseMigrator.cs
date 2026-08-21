@@ -40,7 +40,7 @@ public sealed class DatabaseMigrationException : Exception
 
 public sealed class DatabaseMigrator
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     private static readonly DatabaseMigration VersionOne = new(1,
     [
@@ -121,13 +121,24 @@ public sealed class DatabaseMigrator
         """,
     ]);
 
+    // A history entry names the region its text came from. Rows written before this column existed
+    // cannot be given one after the fact, so they keep the empty name and the card omits the label
+    // rather than inventing a region for them.
+    private static readonly DatabaseMigration VersionFour = new(4,
+    [
+        "ALTER TABLE translation_history ADD COLUMN region_name TEXT NOT NULL DEFAULT '';",
+    ]);
+
     private readonly IReadOnlyList<DatabaseMigration> _migrations;
 
     public DatabaseMigrator() : this([]) { }
 
     internal DatabaseMigrator(IReadOnlyList<DatabaseMigration> additionalMigrations)
     {
-        var migrations = new List<DatabaseMigration> { VersionOne, VersionTwo, VersionThree };
+        var migrations = new List<DatabaseMigration>
+        {
+            VersionOne, VersionTwo, VersionThree, VersionFour,
+        };
         ArgumentNullException.ThrowIfNull(additionalMigrations);
         migrations.AddRange(additionalMigrations);
         migrations.Sort((left, right) => left.Version.CompareTo(right.Version));

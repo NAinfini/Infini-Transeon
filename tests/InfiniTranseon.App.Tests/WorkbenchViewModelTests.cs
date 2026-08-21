@@ -1,4 +1,4 @@
-using InfiniTranseon.App.Presentation;
+﻿using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 
 namespace InfiniTranseon.App.Tests;
@@ -34,6 +34,64 @@ public sealed class WorkbenchViewModelTests
         viewModel.Redo();
         Assert.Equal(0.5, viewModel.SelectedRegion!.X);
         Assert.Equal(0.6, viewModel.SelectedRegion.Y);
+    }
+
+    // An editor gesture that writes the values already stored — re-picking the selected option, or
+    // pressing a region without moving it — must leave the profile clean, or leaving the section
+    // asks the user to save changes they never made.
+    [Fact]
+    public async Task An_edit_that_changes_nothing_leaves_the_profile_clean()
+    {
+        var service = new StubWorkbenchService(CreateDraft());
+        var viewModel = new WorkbenchViewModel(service);
+        await viewModel.LoadAsync(
+            service.Draft.ProfileId,
+            TestContext.Current.CancellationToken);
+        WorkbenchRegionItem region = viewModel.SelectedRegion!;
+
+        string storedBackgroundMode = region.OverlayBackgroundMode;
+        double storedFontSize = region.PreferredFontSize;
+        string storedGameName = viewModel.GameName;
+
+        viewModel.BeginEdit();
+        region.OverlayBackgroundMode = storedBackgroundMode;
+        region.PreferredFontSize = storedFontSize;
+        viewModel.SetRegionEnabled(region, region.Enabled);
+        viewModel.SetRegionBounds(
+            region,
+            region.X,
+            region.Y,
+            region.Width,
+            region.Height,
+            createUndoPoint: true);
+        viewModel.GameName = storedGameName;
+
+        Assert.False(viewModel.IsDirty);
+        Assert.False(viewModel.CanUndo);
+    }
+
+    // The armed undo point survives until the gesture really changes something, so a press that only
+    // selects a region does not spend it and the first move is still undoable.
+    [Fact]
+    public async Task An_armed_edit_becomes_one_undo_point_on_the_first_real_change()
+    {
+        var service = new StubWorkbenchService(CreateDraft());
+        var viewModel = new WorkbenchViewModel(service);
+        await viewModel.LoadAsync(
+            service.Draft.ProfileId,
+            TestContext.Current.CancellationToken);
+        WorkbenchRegionItem region = viewModel.SelectedRegion!;
+        string originalName = region.Name;
+
+        viewModel.BeginEdit();
+        region.Name = originalName;
+        region.Name = "Renamed";
+        region.PreferredFontSize = 33;
+
+        Assert.True(viewModel.IsDirty);
+        viewModel.Undo();
+        Assert.Equal(originalName, viewModel.SelectedRegion!.Name);
+        Assert.False(viewModel.CanUndo);
     }
 
     [Fact]
@@ -217,7 +275,7 @@ public sealed class WorkbenchViewModelTests
         string? originalOutlineColor = region.OutlineColor;
         double originalOutlineWidth = region.OutlineWidth;
 
-        viewModel.MarkEditorChanged(createUndoPoint: true);
+        viewModel.BeginEdit();
         region.PreferredFontSize = 30;
         region.OutlineColor = "#FF001122";
         region.OutlineWidth = 2;
@@ -254,7 +312,6 @@ public sealed class WorkbenchViewModelTests
             service.Draft.ProfileId,
             TestContext.Current.CancellationToken);
         viewModel.GameName = "Edited while switching sections";
-        viewModel.MarkEditorChanged();
 
         await viewModel.EnsureLoadedAsync(
             service.Draft.ProfileId,
@@ -275,7 +332,6 @@ public sealed class WorkbenchViewModelTests
             first.ProfileId,
             TestContext.Current.CancellationToken);
         viewModel.GameName = "Edited";
-        viewModel.MarkEditorChanged();
 
         await viewModel.EnsureLoadedAsync(
             service.Drafts[1].ProfileId,

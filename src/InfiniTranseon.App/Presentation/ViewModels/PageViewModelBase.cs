@@ -45,10 +45,23 @@ public abstract class PageViewModelBase : ObservableObject
     // Runs a load/mutation body, capturing any failure as an explicit inline error. Exceptions are
     // recorded, not rethrown, so the UI can show ErrorMessage; callers that need the failure can check
     // HasError afterwards.
-    protected async Task RunGuardedAsync(Func<Task> body)
+    protected Task RunGuardedAsync(Func<Task> body) => GuardAsync(body, replacesPageContent: true);
+
+    /// <summary>
+    /// Runs a body that publishes its own progress, keeping the page's content on screen. IsLoading
+    /// means "there is nothing to show yet", and a page shell answers it by replacing its content
+    /// with a skeleton — which for a model download hid both the progress bar reporting it and the
+    /// button for cancelling it, for as long as the download ran.
+    /// </summary>
+    protected Task RunReportedAsync(Func<Task> body) => GuardAsync(body, replacesPageContent: false);
+
+    private async Task GuardAsync(Func<Task> body, bool replacesPageContent)
     {
         ArgumentNullException.ThrowIfNull(body);
-        IsLoading = true;
+        if (replacesPageContent)
+        {
+            IsLoading = true;
+        }
         HasError = false;
         ErrorMessage = string.Empty;
         try
@@ -62,7 +75,10 @@ public abstract class PageViewModelBase : ObservableObject
         }
         finally
         {
-            IsLoading = false;
+            if (replacesPageContent)
+            {
+                IsLoading = false;
+            }
         }
     }
 }

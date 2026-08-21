@@ -77,10 +77,10 @@ public interface IProfileService
     // Loads an existing profile as an editable draft, or null when the id is unknown.
     Task<ProfileEditModel?> LoadForEditAsync(Guid profileId, CancellationToken cancellationToken = default);
 
-    // Distinct translation provider ids every enabled channel of this profile would call, including
-    // fallbacks and refinement steps. The workspace readiness check needs these to tell the user a
-    // credential is missing *before* the run starts instead of failing on the first frame.
-    Task<IReadOnlyList<string>> GetTranslationProviderIdsAsync(
+    // Distinct provider ids the runtime would call for enabled translation channels and cloud OCR
+    // regions, including fallbacks and refinement steps. The readiness check uses this before an
+    // engine launch so a missing provider configuration cannot fail on the first frame.
+    Task<IReadOnlyList<string>> GetRequiredProviderIdsAsync(
         Guid profileId,
         CancellationToken cancellationToken = default);
 
@@ -232,6 +232,10 @@ public interface IRuntimeControlService
         CancellationToken cancellationToken = default) =>
         Task.FromResult(ProfileRuntimeApplyResult.SavedOnly);
 
+    Task<ProfileRuntimeApplyResult> ApplySettingsAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProfileRuntimeApplyResult.SavedOnly);
+
     Task<RuntimeThumbnail?> RequestThumbnailAsync(
         Guid targetId,
         int maximumLongEdge,
@@ -259,6 +263,13 @@ public enum ProfileRuntimeApplyResult
 public interface IHistoryService
 {
     void SelectProfile(Guid? profileId);
+
+    Task<ProfileHistoryConfiguration?> GetProfileConfigurationAsync(
+        CancellationToken cancellationToken = default);
+
+    Task UpdateProfileConfigurationAsync(
+        ProfileHistoryConfiguration configuration,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<HistoryEvent>> GetEventsAsync(CancellationToken cancellationToken = default);
 
@@ -301,6 +312,14 @@ public interface IGlossaryService
         int version,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Resolves a resource key to text in the language currently in effect. Services that assemble
+/// display rows take this rather than a <c>ResourceLoader</c>: the loader is a WinRT activation that
+/// is not registered in every host these services run in, and the indirection lets a test assert on
+/// the text a row will actually show without standing up the resource system.
+/// </summary>
+public delegate string ResourceTextLookup(string resourceKey);
 
 public interface ISettingsService
 {

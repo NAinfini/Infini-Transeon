@@ -89,6 +89,7 @@ public sealed class OnlineProviderService : IDisposable
         long expectedDelta = 1;
         int eventCount = 0;
         var cumulative = new StringBuilder(Math.Min(request.MaximumOutputCharacters, 4096));
+        string latestSnapshot = string.Empty;
         ProviderWireEvent? terminal = null;
         string? protocolFailure = null;
         ITranslationProvider? provider;
@@ -157,11 +158,12 @@ public sealed class OnlineProviderService : IDisposable
                                 break;
                             }
                             cumulative.Append(delta.Text);
+                            latestSnapshot = cumulative.ToString();
                             revision++;
                             yield return new ProviderSnapshot(
                                 WithRevision(request.Execution, revision),
                                 delta.ProviderDeltaSequence,
-                                cumulative.ToString());
+                                latestSnapshot);
                             break;
                         case ProviderDone done:
                             if (done.LastProviderDeltaSequence != expectedDelta - 1)
@@ -205,7 +207,7 @@ public sealed class OnlineProviderService : IDisposable
                 yield return new ProviderCompleted(
                     terminalExecution,
                     done.LastProviderDeltaSequence,
-                    cumulative.ToString(),
+                    latestSnapshot,
                     done.Usage);
                 break;
             case ProviderWireFailure failure:

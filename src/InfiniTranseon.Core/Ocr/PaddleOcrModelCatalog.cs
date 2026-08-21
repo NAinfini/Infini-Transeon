@@ -30,9 +30,9 @@ public interface IPaddleOcrModelCatalog
 /// Duplicating the 5 MB detector into each language package would be simpler to resolve and worse
 /// for every user who reads more than one language.
 ///
-/// When several versions of a package are present — which happens for as long as it takes a silent
-/// update to retire the previous copy — the newest wins, so an update takes effect the moment its
-/// directory is published and never leaves the app running the older files.
+/// When several explicitly installed versions of a package are present, the newest wins, so an
+/// approved update takes effect the moment its directory is published and never leaves the app
+/// running the older files.
 /// </summary>
 public sealed class ManagedPaddleOcrModelCatalog : IPaddleOcrModelCatalog
 {

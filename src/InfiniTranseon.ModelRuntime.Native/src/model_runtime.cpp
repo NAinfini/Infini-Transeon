@@ -6,6 +6,7 @@
 #include <memory>
 #include <new>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -25,6 +26,18 @@ constexpr size_t kMaximumInputBytes = 256 * 1024;
 constexpr size_t kMaximumTargetTokenBytes = 32;
 constexpr size_t kMaximumDecodingTokens = 512;
 
+// CTranslate2 falls back to four computation threads whatever the machine offers, so a desktop CPU
+// decodes a caption on a sixth of its cores while the rest idle and the pipeline's attempt deadline
+// runs out. Half the logical processors leaves the concurrent capture, OCR and interface stages the
+// other half; the upper bound reflects that one short sentence stops scaling well before that.
+[[nodiscard]] size_t decoding_threads() noexcept {
+    const size_t logical = std::thread::hardware_concurrency();
+    if (logical == 0) {
+        return 4;
+    }
+    return std::clamp<size_t>(logical / 2, 2, 16);
+}
+
 struct model_runtime {
     std::unique_ptr<sentencepiece::SentencePieceProcessor> tokenizer;
     ctranslate2::Translator translator;
@@ -36,9 +49,41 @@ struct model_runtime {
           translator(
               model_directory,
               ctranslate2::Device::CPU,
-              ctranslate2::ComputeType::DEFAULT) {
+              ctranslate2::ComputeType::DEFAULT,
+              {0},
+              false,
+              ctranslate2::ReplicaPoolConfig{decoding_threads(), 0, -1}) {
     }
 };
+
+// The captured text arrives as the lines the region showed, joined by line breaks. MADLAD-400 is a
+// sentence-level model with no representation for one: given a multi-line block it degenerates into
+// repeating a clause until the decoding cap, which costs minutes and returns the source language
+// untranslated. Each line is therefore its own segment, and the segments decode as a single batch.
+std::vector<std::string> split_lines(const char* text) {
+    std::vector<std::string> lines;
+    const std::string value(text);
+    size_t start = 0;
+    while (true) {
+        const size_t separator = value.find('\n', start);
+        const size_t stop = separator == std::string::npos ? value.size() : separator;
+        size_t length = stop - start;
+        if (length > 0 && value[start + length - 1] == '\r') {
+            --length;
+        }
+        lines.emplace_back(value, start, length);
+        if (separator == std::string::npos) {
+            return lines;
+        }
+        start = separator + 1;
+    }
+}
+
+bool has_content(const std::string& line) noexcept {
+    return std::any_of(line.begin(), line.end(), [](const char character) noexcept {
+        return static_cast<unsigned char>(character) > 0x20U;
+    });
+}
 
 void write_error(char* destination, size_t capacity, const char* message) noexcept {
     if (destination == nullptr || capacity == 0) {
@@ -154,17 +199,33 @@ int32_t INFINI_MODEL_CALL infini_model_runtime_translate(
     }
     try {
         auto* model = static_cast<model_runtime*>(runtime);
-        std::string input(target_token_utf8);
-        input.push_back(' ');
-        input.append(source_text_utf8);
-        std::vector<std::string> source_tokens;
-        const auto encode_status = model->tokenizer->Encode(input, &source_tokens);
-        if (!encode_status.ok() || source_tokens.empty()) {
-            write_error(error_utf8, error_capacity, "source tokenization failed");
-            return INFINI_MODEL_TRANSLATION_FAILED;
+        const std::vector<std::string> lines = split_lines(source_text_utf8);
+        std::vector<std::vector<std::string>> batch;
+        std::vector<size_t> batch_lines;
+        batch.reserve(lines.size());
+        batch_lines.reserve(lines.size());
+        for (size_t index = 0; index < lines.size(); ++index) {
+            if (!has_content(lines[index])) {
+                continue;
+            }
+            std::string input(target_token_utf8);
+            input.push_back(' ');
+            input.append(lines[index]);
+            std::vector<std::string> source_tokens;
+            const auto encode_status = model->tokenizer->Encode(input, &source_tokens);
+            if (!encode_status.ok() || source_tokens.empty()) {
+                write_error(error_utf8, error_capacity, "source tokenization failed");
+                return INFINI_MODEL_TRANSLATION_FAILED;
+            }
+            if (source_tokens.back() != "</s>") {
+                source_tokens.emplace_back("</s>");
+            }
+            batch.push_back(std::move(source_tokens));
+            batch_lines.push_back(index);
         }
-        if (source_tokens.back() != "</s>") {
-            source_tokens.emplace_back("</s>");
+        if (batch.empty()) {
+            write_error(error_utf8, error_capacity, "invalid translation request");
+            return INFINI_MODEL_INVALID_ARGUMENT;
         }
 
         ctranslate2::TranslationOptions options;
@@ -173,28 +234,41 @@ int32_t INFINI_MODEL_CALL infini_model_runtime_translate(
         options.max_decoding_length = std::min(
             kMaximumDecodingTokens,
             maximum_output_characters);
-        const auto results = model->translator.translate_batch(
-            std::vector<std::vector<std::string>>{std::move(source_tokens)},
-            options);
-        if (results.size() != 1 || results[0].output().empty()) {
+        const auto results = model->translator.translate_batch(batch, options);
+        if (results.size() != batch.size()) {
             write_error(error_utf8, error_capacity, "local model produced no translation");
             return INFINI_MODEL_TRANSLATION_FAILED;
         }
 
-        std::vector<std::string> output_tokens;
-        output_tokens.reserve(results[0].output().size());
-        for (const std::string& token : results[0].output()) {
-            if (token != "</s>" && token != "<pad>") {
-                output_tokens.push_back(token);
+        // Blank source lines keep their place so the translated block stays aligned with the region.
+        std::vector<std::string> translated_lines(lines.size());
+        for (size_t index = 0; index < results.size(); ++index) {
+            if (results[index].output().empty()) {
+                write_error(error_utf8, error_capacity, "local model produced no translation");
+                return INFINI_MODEL_TRANSLATION_FAILED;
             }
+            std::vector<std::string> output_tokens;
+            output_tokens.reserve(results[index].output().size());
+            for (const std::string& token : results[index].output()) {
+                if (token != "</s>" && token != "<pad>") {
+                    output_tokens.push_back(token);
+                }
+            }
+            std::string line;
+            const auto decode_status = model->tokenizer->Decode(output_tokens, &line);
+            if (!decode_status.ok() || line.empty()) {
+                write_error(error_utf8, error_capacity, "result detokenization failed");
+                return INFINI_MODEL_TRANSLATION_FAILED;
+            }
+            translated_lines[batch_lines[index]] = std::move(line);
         }
+
         std::string translated;
-        const auto decode_status = model->tokenizer->Decode(
-            output_tokens,
-            &translated);
-        if (!decode_status.ok() || translated.empty()) {
-            write_error(error_utf8, error_capacity, "result detokenization failed");
-            return INFINI_MODEL_TRANSLATION_FAILED;
+        for (size_t index = 0; index < translated_lines.size(); ++index) {
+            if (index > 0) {
+                translated.push_back('\n');
+            }
+            translated.append(translated_lines[index]);
         }
         if (translated.size() + 1 > output_capacity) {
             write_error(error_utf8, error_capacity, "translation output buffer is too small");

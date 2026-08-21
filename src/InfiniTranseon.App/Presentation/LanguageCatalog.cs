@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace InfiniTranseon.App.Presentation;
 
 /// <summary>
@@ -11,6 +9,8 @@ public sealed record LanguageOption(
     string DisplayName,
     string SearchText)
 {
+    public override string ToString() => DisplayName;
+
     /// <summary>
     /// Whether this machine can actually recognise the language, as one short line. Set only for
     /// source languages, and only by the presentation layer — the catalog itself stays free of
@@ -27,6 +27,9 @@ public sealed record LanguageOption(
 /// </summary>
 public static class LanguageCatalog
 {
+    /// <summary>The profile's source-language value that defers detection to the translator.</summary>
+    public const string AutoDetectCode = "auto";
+
     private sealed record Definition(
         string Code,
         string EnglishName,
@@ -66,10 +69,10 @@ public static class LanguageCatalog
         new("el", "Greek", "希腊语", "Ελληνικά", "greek"),
     ];
 
-    public static IReadOnlyList<LanguageOption> CreateSourceOptions(string? uiLanguage = null) =>
+    public static IReadOnlyList<LanguageOption> CreateSourceOptions(string uiLanguage) =>
         [CreateAutoDetect(uiLanguage), .. CreateTargetOptions(uiLanguage)];
 
-    public static IReadOnlyList<LanguageOption> CreateTargetOptions(string? uiLanguage = null)
+    public static IReadOnlyList<LanguageOption> CreateTargetOptions(string uiLanguage)
     {
         bool useChinese = IsChineseUi(uiLanguage);
         return Definitions.Select(definition => CreateOption(definition, useChinese)).ToArray();
@@ -103,11 +106,33 @@ public static class LanguageCatalog
             ?? new LanguageOption(normalized, normalized, normalized);
     }
 
-    private static LanguageOption CreateAutoDetect(string? uiLanguage)
+    /// <summary>
+    /// The language's own short name, without the code suffix the pickers append. Prose that names a
+    /// language — a profile card, a readiness line — wants "日语", not "日语 / 日本語 · ja". A code the
+    /// catalog does not carry is returned unchanged: it is still a correct BCP-47 identifier, and
+    /// reads better than an empty string would.
+    /// </summary>
+    public static string DisplayNameFor(string code, string uiLanguage)
     {
-        string displayName = IsChineseUi(uiLanguage) ? "自动检测" : "Auto-detect";
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+        string normalized = code.Trim();
+        if (string.Equals(normalized, AutoDetectCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return IsChineseUi(uiLanguage) ? "自动检测" : "Auto-detect";
+        }
+
+        Definition? definition = Definitions.FirstOrDefault(item =>
+            string.Equals(item.Code, normalized, StringComparison.OrdinalIgnoreCase));
+        return definition is null
+            ? normalized
+            : IsChineseUi(uiLanguage) ? definition.ChineseName : definition.EnglishName;
+    }
+
+    private static LanguageOption CreateAutoDetect(string uiLanguage)
+    {
+        string displayName = DisplayNameFor(AutoDetectCode, uiLanguage);
         return new LanguageOption(
-            "auto",
+            AutoDetectCode,
             $"{displayName} · auto",
             $"auto autodetect auto-detect detect automatic 自动检测 自动识别 {displayName}");
     }
@@ -127,11 +152,13 @@ public static class LanguageCatalog
         return new LanguageOption(definition.Code, displayName, searchText);
     }
 
-    private static bool IsChineseUi(string? uiLanguage)
+    // The caller states the language; the catalog never guesses it. CultureInfo.CurrentUICulture
+    // follows the operating system, not ApplicationLanguages.PrimaryLanguageOverride, so deriving it
+    // here printed "Auto-detect → Chinese (Simplified)" on a profile card whose every other word was
+    // Chinese. Callers read the tag from the resource table that is actually in effect.
+    private static bool IsChineseUi(string uiLanguage)
     {
-        string language = string.IsNullOrWhiteSpace(uiLanguage)
-            ? CultureInfo.CurrentUICulture.Name
-            : uiLanguage;
-        return language.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+        ArgumentException.ThrowIfNullOrWhiteSpace(uiLanguage);
+        return uiLanguage.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
     }
 }

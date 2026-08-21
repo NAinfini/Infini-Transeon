@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.App.Theme;
@@ -17,11 +17,9 @@ namespace InfiniTranseon.App.Features.Settings;
 
 public sealed partial class SettingsPage : Page
 {
-    private static readonly ResourceLoader Strings = new(
-        ResourceLoader.GetDefaultResourceFilePath(),
-        "Resources");
+    // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
+    private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private bool _loading;
-    private bool _updatingHotkeyScope;
     private IReadOnlyList<ProfileTargetDirectoryEntry> _targetDirectory = [];
     private bool _targetDirectoryAvailable;
     private string? _pendingSection;
@@ -104,7 +102,7 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async void OnThemeChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnThemeChanged(object? sender, EventArgs e)
     {
         var (preference, mode) = ThemeSelector.SelectedIndex switch
         {
@@ -124,7 +122,7 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnLanguageChanged(object? sender, EventArgs e)
     {
         if (_loading)
         {
@@ -133,12 +131,13 @@ public sealed partial class SettingsPage : Page
 
         string language = LanguageSelector.SelectedIndex == 1 ? "zh-CN" : "en-US";
         await ViewModel.UpdateLanguageAsync(language);
-        // Persisting alone changed nothing before: no code ever applied the stored language, so the
-        // setting looked accepted while the UI stayed in its launch language. The override takes
-        // effect for resources resolved from here on; already-built pages keep their current strings,
-        // which is why the restart notice is shown rather than implied.
+        // Two steps, because the language reaches the screen by two separate routes: ApplyUiLanguage
+        // repoints resource resolution and drops the loader cached for code-behind lookups, while
+        // rebuilding the shell re-runs the x:Uid pass XAML performs once per element tree. Doing only
+        // the first is what left this setting looking accepted while every visible string stayed in
+        // the launch language.
         App.ApplyUiLanguage(language);
-        LanguageRestartBar.IsOpen = true;
+        await App.ReloadShellForLanguageChangeAsync();
     }
 
     private async void OnOfflineToggled(object sender, RoutedEventArgs e)
@@ -149,7 +148,7 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async void OnRetentionChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnRetentionChanged(object? sender, EventArgs e)
     {
         if (_loading)
         {
@@ -165,7 +164,7 @@ public sealed partial class SettingsPage : Page
         await ViewModel.UpdateHistoryRetentionAsync(retention);
     }
 
-    private async void OnOcrBackendChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnOcrBackendChanged(object? sender, EventArgs e)
     {
         if (_loading)
         {
@@ -288,7 +287,7 @@ public sealed partial class SettingsPage : Page
 
     private static string Resource(string key) => Strings.GetString(key.Replace('.', '/'));
 
-    private async void OnPerformanceChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnPerformanceChanged(object? sender, EventArgs e)
     {
         if (_loading)
         {
@@ -319,21 +318,17 @@ public sealed partial class SettingsPage : Page
 
     private void OnHotkeyScopeLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not ComboBox { Tag: HotkeyEditorRow row } selector)
+        if (sender is Controls.SelectBox { Tag: HotkeyEditorRow row } selector)
         {
-            return;
+            selector.SelectedItem = row.Scope.ToString();
         }
-        _updatingHotkeyScope = true;
-        selector.SelectedItem = selector.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
-            string.Equals(item.Tag?.ToString(), row.Scope.ToString(), StringComparison.Ordinal));
-        _updatingHotkeyScope = false;
     }
 
-    private async void OnHotkeyScopeChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnHotkeyScopeChanged(object? sender, EventArgs e)
     {
-        if (_loading || _updatingHotkeyScope ||
-            sender is not ComboBox { Tag: HotkeyEditorRow row, SelectedItem: ComboBoxItem item } ||
-            !Enum.TryParse(item.Tag?.ToString(), out AppHotkeyScope scope) ||
+        if (_loading ||
+            sender is not Controls.SelectBox { Tag: HotkeyEditorRow row, SelectedItem: string selected } ||
+            !Enum.TryParse(selected, out AppHotkeyScope scope) ||
             row.IsScopeFixed || row.Scope == scope)
         {
             return;

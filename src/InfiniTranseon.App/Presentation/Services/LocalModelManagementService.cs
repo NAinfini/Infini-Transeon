@@ -6,6 +6,9 @@ using InfiniTranseon.Core.Updates;
 
 namespace InfiniTranseon.App.Presentation.Services;
 
+internal sealed class LocalModelRemovalInProgressException(string message)
+    : InvalidOperationException(message);
+
 public enum LocalModelCatalogState
 {
     Available,
@@ -124,7 +127,7 @@ public sealed class LocalModelManagementService : IManagedModelGateway
         var packages = new ModelPackageService(
             CreateHttpClient,
             options.ModelDirectory,
-            isModelActive: usage.IsActive);
+            beginModelRemoval: usage.BeginRemoval);
         return new LocalModelManagementService(
             catalogs,
             packages,
@@ -426,11 +429,11 @@ public sealed class LocalModelManagementService : IManagedModelGateway
             "status.app.model",
             severity,
             modelId is null || version is null
-                ? new Dictionary<string, object?>()
-                : new Dictionary<string, object?>
+                ? new Dictionary<string, StatusArgument>()
+                : new Dictionary<string, StatusArgument>
                 {
-                    ["modelId"] = modelId,
-                    ["version"] = version,
+                    ["modelId"] = StatusArgument.Id(modelId),
+                    ["version"] = StatusArgument.Id(version),
                 }));
 
     private sealed class DirectProgress<T>(Action<T> report) : IProgress<T>
@@ -442,22 +445,31 @@ public sealed class LocalModelManagementService : IManagedModelGateway
     {
         private readonly object _sync = new();
         private readonly Dictionary<(string ModelId, string Version), int> _leases = [];
+        private readonly HashSet<(string ModelId, string Version)> _removals = [];
 
         public IDisposable Acquire(string modelId, string version)
         {
             lock (_sync)
             {
                 var key = (modelId, version);
+                if (_removals.Contains(key))
+                    throw new LocalModelRemovalInProgressException(
+                        "The model is being removed.");
                 _leases[key] = _leases.GetValueOrDefault(key) + 1;
                 return new UsageLease(this, key);
             }
         }
 
-        public bool IsActive(string modelId, string version)
+        public IDisposable BeginRemoval(string modelId, string version)
         {
             lock (_sync)
             {
-                return _leases.ContainsKey((modelId, version));
+                var key = (modelId, version);
+                if (_leases.ContainsKey(key))
+                    throw new InvalidOperationException("The active model cannot be removed.");
+                if (!_removals.Add(key))
+                    throw new InvalidOperationException("The model is already being removed.");
+                return new RemovalReservation(this, key);
             }
         }
 
@@ -474,6 +486,14 @@ public sealed class LocalModelManagementService : IManagedModelGateway
             }
         }
 
+        private void EndRemoval((string ModelId, string Version) key)
+        {
+            lock (_sync)
+            {
+                _removals.Remove(key);
+            }
+        }
+
         private sealed class UsageLease(
             ModelUsageTracker owner,
             (string ModelId, string Version) key) : IDisposable
@@ -481,6 +501,15 @@ public sealed class LocalModelManagementService : IManagedModelGateway
             private ModelUsageTracker? _owner = owner;
 
             public void Dispose() => Interlocked.Exchange(ref _owner, null)?.Release(key);
+        }
+
+        private sealed class RemovalReservation(
+            ModelUsageTracker owner,
+            (string ModelId, string Version) key) : IDisposable
+        {
+            private ModelUsageTracker? _owner = owner;
+
+            public void Dispose() => Interlocked.Exchange(ref _owner, null)?.EndRemoval(key);
         }
     }
 }

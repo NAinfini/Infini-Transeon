@@ -28,21 +28,37 @@ int main() {
     value.bounds = {0.0F, 0.0F, 800.0F, 320.0F};
     value.style.maximum_lines = 3U;
     value.ordered_slots = {
-        slot{identity_value(std::byte{2}), 1U, slot_state::waiting, 0U, u"", u"B"},
-        slot{identity_value(std::byte{1}), 0U, slot_state::success, 1U, u"A long translated subtitle that must wrap without moving other slots", u"A"},
-        slot{identity_value(std::byte{3}), 2U, slot_state::failure, 0U, u"", u"C"},
-        slot{identity_value(std::byte{4}), 3U, slot_state::streaming, 1U, u"实时翻译结果", u"D"},
+        slot{identity_value(std::byte{2}), 1U, slot_state::waiting, 0U,
+             {slot_line{u"", rect_f{0.0F, 80.0F, 800.0F, 80.0F}, 1U}}, u"B"},
+        slot{identity_value(std::byte{1}), 0U, slot_state::success, 1U,
+             {slot_line{u"A long translated subtitle", rect_f{0.0F, 0.0F, 800.0F, 40.0F}, 1U},
+              slot_line{u"that must wrap without moving other slots",
+                        rect_f{0.0F, 40.0F, 800.0F, 40.0F}, 1U}},
+             u"A"},
+        slot{identity_value(std::byte{3}), 2U, slot_state::failure, 0U,
+             {slot_line{u"", rect_f{0.0F, 160.0F, 800.0F, 80.0F}, 1U}}, u"C"},
+        slot{identity_value(std::byte{4}), 3U, slot_state::streaming, 1U,
+             {slot_line{u"实时翻译结果", rect_f{0.0F, 240.0F, 800.0F, 80.0F}, 1U}}, u"D"},
     };
-    const auto layout = layout_fixed_slots(value, 3.0F);
-    assert(layout.size() == 4U);
-    assert(layout[0].slot_id == identity_value(std::byte{1}));
-    assert(std::abs(layout[0].bounds.height - 80.0F) < 0.01F);
-    assert(layout[1].bounds.y == 80.0F);
+    const auto layout = layout_slot_lines(value, value.ordered_slots[1], 3.0F);
+    assert(layout.size() == 2U);
+    // Each translated line lands on the captured line it replaces, at its height.
+    assert(std::abs(layout[0].bounds.height - 40.0F) < 0.01F);
+    assert(layout[1].bounds.y == 40.0F);
     assert(layout[0].font_size >= value.style.minimum_font_size * 3.0F);
+
+    // A rectangle covering several captured lines has to share its height between them, so it draws
+    // smaller than a rectangle of the same height standing for a single line.
+    slot spanning = value.ordered_slots[1];
+    spanning.lines = {slot_line{u"两行合并", rect_f{0.0F, 0.0F, 800.0F, 80.0F}, 2U}};
+    slot single = spanning;
+    single.lines.front().source_line_count = 1U;
+    assert(layout_slot_lines(value, spanning, 1.0F).front().font_size <
+           layout_slot_lines(value, single, 1.0F).front().font_size);
 
     value.style.background = background_mode::offset;
     value.destination_bounds = rect_f{1000.0F, 100.0F, 600.0F, 300.0F};
-    const auto offset_layout = layout_fixed_slots(value, 1.0F);
+    const auto offset_layout = layout_slot_lines(value, value.ordered_slots[1], 1.0F);
     assert(offset_layout.front().bounds.x == 1000.0F);
     assert(offset_layout.front().bounds.y == 100.0F);
     assert(offset_layout.front().bounds.width == 600.0F);
@@ -117,7 +133,7 @@ int main() {
     refined.regions.front().style.minimum_dwell_milliseconds = 650U;
     refined.regions.front().style.crossfade_milliseconds = 140U;
     refined.regions.front().ordered_slots.front().stage_index = 2U;
-    refined.regions.front().ordered_slots.front().text = u"Refined translation";
+    refined.regions.front().ordered_slots.front().lines.front().text = u"Refined translation";
     const auto transition = plan_refinement_transition(state, refined);
     assert(transition.has_value());
     assert(transition->minimum_dwell_milliseconds == 650U);

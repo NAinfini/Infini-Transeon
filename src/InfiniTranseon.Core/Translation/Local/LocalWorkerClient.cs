@@ -15,16 +15,12 @@ public interface ILocalTranslationClient : IAsyncDisposable
         CancellationToken cancellationToken);
 }
 
-internal sealed class LocalWorkerSessionCanceledException(
-    string message,
-    OperationCanceledException innerException,
-    CancellationToken cancellationToken) : OperationCanceledException(message, innerException, cancellationToken);
-
 public sealed class LocalWorkerClient : ILocalTranslationClient
 {
     private readonly Stream _stream;
     private readonly Guid _sessionEpoch;
     private readonly SemaphoreSlim _singleRequest = new(1, 1);
+    private readonly CancellationTokenSource _closing = new();
     private readonly TaskCompletionSource _disposeCompletion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _disposeStarted;
@@ -68,12 +64,15 @@ public sealed class LocalWorkerClient : ILocalTranslationClient
             maximumOutputCharacters);
         await _singleRequest.WaitAsync(cancellationToken).ConfigureAwait(false);
         bool frameStarted = false;
+        bool requestSent = false;
+        bool resynchronizing = false;
         try
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeStarted) != 0, this);
             if (_faulted) throw new IOException("Local worker protocol session is no longer usable.");
             frameStarted = true;
             await LocalWorkerFrameCodec.WriteAsync(_stream, request, cancellationToken).ConfigureAwait(false);
+            requestSent = true;
             LocalTranslationResponse response = await LocalWorkerFrameCodec.ReadAsync<LocalTranslationResponse>(
                 _stream, cancellationToken).ConfigureAwait(false);
             if (response.ProtocolVersion != LocalWorkerProtocol.Version ||
@@ -83,18 +82,40 @@ public sealed class LocalWorkerClient : ILocalTranslationClient
                 throw new InvalidDataException("Local worker exceeded the output limit.");
             return response;
         }
-        catch (OperationCanceledException exception) when (frameStarted)
+        catch (OperationCanceledException) when (requestSent)
         {
-            _faulted = true;
-            throw new LocalWorkerSessionCanceledException(
-                "Local worker request was canceled after protocol transmission began.",
-                exception,
-                cancellationToken);
+            // Superseding a caption is ordinary traffic, and the worker holds a multi-gigabyte model
+            // that costs seconds to load. The request the caller abandoned is still being decoded and
+            // its response frame will arrive, so the session is resynchronized rather than discarded:
+            // the request slot stays held until that orphaned frame has been read and thrown away.
+            resynchronizing = true;
+            _ = ResynchronizeAsync();
+            throw;
         }
         catch (Exception exception) when (frameStarted && exception is IOException or InvalidDataException)
         {
             _faulted = true;
             throw;
+        }
+        finally
+        {
+            if (!resynchronizing) _singleRequest.Release();
+        }
+    }
+
+    private async Task ResynchronizeAsync()
+    {
+        try
+        {
+            _ = await LocalWorkerFrameCodec.ReadAsync<LocalTranslationResponse>(
+                _stream, _closing.Token).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The abandoned request has no caller left to observe this. Recording the fault is what
+            // matters: the stream is no longer in a known position, so the next request fails fast
+            // and the session manager retires the worker instead of reading a misaligned frame.
+            _faulted = true;
         }
         finally
         {
@@ -110,20 +131,23 @@ public sealed class LocalWorkerClient : ILocalTranslationClient
             return;
         }
 
-        await _singleRequest.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
+            // A resynchronizing read is waiting for a frame from a worker that disposal is about to
+            // take away, and closing a pipe does not abort a read already in flight on it. Cancelling
+            // that read is what lets the abandoned request release the slot disposal waits on, so
+            // shutting the session down ends instead of outliving the worker it is retiring.
+            await _closing.CancelAsync().ConfigureAwait(false);
             await _stream.DisposeAsync().ConfigureAwait(false);
+            await _singleRequest.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            _singleRequest.Release();
+            _closing.Dispose();
             _disposeCompletion.TrySetResult();
         }
         catch (Exception exception)
         {
             _disposeCompletion.TrySetException(exception);
             throw;
-        }
-        finally
-        {
-            _singleRequest.Release();
         }
     }
 }

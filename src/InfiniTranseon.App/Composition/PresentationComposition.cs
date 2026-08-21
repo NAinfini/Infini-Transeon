@@ -85,10 +85,12 @@ public static class PresentationComposition
     /// </summary>
     public static IServiceCollection AddRealPresentationServices(
         this IServiceCollection services,
-        AppDataOptions options)
+        AppDataOptions options,
+        ResourceTextLookup text)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(text);
 
         services.AddSingleton(options);
 
@@ -129,9 +131,11 @@ public static class PresentationComposition
         services.AddSingleton<ISettingsService>(provider => new RealSettingsService(
             provider.GetRequiredService<ApplicationSettingsRepository>(),
             provider.GetRequiredService<ISecretReferenceService>(),
+            text,
             provider.GetRequiredService<CustomRestAdapterStore>(),
             provider.GetRequiredService<LocalModelManagementService>(),
-            provider.GetRequiredService<OcrBackendPreferenceSource>()));
+            provider.GetRequiredService<OcrBackendPreferenceSource>(),
+            provider.GetRequiredService<IOcrLanguageAvailability>()));
         services.AddSingleton<IReleaseUpdateClient>(_ =>
             ReleaseUpdateComposition.CreateClient(options));
         services.AddSingleton<IAppUpdateService>(provider => new RealAppUpdateService(
@@ -143,16 +147,19 @@ public static class PresentationComposition
             provider.GetRequiredService<AppStatusLog>()));
         services.AddSingleton<IProfileService>(provider => new RealProfileService(
             provider.GetRequiredService<ProfileRepository>(),
+            provider.GetRequiredService<ICaptureProbe>(),
+            text,
             options.DatabasePath));
         services.AddSingleton<IWorkbenchService>(provider => new RealWorkbenchService(
             provider.GetRequiredService<ProfileRepository>(),
             provider.GetRequiredService<IRuntimeControlService>(),
             provider.GetRequiredService<RuntimeCapabilitiesService>(),
-            provider.GetRequiredService<CustomRestAdapterStore>()));
+            provider.GetRequiredService<ISettingsService>()));
         services.AddSingleton<IHistoryService>(provider => new RealHistoryService(
             options,
             provider.GetRequiredService<ProfileRepository>(),
-            provider.GetRequiredService<ISettingsService>()));
+            provider.GetRequiredService<ISettingsService>(),
+            provider.GetRequiredService<IRuntimeControlService>()));
         services.AddSingleton<IDiagnosticsService>(_ => new RealDiagnosticsService(options));
         services.AddSingleton<IGlossaryService>(provider => new RealGlossaryService(
             provider.GetRequiredService<ProfileRepository>(),
@@ -191,13 +198,17 @@ public static class PresentationComposition
         });
         services.AddSingleton<ITranslationProbe>(provider => new CatalogTranslationProbe(
             provider.GetRequiredService<IBoundCredentialStore>(),
-            provider.GetRequiredService<CustomRestAdapterStore>()));
+            provider.GetRequiredService<CustomRestAdapterStore>(),
+            provider.GetRequiredService<LocalModelManagementService>(),
+            provider.GetRequiredService<ISettingsService>(),
+            options));
 
         // Real engine runtime facade: locates/launches EngineHost per start, streams live targets.
         services.AddSingleton<IRuntimeControlService>(provider => new RealRuntimeControlService(
             provider.GetRequiredService<ProfileRepository>(),
             provider.GetRequiredService<ICaptureProbe>(),
             provider.GetRequiredService<ISettingsService>(),
+            provider.GetRequiredService<ISecretReferenceService>(),
             provider.GetRequiredService<IBoundCredentialStore>(),
             provider.GetRequiredService<RuntimeCapabilitiesService>(),
             provider.GetRequiredService<RuntimeStateStore>(),
@@ -227,12 +238,13 @@ public static class PresentationComposition
     /// Builds the real graph used at startup. Any registration or construction failure (including a
     /// database that cannot be opened) propagates so the caller can open a local recovery window.
     /// </summary>
-    public static ServiceProvider BuildReal(AppDataOptions options)
+    public static ServiceProvider BuildReal(AppDataOptions options, ResourceTextLookup text)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(text);
         ServiceCollection services = new();
         services.AddPresentationViewModels();
-        services.AddRealPresentationServices(options);
+        services.AddRealPresentationServices(options, text);
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateOnBuild = true,
