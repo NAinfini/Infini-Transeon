@@ -1,5 +1,7 @@
 # Infini-Transeon
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Infini-Transeon is an open-source Windows game-translation overlay. It captures a
 window, monitor, or fixed desktop area; recognizes visible text; translates it
 through services or local models selected by the user; and renders the result

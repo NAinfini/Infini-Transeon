@@ -95,6 +95,8 @@ public sealed record ApplicationSettings
     public IReadOnlyList<HotkeySetting>? Hotkeys { get; init; }
     public IReadOnlyDictionary<string, string> ProviderEndpoints { get; init; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> ProviderModels { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
     public bool ReducedMotion { get; init; }
     public bool CloseToTray { get; init; } = true;
     public bool CloseToTrayConfirmed { get; init; }
@@ -153,6 +155,7 @@ public sealed record ApplicationSettings
             }
         }
         ArgumentNullException.ThrowIfNull(ProviderEndpoints);
+        ArgumentNullException.ThrowIfNull(ProviderModels);
         ArgumentNullException.ThrowIfNull(PinnedProfileIds);
         if (PinnedProfileIds.Count > 256 ||
             PinnedProfileIds.Any(profileId => profileId == Guid.Empty) ||
@@ -160,22 +163,36 @@ public sealed record ApplicationSettings
         {
             throw new InvalidDataException("Pinned profile IDs are invalid.");
         }
-        if (ProviderEndpoints.Count > 32)
+        if (ProviderEndpoints.Count > 32 || ProviderModels.Count > 32)
         {
-            throw new InvalidDataException("Too many provider endpoints are configured.");
+            throw new InvalidDataException("Too many provider overrides are configured.");
         }
         foreach ((string providerId, string endpointText) in ProviderEndpoints)
         {
             if (string.IsNullOrWhiteSpace(providerId) || providerId.Length > 128 ||
+                endpointText.Length > 2048 ||
                 !Uri.TryCreate(endpointText, UriKind.Absolute, out Uri? endpoint) ||
                 endpoint.Scheme != Uri.UriSchemeHttps ||
+                string.IsNullOrWhiteSpace(endpoint.IdnHost) ||
                 !string.IsNullOrEmpty(endpoint.UserInfo) ||
-                endpoint.AbsolutePath != "/" ||
                 !string.IsNullOrEmpty(endpoint.Query) ||
-                !string.IsNullOrEmpty(endpoint.Fragment))
+                !string.IsNullOrEmpty(endpoint.Fragment) ||
+                string.Equals(providerId, "ocr.azure-ai-vision", StringComparison.Ordinal) &&
+                endpoint.AbsolutePath != "/")
             {
                 throw new InvalidDataException(
-                    $"Provider endpoint '{providerId}' must be an HTTPS origin.");
+                    $"Provider endpoint '{providerId}' must be a safe HTTPS URL.");
+            }
+        }
+        foreach ((string providerId, string model) in ProviderModels)
+        {
+            if (string.IsNullOrWhiteSpace(providerId) || providerId.Length > 128 ||
+                string.IsNullOrWhiteSpace(model) || model.Length > 256 ||
+                !string.Equals(model, model.Trim(), StringComparison.Ordinal) ||
+                model.Any(char.IsControl))
+            {
+                throw new InvalidDataException(
+                    $"Provider model '{providerId}' is invalid.");
             }
         }
         ArgumentNullException.ThrowIfNull(Performance);

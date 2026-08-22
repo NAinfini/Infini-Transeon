@@ -93,7 +93,7 @@ jobs:
       - name: Publish Windows processes
         run: |
           $version = $env:RELEASE_TAG.TrimStart('v')
-          dotnet publish src/InfiniTranseon.App/InfiniTranseon.App.csproj -c Release -r win-x64 --self-contained true --no-restore -p:Version=$version -o artifacts/release/publish
+          dotnet publish src/InfiniTranseon.App/InfiniTranseon.App.csproj -c Release -r win-x64 --self-contained true --no-restore -p:Version=$version -p:PublishSingleFile=true -p:EnableMsixTooling=true -p:IncludeAllContentForSelfExtract=true -o artifacts/release/publish
           dotnet publish src/InfiniTranseon.ModelWorker/InfiniTranseon.ModelWorker.csproj -c Release -r win-x64 --self-contained true --no-restore -p:Version=$version -p:PublishSingleFile=true -o artifacts/release/model-worker
           Copy-Item artifacts/release/model-worker/InfiniTranseon.ModelWorker.exe artifacts/release/publish/
           Copy-Item artifacts/cmake/windows-x64/src/InfiniTranseon.EngineHost/Release/InfiniTranseon.EngineHost.exe artifacts/release/publish/

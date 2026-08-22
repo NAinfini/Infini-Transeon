@@ -93,11 +93,16 @@ public sealed class ProviderContractTests
     public void OpenAiCompatibleBuiltInsCoverGlobalAndChinaEndpointsWithoutFixingModelChoice()
     {
         OpenAiCompatibleOptions openAi = BuiltInProviderDefinitions.OpenAi("gpt-configured", "openai-key");
+        OpenAiCompatibleOptions grok = BuiltInProviderDefinitions.Grok("grok-configured", "grok-key");
         OpenAiCompatibleOptions deepSeek = BuiltInProviderDefinitions.DeepSeek("deepseek-configured", "deepseek-key");
         OpenAiCompatibleOptions qwen = BuiltInProviderDefinitions.QwenModelStudio("qwen-configured", "qwen-key");
         OpenAiCompatibleOptions qianfan = BuiltInProviderDefinitions.BaiduQianfan("ernie-configured", "qianfan-key");
 
         Assert.Equal("https://api.openai.com/v1/chat/completions", openAi.Endpoint.AbsoluteUri);
+        Assert.Equal("llm.grok", grok.ProviderId);
+        Assert.Equal("https://api.x.ai/v1/chat/completions", grok.Endpoint.AbsoluteUri);
+        Assert.Equal("grok-configured", grok.Model);
+        Assert.Equal("grok-key", grok.CredentialReference);
         Assert.Equal("https://api.deepseek.com/chat/completions", deepSeek.Endpoint.AbsoluteUri);
         Assert.Equal("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
             qwen.Endpoint.AbsoluteUri);

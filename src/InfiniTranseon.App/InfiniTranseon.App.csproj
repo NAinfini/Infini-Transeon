@@ -15,6 +15,11 @@
     <SatelliteResourceLanguages>en-US;zh-CN</SatelliteResourceLanguages>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
@@ -42,5 +47,16 @@
     <Copy
       SourceFiles="$(TargetDir)resources.pri"
       DestinationFiles="$(PublishDir)resources.pri" />
+  </Target>
+  <Target
+    Name="PublishLooseOnnxRuntime"
+    AfterTargets="Publish"
+    Condition="'$(PublishSingleFile)' == 'true'">
+    <Error
+      Condition="!Exists('$(TargetDir)onnxruntime.dll')"
+      Text="The ONNX Runtime native library is missing: '$(TargetDir)onnxruntime.dll'." />
+    <Copy
+      SourceFiles="$(TargetDir)onnxruntime.dll"
+      DestinationFiles="$(PublishDir)onnxruntime.dll" />
   </Target>
 </Project>

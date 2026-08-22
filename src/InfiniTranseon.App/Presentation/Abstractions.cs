@@ -43,13 +43,17 @@ public sealed record ApplicationSettings(
     bool CloseToTray = true,
     bool CloseToTrayConfirmed = false,
     IReadOnlyList<Guid>? PinnedProfileIds = null,
-    AppOcrBackend OcrBackend = AppOcrBackend.Automatic)
+    AppOcrBackend OcrBackend = AppOcrBackend.Automatic,
+    IReadOnlyDictionary<string, string>? ProviderModels = null)
 {
     public IReadOnlyList<AppHotkeyBinding> EffectiveHotkeys =>
         Hotkeys ?? HotkeyDefaults.Create();
 
     public IReadOnlyDictionary<string, string> EffectiveProviderEndpoints =>
         ProviderEndpoints ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, string> EffectiveProviderModels =>
+        ProviderModels ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
     public IReadOnlyList<Guid> EffectivePinnedProfileIds => PinnedProfileIds ?? [];
 }

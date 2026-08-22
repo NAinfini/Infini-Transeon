@@ -45,6 +45,8 @@ FORM: Global settings workspace in the approved native Fluent direction.
                         Grid.Column="0"
                         Width="{StaticResource PaneWidthWorkspaceNav}"
                         VerticalAlignment="Top"
+                        ScrollViewer.VerticalScrollMode="Disabled"
+                        ScrollViewer.VerticalScrollBarVisibility="Hidden"
                         SelectionMode="Single"
                         SelectionChanged="OnSettingsSectionChanged">
                         <!-- The initial selection is applied from the constructor, not with

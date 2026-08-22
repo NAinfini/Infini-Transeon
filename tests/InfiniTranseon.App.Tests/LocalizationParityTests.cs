@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using InfiniTranseon.App.Presentation;
 
 namespace InfiniTranseon.App.Tests;
 
@@ -99,6 +100,21 @@ public sealed class LocalizationParityTests
         List<string> missing = [.. required.Where(key => !resources.ContainsKey(key))];
 
         Assert.True(missing.Count == 0, $"Missing in {culture}: [{string.Join(", ", missing)}].");
+    }
+
+    [Theory]
+    [InlineData(BaseCulture)]
+    [InlineData(TargetCulture)]
+    public void Every_hotkey_enum_value_has_a_localized_label(string culture)
+    {
+        IReadOnlyDictionary<string, string> resources = LoadResources(culture);
+        IEnumerable<string> required = Enum.GetValues<AppHotkeyAction>()
+            .Select(action => $"HotkeyAction_{action}")
+            .Concat(Enum.GetValues<AppHotkeyScope>()
+                .Select(scope => $"HotkeyScope_{scope}"));
+        List<string> missing = [.. required.Where(key => !resources.ContainsKey(key))];
+
+        Assert.True(missing.Count == 0, $"Missing hotkey label(s) in {culture}: [{string.Join(", ", missing)}].");
     }
 
     // Code-side lookups are resolved by MRT, which addresses a property-style resw name

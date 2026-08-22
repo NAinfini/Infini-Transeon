@@ -17,6 +17,10 @@
     "THIRD-PARTY-NOTICES.json",
     "sbom.json"
   ],
+  "allowedRootDlls": [
+    "InfiniTranseon.ModelRuntime.Native.dll",
+    "onnxruntime.dll"
+  ],
   "excludedPatterns": [
     "models/**",
     "credentials/**",

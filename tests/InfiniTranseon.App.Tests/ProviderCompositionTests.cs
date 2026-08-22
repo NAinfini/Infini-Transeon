@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Core.Privacy;
 
@@ -46,13 +47,14 @@ public sealed class ProviderCompositionTests
                 provider.Capability == CatalogProviderCapability.Translation)
             .ToArray();
 
-        Assert.Equal(15, choices.Length);
+        Assert.Equal(16, choices.Length);
         Assert.Contains(choices, provider => provider.DisplayName == "DeepL");
         Assert.Contains(choices, provider => provider.DisplayName == "DeepL API Free");
         Assert.Contains(choices, provider => provider.DisplayName == "Baidu Translate");
         Assert.Contains(choices, provider => provider.DisplayName == "Alibaba Cloud Translation");
         Assert.Contains(choices, provider => provider.DisplayName == "Azure AI Translator");
         Assert.Contains(choices, provider => provider.DisplayName == "OpenAI compatible");
+        Assert.Contains(choices, provider => provider.DisplayName == "xAI Grok");
         Assert.Contains(choices, provider => provider.DisplayName == "DeepSeek");
         Assert.Contains(choices, provider => provider.DisplayName == "Qwen / Model Studio");
         Assert.Contains(choices, provider => provider.DisplayName == "Baidu Qianfan");
@@ -81,14 +83,136 @@ public sealed class ProviderCompositionTests
         Assert.Contains("translation.yandex", ids);
         Assert.Contains("translation.google-cloud", ids);
         Assert.Contains("llm.openai", ids);
+        Assert.Contains("llm.grok", ids);
         Assert.Contains("llm.deepseek", ids);
         Assert.Contains("llm.qwen-model-studio", ids);
         Assert.Contains("llm.baidu-qianfan", ids);
         Assert.Contains("llm.anthropic", ids);
         Assert.Contains("llm.gemini", ids);
+        Assert.Equal(
+            EngineRuntimeComposition.GrokDefaultModel,
+            registry.Descriptors.Single(descriptor => descriptor.Id == "llm.grok").ModelId);
         Assert.All(ids, id => Assert.Contains(
             ProviderCatalog.Default,
             provider => provider.Id == id));
+    }
+
+    [Fact]
+    public void LlmCatalogDefaultsAndOverridesDriveRuntimeIdentityAndCredentialOrigin()
+    {
+        CatalogProvider deepSeek = Assert.Single(
+            ProviderCatalog.Default,
+            provider => provider.Id == "llm.deepseek");
+        var endpoints = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [deepSeek.Id] = "https://gateway.example.com/v1/chat/completions",
+        };
+        var models = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [deepSeek.Id] = "vendor/deepseek-chat",
+        };
+
+        Assert.True(deepSeek.CanOverrideEndpoint);
+        Assert.True(deepSeek.CanOverrideModel);
+        Assert.Equal(EngineRuntimeComposition.DeepSeekOptions.Endpoint, deepSeek.DefaultEndpoint);
+        Assert.Equal(EngineRuntimeComposition.DeepSeekDefaultModel, deepSeek.DefaultModel);
+        Assert.Equal(new Uri(endpoints[deepSeek.Id]), deepSeek.ResolveEndpoint(endpoints));
+        Assert.Equal(models[deepSeek.Id], deepSeek.ResolveModel(models));
+
+        Core.Translation.ProviderRegistry registry =
+            EngineRuntimeComposition.BuildProviderRegistry(
+                new EmptyCredentialStore(),
+                providerEndpoints: endpoints,
+                providerModels: models);
+        Assert.Equal(
+            models[deepSeek.Id],
+            registry.Descriptors.Single(descriptor => descriptor.Id == deepSeek.Id).ModelId);
+        Assert.Equal(
+            "gateway.example.com",
+            Assert.Single(deepSeek.Credentials).ResolveBinding(endpoints).Host);
+    }
+
+    [Fact]
+    public void EveryCloudLlmShowsItsDefaultModelAndOnlyCompatibleProtocolsExposeEndpointOverride()
+    {
+        CatalogProvider[] llms = ProviderCatalog.Default
+            .Where(provider => provider.Id.StartsWith("llm.", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(7, llms.Length);
+        Assert.All(llms, provider =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(provider.DefaultModel));
+            Assert.True(provider.CanOverrideModel);
+        });
+        CatalogProvider gemini = llms.Single(provider => provider.Id == "llm.gemini");
+        Assert.Null(gemini.DefaultEndpoint);
+        Assert.False(gemini.CanOverrideEndpoint);
+        Assert.All(
+            llms.Where(provider => provider != gemini),
+            provider =>
+            {
+                Assert.NotNull(provider.DefaultEndpoint);
+                Assert.True(provider.CanOverrideEndpoint);
+            });
+    }
+
+    [Fact]
+    public async Task ProviderRowsShowEffectiveValuesAndKeepBuiltInDefaultsForRestore()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "infini-provider-row-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string databasePath = Path.Combine(root, "settings.db");
+            var repository = new Core.Settings.ApplicationSettingsRepository(databasePath);
+            await repository.SaveAsync(
+                new Core.Settings.ApplicationSettings
+                {
+                    ProviderEndpoints = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["llm.deepseek"] =
+                            "https://gateway.example.com/v1/chat/completions",
+                    },
+                    ProviderModels = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["llm.deepseek"] = "vendor/deepseek-chat",
+                    },
+                },
+                TestContext.Current.CancellationToken);
+            var secretStore = new BoundCredentialStore(new MemoryCredentialStore());
+            var secrets = new RealSecretReferenceService(
+                secretStore,
+                repository,
+                () => ProviderCatalog.Default);
+            var service = new RealSettingsService(
+                repository,
+                secrets,
+                TestResourceText.Lookup);
+
+            ProviderRow deepSeek = Assert.Single(
+                await service.GetProvidersAsync(TestContext.Current.CancellationToken),
+                provider => provider.Id == "llm.deepseek");
+
+            Assert.Equal(
+                "https://gateway.example.com/v1/chat/completions",
+                deepSeek.Endpoint);
+            Assert.Equal(
+                EngineRuntimeComposition.DeepSeekOptions.Endpoint.AbsoluteUri,
+                deepSeek.DefaultEndpoint);
+            Assert.Equal("vendor/deepseek-chat", deepSeek.Model);
+            Assert.Equal(EngineRuntimeComposition.DeepSeekDefaultModel, deepSeek.DefaultModel);
+            Assert.True(deepSeek.IsEndpointOverridden);
+            Assert.True(deepSeek.IsModelOverridden);
+            Assert.True(deepSeek.CanConfigure);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

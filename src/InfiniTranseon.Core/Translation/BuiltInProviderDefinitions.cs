@@ -12,6 +12,13 @@ public static class BuiltInProviderDefinitions
             "llm.openai", "https://api.openai.com/v1/chat/completions",
             model, credentialReference, proxyPolicy);
 
+    public static OpenAiCompatibleOptions Grok(
+        string model,
+        string credentialReference,
+        ProxyPolicy proxyPolicy = ProxyPolicy.System) => OpenAiCompatible(
+            "llm.grok", "https://api.x.ai/v1/chat/completions",
+            model, credentialReference, proxyPolicy);
+
     public static OpenAiCompatibleOptions DeepSeek(
         string model,
         string credentialReference,

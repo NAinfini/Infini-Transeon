@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace InfiniTranseon.Core.Tests.Architecture;
 
@@ -140,6 +141,73 @@ public sealed class BuildConfigurationTests
             "x:Key=\"HighContrast\"",
             tokens,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SetupWizardHasOnePlainLanguagePriorityEditor()
+    {
+        string root = FindRepositoryRoot();
+        string wizard = File.ReadAllText(Path.Combine(
+            root,
+            "src",
+            "InfiniTranseon.App",
+            "Features",
+            "SetupWizard",
+            "SetupWizardPage.xaml"));
+
+        Assert.DoesNotContain("RegionPrioritySelector", wizard, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            wizard.Split("x:Name=\"InspectorPriorityBox\"", StringSplitOptions.None).Length - 1);
+        Assert.Contains("x:Uid=\"RegionPriorityHighest\"", wizard, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"RegionPriorityHigh\"", wizard, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"RegionPriorityNormal\"", wizard, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"RegionPriorityLow\"", wizard, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"WorkbenchPriorityHint\"", wizard, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplicationXamlHasOneVerticalScrollOwnerPerContentPath()
+    {
+        string root = FindRepositoryRoot();
+        string appRoot = Path.Combine(root, "src", "InfiniTranseon.App");
+
+        foreach (string file in Directory.EnumerateFiles(appRoot, "*.xaml", SearchOption.AllDirectories))
+        {
+            string appRelativePath = Path.GetRelativePath(appRoot, file);
+            if (appRelativePath.StartsWith($"bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) ||
+                appRelativePath.StartsWith($"obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            XDocument document = XDocument.Load(file, LoadOptions.PreserveWhitespace);
+            foreach (XElement scrollViewer in document.Descendants()
+                         .Where(element => element.Name.LocalName == "ScrollViewer"))
+            {
+                Assert.False(
+                    scrollViewer.Descendants().Any(element => element.Name.LocalName == "ScrollViewer"),
+                    $"{appRelativePath} nests a ScrollViewer inside another ScrollViewer.");
+
+                foreach (XElement listView in scrollViewer.Descendants()
+                             .Where(element => element.Name.LocalName == "ListView"))
+                {
+                    Assert.True(
+                        string.Equals(
+                            listView.Attribute("ScrollViewer.VerticalScrollMode")?.Value,
+                            "Disabled",
+                            StringComparison.Ordinal),
+                        $"{appRelativePath} contains a vertically scrolling ListView inside a ScrollViewer.");
+                    Assert.True(
+                        string.Equals(
+                            listView.Attribute("ScrollViewer.VerticalScrollBarVisibility")?.Value,
+                            "Hidden",
+                            StringComparison.Ordinal),
+                        $"{appRelativePath} exposes a ListView scrollbar inside a ScrollViewer.");
+                    Assert.Null(listView.Attribute("MaxHeight"));
+                }
+            }
+        }
     }
 
     private static string FindRepositoryRoot()

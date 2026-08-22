@@ -101,7 +101,10 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
             try
             {
                 secret = await _credentials
-                    .ReadAsync(credential.Reference, credential.Binding, cancellationToken)
+                    .ReadAsync(
+                        credential.Reference,
+                        credential.ResolveBinding(settings.EffectiveProviderEndpoints),
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (CredentialBindingException)
@@ -119,7 +122,11 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
         // The credentials above are already verified, so the inner probe runs registry-only: it
         // supports a single credential binding and would silently skip the extra ones.
         ProviderRegistry registry =
-            EngineRuntimeComposition.BuildProviderRegistry(_credentials, customDefinitions);
+            EngineRuntimeComposition.BuildProviderRegistry(
+                _credentials,
+                customDefinitions,
+                providerEndpoints: settings.EffectiveProviderEndpoints,
+                providerModels: settings.EffectiveProviderModels);
         return await new TranslationProbe(registry, provider.Id)
             .TranslateAsync(request, cancellationToken)
             .ConfigureAwait(false);

@@ -50,6 +50,12 @@ public sealed class ProfileStorageTests
             {
                 ["ocr.azure-ai-vision"] =
                     "https://example-vision-resource.cognitiveservices.azure.com/",
+                ["llm.deepseek"] =
+                    "https://gateway.example.com/v1/chat/completions",
+            },
+            ProviderModels = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["llm.deepseek"] = "vendor/deepseek-chat",
             },
             ReducedMotion = true,
             CloseToTray = false,
@@ -77,6 +83,10 @@ public sealed class ProfileStorageTests
         Assert.Equal(
             "https://example-vision-resource.cognitiveservices.azure.com/",
             loaded.ProviderEndpoints["ocr.azure-ai-vision"]);
+        Assert.Equal(
+            "https://gateway.example.com/v1/chat/completions",
+            loaded.ProviderEndpoints["llm.deepseek"]);
+        Assert.Equal("vendor/deepseek-chat", loaded.ProviderModels["llm.deepseek"]);
         Assert.True(loaded.ReducedMotion);
         Assert.False(loaded.CloseToTray);
         Assert.True(loaded.CloseToTrayConfirmed);
@@ -163,6 +173,68 @@ public sealed class ProfileStorageTests
         Assert.Throws<InvalidDataException>(
             () => repository.SaveAsync(settings, TestContext.Current.CancellationToken)
                 .GetAwaiter().GetResult());
+    }
+
+    [Theory]
+    [InlineData("http://gateway.example.com/v1/chat/completions")]
+    [InlineData("https://key@gateway.example.com/v1/chat/completions")]
+    [InlineData("https://gateway.example.com/v1/chat/completions?api-key=secret")]
+    [InlineData("https://gateway.example.com/v1/chat/completions#fragment")]
+    public void UnsafeProviderEndpointIsRejectedBeforeDatabaseWrite(string endpoint)
+    {
+        using TempDatabase database = new();
+        var repository = new ApplicationSettingsRepository(database.Path);
+        var settings = new ApplicationSettings
+        {
+            ProviderEndpoints = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["llm.deepseek"] = endpoint,
+            },
+        };
+
+        Assert.Throws<InvalidDataException>(
+            () => repository.SaveAsync(settings, TestContext.Current.CancellationToken)
+                .GetAwaiter().GetResult());
+    }
+
+    [Fact]
+    public void AzureVisionResourceEndpointStillRequiresAnHttpsOrigin()
+    {
+        using TempDatabase database = new();
+        var repository = new ApplicationSettingsRepository(database.Path);
+        var settings = new ApplicationSettings
+        {
+            ProviderEndpoints = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ocr.azure-ai-vision"] =
+                    "https://example.cognitiveservices.azure.com/computervision/imageanalysis",
+            },
+        };
+
+        Assert.Throws<InvalidDataException>(
+            () => repository.SaveAsync(settings, TestContext.Current.CancellationToken)
+                .GetAwaiter().GetResult());
+    }
+
+    [Fact]
+    public void InvalidProviderModelIsRejectedBeforeDatabaseWrite()
+    {
+        using TempDatabase database = new();
+        var repository = new ApplicationSettingsRepository(database.Path);
+
+        foreach (string model in new[] { " ", "model\r\nname", new string('x', 257) })
+        {
+            var settings = new ApplicationSettings
+            {
+                ProviderModels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["llm.deepseek"] = model,
+                },
+            };
+            Assert.Throws<InvalidDataException>(
+                () => repository.SaveAsync(settings, TestContext.Current.CancellationToken)
+                    .GetAwaiter().GetResult());
+        }
     }
 
     private sealed class TempDatabase : IDisposable

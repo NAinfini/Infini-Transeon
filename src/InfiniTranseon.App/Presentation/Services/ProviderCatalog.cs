@@ -50,6 +50,14 @@ public sealed record CatalogProvider(
 
     public string? EndpointPlaceholder { get; init; }
 
+    public Uri? DefaultEndpoint { get; init; }
+
+    public string? DefaultModel { get; init; }
+
+    public bool CanOverrideEndpoint { get; init; }
+
+    public bool CanOverrideModel { get; init; }
+
     public CatalogProvider(
         string id,
         string displayName,
@@ -78,6 +86,33 @@ public sealed record CatalogProvider(
 
     public CredentialBinding? Binding =>
         Credentials.Count == 1 ? Credentials[0].Binding : null;
+
+    public Uri ResolveEndpoint(IReadOnlyDictionary<string, string> providerEndpoints)
+    {
+        ArgumentNullException.ThrowIfNull(providerEndpoints);
+        if (providerEndpoints.TryGetValue(Id, out string? configured) &&
+            Uri.TryCreate(configured, UriKind.Absolute, out Uri? endpoint) &&
+            endpoint.Scheme == Uri.UriSchemeHttps &&
+            string.IsNullOrEmpty(endpoint.UserInfo) &&
+            string.IsNullOrEmpty(endpoint.Query) &&
+            string.IsNullOrEmpty(endpoint.Fragment))
+        {
+            return endpoint;
+        }
+        return DefaultEndpoint ?? throw new InvalidDataException(
+            $"Provider '{Id}' requires a valid HTTPS endpoint.");
+    }
+
+    public string ResolveModel(IReadOnlyDictionary<string, string> providerModels)
+    {
+        ArgumentNullException.ThrowIfNull(providerModels);
+        string? model = providerModels.GetValueOrDefault(Id) ?? DefaultModel;
+        if (string.IsNullOrWhiteSpace(model) || model.Length > 256 || model.Any(char.IsControl))
+        {
+            throw new InvalidDataException($"Provider '{Id}' requires a valid model name.");
+        }
+        return model;
+    }
 }
 
 public enum CatalogProviderCapability

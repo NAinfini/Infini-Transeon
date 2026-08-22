@@ -7,6 +7,14 @@ package identity, generates an SBOM, signs the canonical release manifest with
 Ed25519, uploads a draft GitHub Release, and publishes it only after every prior
 step succeeds.
 
+The main WinUI application and model worker are published as self-contained
+single-file executables. The portable layout keeps only the two native libraries
+that must remain independently addressable (`InfiniTranseon.ModelRuntime.Native.dll`
+and `onnxruntime.dll`), the isolated engine/worker executables, `resources.pri`,
+manifests, licenses, and diagnostics metadata. The release verifier rejects any
+additional DLL so ordinary managed and Windows App SDK assemblies
+cannot silently return to the package.
+
 The current Windows binaries and MSI intentionally have no Authenticode
 signature. Windows therefore displays **Unknown publisher**, and SmartScreen
 may warn. Every GitHub Release and every in-app update prompt must state this

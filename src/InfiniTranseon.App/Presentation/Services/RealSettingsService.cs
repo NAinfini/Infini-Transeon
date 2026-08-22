@@ -125,7 +125,8 @@ public sealed class RealSettingsService : ISettingsService
             core.CloseToTray,
             core.CloseToTrayConfirmed,
             [.. core.PinnedProfileIds],
-            FromCoreOcrBackend(core.OcrBackend));
+            FromCoreOcrBackend(core.OcrBackend),
+            new Dictionary<string, string>(core.ProviderModels, StringComparer.Ordinal));
     }
 
     public async Task UpdateAsync(ApplicationSettings settings, CancellationToken cancellationToken = default)
@@ -143,6 +144,9 @@ public sealed class RealSettingsService : ISettingsService
                 Hotkeys = settings.EffectiveHotkeys.Select(ToCoreHotkey).ToArray(),
                 ProviderEndpoints = new Dictionary<string, string>(
                     settings.EffectiveProviderEndpoints,
+                    StringComparer.Ordinal),
+                ProviderModels = new Dictionary<string, string>(
+                    settings.EffectiveProviderModels,
                     StringComparer.Ordinal),
                 ReducedMotion = settings.ReducedMotion,
                 CloseToTray = settings.CloseToTray,
@@ -217,8 +221,22 @@ public sealed class RealSettingsService : ISettingsService
                     StringComparison.OrdinalIgnoreCase),
                 CanDownloadModel = false,
                 RequiresEndpoint = provider.RequiresEndpoint,
-                Endpoint = settings.EffectiveProviderEndpoints.GetValueOrDefault(provider.Id),
-                EndpointPlaceholder = provider.EndpointPlaceholder,
+                Endpoint = provider.DefaultEndpoint is not null
+                    ? provider.ResolveEndpoint(settings.EffectiveProviderEndpoints).AbsoluteUri
+                    : settings.EffectiveProviderEndpoints.GetValueOrDefault(provider.Id),
+                EndpointPlaceholder = provider.EndpointPlaceholder ??
+                    provider.DefaultEndpoint?.AbsoluteUri,
+                DefaultEndpoint = provider.DefaultEndpoint?.AbsoluteUri,
+                Model = provider.DefaultModel is not null
+                    ? provider.ResolveModel(settings.EffectiveProviderModels)
+                    : null,
+                DefaultModel = provider.DefaultModel,
+                CanOverrideEndpoint = provider.CanOverrideEndpoint,
+                CanOverrideModel = provider.CanOverrideModel,
+                IsEndpointOverridden =
+                    settings.EffectiveProviderEndpoints.ContainsKey(provider.Id),
+                IsModelOverridden =
+                    settings.EffectiveProviderModels.ContainsKey(provider.Id),
                 Credentials = credentialFields,
             });
         }

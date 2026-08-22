@@ -304,6 +304,7 @@
   <data name="HotkeyAction_ToggleOverlay" xml:space="preserve"><value>Show or hide overlay</value></data>
   <data name="HotkeyAction_PauseAll" xml:space="preserve"><value>Pause or resume translation</value></data>
   <data name="HotkeyAction_ManualOcr" xml:space="preserve"><value>Recognize visible text now</value></data>
+  <data name="HotkeyAction_CycleTranslationGroup" xml:space="preserve"><value>Switch translator group</value></data>
   <data name="HotkeyAction_RetranslateCurrent" xml:space="preserve"><value>Retranslate current text</value></data>
   <data name="HotkeyAction_EmergencyStop" xml:space="preserve"><value>Emergency stop runtime</value></data>
   <data name="HotkeyScope_AllRunningTargets" xml:space="preserve"><value>All running targets</value></data>
@@ -423,20 +424,28 @@
   <data name="SetupTargetLanguageBox.Header" xml:space="preserve"><value>Target language</value></data>
   <data name="SetupTargetLanguageBox.PlaceholderText" xml:space="preserve"><value>Search a target language</value></data>
   <data name="SetupProviderSelector.Header" xml:space="preserve"><value>Translation channel</value></data>
-  <data name="SetupSecretHint.Text" xml:space="preserve"><value>Configure every credential required by this provider. Values are stored only in Windows Credential Manager and never written to the profile or logs.</value></data>
-  <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>Configure credentials</value></data>
+  <data name="SetupSecretHint.Text" xml:space="preserve"><value>Configure the available service settings and required credentials. Credentials stay in Windows Credential Manager and are never written to the profile or logs.</value></data>
+  <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>Configure service</value></data>
   <data name="ProviderCredentialsTitle" xml:space="preserve"><value>Configure {0}</value></data>
-  <data name="ProviderCredentialsPrivacy" xml:space="preserve"><value>Existing values are never displayed. Leave a configured field blank to keep it unchanged.</value></data>
+  <data name="ProviderCredentialsPrivacy" xml:space="preserve"><value>Existing credentials are never displayed. Leave a configured field blank to keep it unchanged.</value></data>
+  <data name="ProviderConfigurationPrivacy" xml:space="preserve"><value>Built-in defaults are shown when available. Existing credentials are never displayed; leave a configured credential blank to keep it unchanged.</value></data>
   <data name="ProviderCredentialKeepPlaceholder" xml:space="preserve"><value>Configured — leave blank to keep</value></data>
   <data name="ProviderCredentialRequiredPlaceholder" xml:space="preserve"><value>Required</value></data>
-  <data name="ProviderCredentialsSave" xml:space="preserve"><value>Save credentials</value></data>
+  <data name="ProviderCredentialsSave" xml:space="preserve"><value>Save</value></data>
   <data name="ProviderCredentialsCancel" xml:space="preserve"><value>Cancel</value></data>
-  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>Enter at least one value to save.</value></data>
+  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>Change the URL or model, or enter a credential to save.</value></data>
   <data name="ProviderCredentialImportServiceAccount" xml:space="preserve"><value>Choose service-account JSON…</value></data>
   <data name="ProviderCredentialServiceAccountTooLarge" xml:space="preserve"><value>The service-account file exceeds 256 KB.</value></data>
   <data name="ProviderCredentialServiceAccountInvalid" xml:space="preserve"><value>This is not a valid Google service-account JSON file.</value></data>
   <data name="ProviderCredentialServiceAccountReady" xml:space="preserve"><value>Validated and ready to save.</value></data>
   <data name="ProviderEndpointRequired" xml:space="preserve"><value>A valid HTTPS service endpoint is required.</value></data>
+  <data name="ProviderEndpointLabel" xml:space="preserve"><value>API endpoint URL</value></data>
+  <data name="ProviderEndpointCompatibilityHint" xml:space="preserve"><value>Keep the default unless the replacement supports this provider's request, authentication, and response format. Changing the host requires re-entering its credentials.</value></data>
+  <data name="ProviderModelLabel" xml:space="preserve"><value>Model name</value></data>
+  <data name="ProviderModelHint" xml:space="preserve"><value>Enter the exact model ID accepted by this endpoint. For a third-party Chat Completions gateway, configure OpenAI compatible.</value></data>
+  <data name="ProviderRestoreDefaults" xml:space="preserve"><value>Restore built-in defaults</value></data>
+  <data name="ProviderModelInvalid" xml:space="preserve"><value>Enter a valid model name of up to 256 characters.</value></data>
+  <data name="ProviderCredentialReentryRequired" xml:space="preserve"><value>The API host changed. Re-enter every existing credential before saving so it is never sent to a new host without your confirmation.</value></data>
   <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>Region name</value></data>
   <data name="SetupRegionContextRoleSelector.Header" xml:space="preserve"><value>Context role</value></data>
   <data name="SetupRegionRoleNone.Content" xml:space="preserve"><value>None</value></data>
@@ -832,6 +841,7 @@
   <data name="ProviderDetailYoudao" xml:space="preserve"><value>Text translation v3 · game domain · source-language auto detection</value></data>
   <data name="ProviderDetailGoogleCloud" xml:space="preserve"><value>Translation v3 · service-account JSON · project ID read from the credential</value></data>
   <data name="ProviderDetailOpenAi" xml:space="preserve"><value>OpenAI endpoint · streaming · key in Windows Credential Manager</value></data>
+  <data name="ProviderDetailGrok" xml:space="preserve"><value>xAI API · OpenAI-compatible streaming · game context enabled</value></data>
   <data name="ProviderDetailDeepSeek" xml:space="preserve"><value>OpenAI-compatible streaming · game context enabled</value></data>
   <data name="ProviderDetailQwen" xml:space="preserve"><value>Alibaba Model Studio · OpenAI-compatible streaming</value></data>
   <data name="ProviderDetailQianfan" xml:space="preserve"><value>ERNIE · OpenAI-compatible streaming</value></data>
@@ -866,10 +876,6 @@
   <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>Custom REST adapters</value></data>
   <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>No custom adapters</value></data>
   <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>Import a versioned REST adapter definition when a built-in provider is not enough.</value></data>
-  <data name="ProviderInlineEndpointBox.Header" xml:space="preserve"><value>Endpoint</value></data>
-  <data name="ProviderSaveEndpointButton.Content" xml:space="preserve"><value>Save endpoint</value></data>
-  <data name="ProviderEndpointSavedTitle" xml:space="preserve"><value>Endpoint saved</value></data>
-  <data name="ProviderEndpointSaveFailedTitle" xml:space="preserve"><value>Endpoint was not saved</value></data>
   <data name="ProviderOtherHeader.Text" xml:space="preserve"><value>Other</value></data>
   <data name="ProvidersEmptyTitle" xml:space="preserve"><value>No providers configured</value></data>
   <data name="ProvidersEmptyBody" xml:space="preserve"><value>Configure a cloud provider's credentials, install a local model, or import a REST adapter to get started.</value></data>

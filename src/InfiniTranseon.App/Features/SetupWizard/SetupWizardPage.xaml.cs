@@ -574,7 +574,9 @@ public sealed partial class SetupWizardPage : Page
         bool saved = await ProviderCredentialDialog.ShowAsync(
             XamlRoot,
             ViewModel.SelectedProvider,
-            App.GetService<ISecretReferenceService>());
+            App.GetService<ISecretReferenceService>(),
+            App.GetService<ISettingsService>(),
+            _runtime);
         if (saved)
         {
             await ViewModel.InitializeAsync();
@@ -590,7 +592,7 @@ public sealed partial class SetupWizardPage : Page
             return;
         }
 
-        ViewModel.AddRegion(RegionNameBox.Text, PriorityFromIndex(RegionPrioritySelector.SelectedIndex));
+        ViewModel.AddRegion(RegionNameBox.Text, RegionPriorityLevel.P0);
         RegionNameBox.Text = string.Empty;
         Canvas.SelectedRegion = ViewModel.SelectedRegion;
         RegionList.SelectedItem = ViewModel.SelectedRegion;
@@ -687,14 +689,6 @@ public sealed partial class SetupWizardPage : Page
             region.ContextRole = (RegionContextRole)InspectorContextRoleBox.SelectedIndex;
         }
     }
-
-    private static RegionPriorityLevel PriorityFromIndex(int index) => index switch
-    {
-        1 => RegionPriorityLevel.P1,
-        2 => RegionPriorityLevel.P2,
-        3 => RegionPriorityLevel.P3,
-        _ => RegionPriorityLevel.P0,
-    };
 
     /// <summary>Step 3 "试跑 OCR" (design spec 5.2): a real end-to-end test — real thumbnail (when
     /// the engine happens to be running for this target), real WinRT crop, real

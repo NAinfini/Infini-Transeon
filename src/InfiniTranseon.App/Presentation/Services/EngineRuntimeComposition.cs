@@ -82,6 +82,7 @@ public static class EngineRuntimeComposition
     // Deliberate, visible configuration defaults — not hidden fallbacks. Every value is a
     // deployment decision documented here and pinned so the credential bindings stay stable.
     public const string OpenAiDefaultModel = "gpt-4o-mini";
+    public const string GrokDefaultModel = "grok-4.6";
     public const string DeepSeekDefaultModel = "deepseek-v4-flash";
     public const string QwenDefaultModel = "qwen3.7-plus";
     public const string QianfanDefaultModel = "ernie-5.0";
@@ -163,6 +164,10 @@ public static class EngineRuntimeComposition
     public static OpenAiCompatibleOptions OpenAiOptions { get; } =
         BuiltInProviderDefinitions.OpenAi(OpenAiDefaultModel, "llm.openai");
 
+    /// <summary>xAI's official OpenAI-compatible chat-completions endpoint.</summary>
+    public static OpenAiCompatibleOptions GrokOptions { get; } =
+        BuiltInProviderDefinitions.Grok(GrokDefaultModel, "llm.grok");
+
     /// <summary>DeepSeek's official OpenAI-compatible endpoint.</summary>
     public static OpenAiCompatibleOptions DeepSeekOptions { get; } =
         BuiltInProviderDefinitions.DeepSeek(DeepSeekDefaultModel, "llm.deepseek");
@@ -241,13 +246,22 @@ public static class EngineRuntimeComposition
         IBoundCredentialStore credentials,
         IReadOnlyList<DeclarativeRestAdapterDefinition>? customAdapters = null,
         IReadOnlyList<ProviderRegistration>? additionalRegistrations = null,
-        bool strictOffline = false)
+        bool strictOffline = false,
+        IReadOnlyDictionary<string, string>? providerEndpoints = null,
+        IReadOnlyDictionary<string, string>? providerModels = null)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        IReadOnlyDictionary<string, string> endpoints = providerEndpoints ??
+            new Dictionary<string, string>(StringComparer.Ordinal);
+        IReadOnlyDictionary<string, string> models = providerModels ??
+            new Dictionary<string, string>(StringComparer.Ordinal);
         List<ProviderRegistration> registrations = strictOffline
             ? []
             : new List<ProviderRegistration>(
-                BuiltInProviderSpecs.CreateTranslationRegistrations(credentials));
+                BuiltInProviderSpecs.CreateTranslationRegistrations(
+                    credentials,
+                    endpoints,
+                    models));
         if (!strictOffline)
         {
             foreach (DeclarativeRestAdapterDefinition definition in customAdapters ?? [])
@@ -293,7 +307,8 @@ public static class EngineRuntimeComposition
         IReadOnlyDictionary<string, string>? providerEndpoints = null,
         LocalModelManagementService? localModels = null,
         AppDataOptions? appData = null,
-        OcrBackendPreference ocrBackend = OcrBackendPreference.Automatic)
+        OcrBackendPreference ocrBackend = OcrBackendPreference.Automatic,
+        IReadOnlyDictionary<string, string>? providerModels = null)
     {
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(credentials);
@@ -313,7 +328,9 @@ public static class EngineRuntimeComposition
                     credentials,
                     customAdapters,
                     local.Registrations,
-                    strictOffline),
+                    strictOffline,
+                    providerEndpoints,
+                    providerModels),
                 new ProviderServiceLimits());
             EngineRuntimeBackendFactory backendFactory = EngineRuntimeBackendAssembler.CreateFactory(
                 new EngineRuntimeBackendOptions(binding, providers, CommandTimeout, Stabilizer)

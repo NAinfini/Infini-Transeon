@@ -12,7 +12,11 @@ namespace InfiniTranseon.App.Presentation.Services;
 /// </summary>
 internal sealed record BuiltInProviderSpec(
     CatalogProvider Catalog,
-    Func<IBoundCredentialStore, ProviderRegistration>? CreateTranslationRegistration,
+    Func<
+        IBoundCredentialStore,
+        IReadOnlyDictionary<string, string>,
+        IReadOnlyDictionary<string, string>,
+        ProviderRegistration>? CreateTranslationRegistration,
     Func<
         IBoundCredentialStore,
         IReadOnlyDictionary<string, string>,
@@ -225,6 +229,11 @@ internal static class BuiltInProviderSpecs
             "ProviderKindLlmCloud",
             "ProviderDetailOpenAi"),
         OpenAiCompatible(
+            EngineRuntimeComposition.GrokOptions,
+            "xAI Grok",
+            "ProviderKindLlmCloud",
+            "ProviderDetailGrok"),
+        OpenAiCompatible(
             EngineRuntimeComposition.DeepSeekOptions,
             "DeepSeek",
             "ProviderKindLlmCloudChina",
@@ -239,42 +248,8 @@ internal static class BuiltInProviderSpecs
             "Baidu Qianfan",
             "ProviderKindLlmCloudChina",
             "ProviderDetailQianfan"),
-        Translation(
-            new CatalogProvider(
-                "llm.anthropic",
-                "Anthropic Claude",
-                "ProviderKindLlmCloud",
-                EngineRuntimeComposition.AnthropicOptions.CredentialReference,
-                AnthropicTranslationProvider.CreateCredentialBinding(
-                    EngineRuntimeComposition.AnthropicOptions),
-                "ProviderDetailAnthropic"),
-            ProviderKind.LargeLanguageModel,
-            EngineRuntimeComposition.AnthropicOptions.Model,
-            credentials => new AnthropicTranslationProvider(
-                EngineRuntimeComposition.AnthropicOptions,
-                EngineRuntimeComposition.ClientFor(
-                    "llm.anthropic",
-                    EngineRuntimeComposition.AnthropicOptions.Endpoint,
-                    EngineRuntimeComposition.AnthropicOptions.ProxyPolicy),
-                credentials)),
-        Translation(
-            new CatalogProvider(
-                "llm.gemini",
-                "Google Gemini",
-                "ProviderKindLlmCloud",
-                EngineRuntimeComposition.GeminiOptions.CredentialReference,
-                GeminiTranslationProvider.CreateCredentialBinding(
-                    EngineRuntimeComposition.GeminiOptions),
-                "ProviderDetailGemini"),
-            ProviderKind.LargeLanguageModel,
-            EngineRuntimeComposition.GeminiDefaultModel,
-            credentials => new GeminiTranslationProvider(
-                EngineRuntimeComposition.GeminiOptions,
-                EngineRuntimeComposition.ClientFor(
-                    "llm.gemini",
-                    EngineRuntimeComposition.GeminiOptions.Endpoint,
-                EngineRuntimeComposition.GeminiOptions.ProxyPolicy),
-                credentials)),
+        Anthropic(),
+        Gemini(),
         AzureVisionOcr(),
         Ocr(
             new CatalogProvider(
@@ -358,9 +333,14 @@ internal static class BuiltInProviderSpecs
     ];
 
     public static IReadOnlyList<ProviderRegistration> CreateTranslationRegistrations(
-        IBoundCredentialStore credentials) =>
+        IBoundCredentialStore credentials,
+        IReadOnlyDictionary<string, string> providerEndpoints,
+        IReadOnlyDictionary<string, string> providerModels) =>
         All.Where(spec => spec.CreateTranslationRegistration is not null)
-            .Select(spec => spec.CreateTranslationRegistration!(credentials))
+            .Select(spec => spec.CreateTranslationRegistration!(
+                credentials,
+                providerEndpoints,
+                providerModels))
             .ToArray();
 
     public static IReadOnlyList<OcrProviderRegistration> CreateOcrRegistrations(
@@ -379,7 +359,7 @@ internal static class BuiltInProviderSpecs
         Func<IBoundCredentialStore, ITranslationProvider> createProvider) =>
         new(
             catalog,
-            credentials => new ProviderRegistration(
+            (credentials, _, _) => new ProviderRegistration(
                 ProviderDescriptor.Online(catalog.Id, kind, modelId),
                 () => createProvider(credentials)),
             CreateOcrRegistration: null);
@@ -417,24 +397,163 @@ internal static class BuiltInProviderSpecs
         OpenAiCompatibleOptions options,
         string displayName,
         string kindResourceKey,
-        string detailResourceKey) =>
-        Translation(
-            new CatalogProvider(
+        string detailResourceKey)
+    {
+        CatalogProvider catalog = new(
                 options.ProviderId,
                 displayName,
                 kindResourceKey,
                 options.CredentialReference,
                 OpenAiCompatibleProvider.CreateCredentialBinding(options),
-                detailResourceKey),
-            ProviderKind.LargeLanguageModel,
-            options.Model,
-            credentials => new OpenAiCompatibleProvider(
-                options,
-                EngineRuntimeComposition.ClientFor(
-                    options.ProviderId,
-                    options.Endpoint,
-                    options.ProxyPolicy),
-                credentials));
+                detailResourceKey)
+        {
+            DefaultEndpoint = options.Endpoint,
+            DefaultModel = options.Model,
+            CanOverrideEndpoint = true,
+            CanOverrideModel = true,
+        };
+        CatalogCredential credential = AssertSingleCredential(catalog) with
+        {
+            BindingResolver = endpoints => OpenAiCompatibleProvider.CreateCredentialBinding(
+                options with { Endpoint = catalog.ResolveEndpoint(endpoints) }),
+        };
+        catalog = catalog with { Credentials = [credential] };
+        return new BuiltInProviderSpec(
+            catalog,
+            (credentials, endpoints, models) =>
+            {
+                OpenAiCompatibleOptions configured = options with
+                {
+                    Endpoint = catalog.ResolveEndpoint(endpoints),
+                    Model = catalog.ResolveModel(models),
+                };
+                return new ProviderRegistration(
+                    ProviderDescriptor.Online(
+                        catalog.Id,
+                        ProviderKind.LargeLanguageModel,
+                        configured.Model),
+                    () => new OpenAiCompatibleProvider(
+                        configured,
+                        EngineRuntimeComposition.ClientFor(
+                            configured.ProviderId,
+                            configured.Endpoint,
+                            configured.ProxyPolicy),
+                        credentials));
+            },
+            CreateOcrRegistration: null);
+    }
+
+    private static BuiltInProviderSpec Anthropic()
+    {
+        AnthropicProviderOptions defaults = EngineRuntimeComposition.AnthropicOptions;
+        CatalogProvider catalog = new(
+            "llm.anthropic",
+            "Anthropic Claude",
+            "ProviderKindLlmCloud",
+            defaults.CredentialReference,
+            AnthropicTranslationProvider.CreateCredentialBinding(defaults),
+            "ProviderDetailAnthropic")
+        {
+            DefaultEndpoint = defaults.Endpoint,
+            DefaultModel = defaults.Model,
+            CanOverrideEndpoint = true,
+            CanOverrideModel = true,
+        };
+        CatalogCredential credential = AssertSingleCredential(catalog) with
+        {
+            BindingResolver = endpoints => AnthropicTranslationProvider.CreateCredentialBinding(
+                defaults with { Endpoint = catalog.ResolveEndpoint(endpoints) }),
+        };
+        catalog = catalog with { Credentials = [credential] };
+        return new BuiltInProviderSpec(
+            catalog,
+            (credentials, endpoints, models) =>
+            {
+                AnthropicProviderOptions configured = defaults with
+                {
+                    Endpoint = catalog.ResolveEndpoint(endpoints),
+                    Model = catalog.ResolveModel(models),
+                };
+                return new ProviderRegistration(
+                    ProviderDescriptor.Online(
+                        catalog.Id,
+                        ProviderKind.LargeLanguageModel,
+                        configured.Model),
+                    () => new AnthropicTranslationProvider(
+                        configured,
+                        EngineRuntimeComposition.ClientFor(
+                            catalog.Id,
+                            configured.Endpoint,
+                            configured.ProxyPolicy),
+                        credentials));
+            },
+            CreateOcrRegistration: null);
+    }
+
+    private static BuiltInProviderSpec Gemini()
+    {
+        GeminiProviderOptions defaults = EngineRuntimeComposition.GeminiOptions;
+        CatalogProvider catalog = new(
+            "llm.gemini",
+            "Google Gemini",
+            "ProviderKindLlmCloud",
+            defaults.CredentialReference,
+            GeminiTranslationProvider.CreateCredentialBinding(defaults),
+            "ProviderDetailGemini")
+        {
+            DefaultModel = EngineRuntimeComposition.GeminiDefaultModel,
+            CanOverrideModel = true,
+        };
+        return new BuiltInProviderSpec(
+            catalog,
+            (credentials, _, models) =>
+            {
+                string model = catalog.ResolveModel(models);
+                GeminiProviderOptions configured = defaults with
+                {
+                    Endpoint = GeminiEndpointForModel(defaults.Endpoint, model),
+                };
+                return new ProviderRegistration(
+                    ProviderDescriptor.Online(
+                        catalog.Id,
+                        ProviderKind.LargeLanguageModel,
+                        model),
+                    () => new GeminiTranslationProvider(
+                        configured,
+                        EngineRuntimeComposition.ClientFor(
+                            catalog.Id,
+                            configured.Endpoint,
+                            configured.ProxyPolicy),
+                        credentials));
+            },
+            CreateOcrRegistration: null);
+    }
+
+    private static CatalogCredential AssertSingleCredential(CatalogProvider catalog) =>
+        catalog.Credentials.Count == 1
+            ? catalog.Credentials[0]
+            : throw new InvalidOperationException(
+                $"Provider '{catalog.Id}' must declare exactly one credential.");
+
+    private static Uri GeminiEndpointForModel(Uri defaultEndpoint, string model)
+    {
+        const string marker = "/models/";
+        int start = defaultEndpoint.AbsolutePath.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+            throw new InvalidDataException("Gemini endpoint does not contain a model segment.");
+        int suffix = defaultEndpoint.AbsolutePath.IndexOf(
+            ":streamGenerateContent",
+            start + marker.Length,
+            StringComparison.Ordinal);
+        if (suffix < 0)
+            throw new InvalidDataException("Gemini endpoint does not contain a model segment.");
+        var builder = new UriBuilder(defaultEndpoint)
+        {
+            Path = defaultEndpoint.AbsolutePath[..(start + marker.Length)] +
+                model + defaultEndpoint.AbsolutePath[suffix..],
+        };
+        return builder.Uri;
+    }
 
     private static BuiltInProviderSpec Ocr(
         CatalogProvider catalog,
@@ -468,6 +587,7 @@ internal static class BuiltInProviderSpecs
         {
             Capability = CatalogProviderCapability.Ocr,
             RequiresEndpoint = true,
+            CanOverrideEndpoint = true,
             EndpointPlaceholder =
                 "https://your-resource-name.cognitiveservices.azure.com/",
         };

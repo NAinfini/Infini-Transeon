@@ -288,4 +288,20 @@ public sealed class DesignTokensTests
         Assert.Contains("MinimumWindowHeightEpx = 600", source, StringComparison.Ordinal);
         Assert.Contains("AppWindow.Resize", source, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Setup_wizard_capture_targets_use_the_page_scroll_viewer()
+    {
+        string path = AppSourcePaths.AllXamlFiles()
+            .Single(file => Path.GetFileName(file) == "SetupWizardPage.xaml");
+        XDocument document = XDocument.Load(path);
+        XElement targetList = document
+            .Descendants()
+            .Single(element => (string?)element.Attribute(XamlNs + "Name") == "CaptureTargetList");
+
+        Assert.Null(targetList.Attribute("MaxHeight"));
+        Assert.Equal("Disabled", (string?)targetList.Attribute("ScrollViewer.VerticalScrollMode"));
+        Assert.Equal("Hidden", (string?)targetList.Attribute("ScrollViewer.VerticalScrollBarVisibility"));
+        Assert.Single(targetList.Ancestors(), element => element.Name.LocalName == "ScrollViewer");
+    }
 }

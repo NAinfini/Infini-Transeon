@@ -63,56 +63,13 @@ public sealed partial class ServicesModelsPage : Page
         bool saved = await ProviderCredentialDialog.ShowAsync(
             XamlRoot,
             provider,
-            App.GetService<ISecretReferenceService>());
+            App.GetService<ISecretReferenceService>(),
+            _settings,
+            _runtime);
         if (saved)
         {
             await ViewModel.InitializeAsync();
             RebuildGroups();
-        }
-    }
-
-    private async void OnSaveEndpointClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement
-            {
-                Tag: ProviderRow { RequiresEndpoint: true } provider,
-            })
-        {
-            return;
-        }
-        string endpoint = provider.Endpoint?.Trim() ?? string.Empty;
-        if (endpoint.Length == 0)
-        {
-            PageNoticeBar.Title = Strings.GetString("ProviderEndpointRequired");
-            PageNoticeBar.Message = provider.Name;
-            PageNoticeBar.Severity = InfoBarSeverity.Error;
-            PageNoticeBar.IsOpen = true;
-            return;
-        }
-        try
-        {
-            ApplicationSettings current = await _settings.GetSettingsAsync();
-            var endpoints = new Dictionary<string, string>(
-                current.EffectiveProviderEndpoints,
-                StringComparer.Ordinal)
-            {
-                [provider.Id] = endpoint,
-            };
-            await _settings.UpdateAsync(current with { ProviderEndpoints = endpoints });
-            await _runtime.ApplySettingsAsync();
-            await ViewModel.InitializeAsync();
-            RebuildGroups();
-            PageNoticeBar.Title = Strings.GetString("ProviderEndpointSavedTitle");
-            PageNoticeBar.Message = provider.Name;
-            PageNoticeBar.Severity = InfoBarSeverity.Success;
-            PageNoticeBar.IsOpen = true;
-        }
-        catch (Exception exception)
-        {
-            PageNoticeBar.Title = Strings.GetString("ProviderEndpointSaveFailedTitle");
-            PageNoticeBar.Message = exception.Message;
-            PageNoticeBar.Severity = InfoBarSeverity.Error;
-            PageNoticeBar.IsOpen = true;
         }
     }
 

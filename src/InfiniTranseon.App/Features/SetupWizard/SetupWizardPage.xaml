@@ -170,7 +170,10 @@
                                       AutomationProperties.LabeledBy="{x:Bind SetupStep1Heading}"
                                       ItemsSource="{x:Bind ViewModel.Targets, Mode=OneWay}"
                                       SelectionChanged="OnCaptureTargetSelectionChanged"
-                                      SelectionMode="Multiple" MaxHeight="260" HorizontalAlignment="Stretch">
+                                      SelectionMode="Multiple"
+                                      ScrollViewer.VerticalScrollMode="Disabled"
+                                      ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                      HorizontalAlignment="Stretch">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="probes:CaptureProbeTarget">
                                         <!-- Without an explicit name the item peer falls back to the
@@ -405,7 +408,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="460" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <TextBlock
@@ -421,21 +424,9 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
                                 <TextBox x:Name="RegionNameBox" x:Uid="SetupRegionNameBox" />
                                 <Button Grid.Column="1" x:Uid="SetupAddRegionButton" Click="OnAddRegionClick"
                                         Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom" />
-                                <controls:SelectBox Grid.Row="1" Grid.ColumnSpan="2" x:Name="RegionPrioritySelector"
-                                                    x:Uid="SetupRegionPriorityBox"
-                                                    SelectedIndex="0" HorizontalAlignment="Stretch">
-                                    <ListViewItem Content="P0" />
-                                    <ListViewItem Content="P1" />
-                                    <ListViewItem Content="P2" />
-                                    <ListViewItem Content="P3" />
-                                </controls:SelectBox>
                             </Grid>
                             <ListView
                                 x:Name="RegionList"
@@ -443,7 +434,8 @@
                                 ItemsSource="{x:Bind ViewModel.Regions, Mode=OneWay}"
                                 SelectionChanged="OnRegionListSelectionChanged"
                                 SelectionMode="Single"
-                                MaxHeight="320"
+                                ScrollViewer.VerticalScrollMode="Disabled"
+                                ScrollViewer.VerticalScrollBarVisibility="Hidden"
                                 HorizontalAlignment="Stretch">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="vm:WorkbenchRegionItem">
@@ -454,7 +446,9 @@
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="{x:Bind Name, Mode=OneWay}" />
-                                                <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{x:Bind Priority, Mode=OneWay}" />
+                                                <TextBlock
+                                                    Style="{StaticResource CaptionTextStyle}"
+                                                    Text="{x:Bind controls:RegionListPane.DescribePriority(Priority), Mode=OneWay}" />
                                             </StackPanel>
                                             <Button Grid.Column="1" x:Uid="SetupRemoveRegionButton" Tag="{x:Bind}"
                                                     Click="OnRemoveRegionClick" MinWidth="32" MinHeight="32" Padding="6">
@@ -478,7 +472,7 @@
                             <controls:RegionCanvas
                                 x:Name="Canvas"
                                 x:Uid="SetupRegionCanvas"
-                                Height="380"
+                                Height="480"
                                 SelectionChanged="OnCanvasSelectionChanged"
                                 RegionAdded="OnCanvasRegionAdded"
                                 RegionChanged="OnCanvasRegionChanged"
@@ -489,51 +483,53 @@
                             Grid.Row="1" Grid.Column="2"
                             Style="{StaticResource CardBorderStyle}"
                             Padding="{StaticResource InsetS}">
-                            <ScrollViewer>
-                                <StackPanel Spacing="{StaticResource SpaceM}">
-                                    <TextBlock x:Uid="SetupInspectorHeader" FontWeight="SemiBold" />
-                                    <TextBox x:Name="InspectorNameBox" x:Uid="SetupRegionNameBox" LostFocus="OnInspectorChanged" />
-                                    <controls:SelectBox
-                                        x:Name="InspectorPriorityBox"
-                                        x:Uid="SetupRegionPriorityBox"
-                                        HorizontalAlignment="Stretch"
-                                        SelectionChanged="OnInspectorSelectionChanged">
-                                        <ListViewItem Content="P0" />
-                                        <ListViewItem Content="P1" />
-                                        <ListViewItem Content="P2" />
-                                        <ListViewItem Content="P3" />
-                                    </controls:SelectBox>
-                                    <controls:SelectBox
-                                        x:Name="InspectorContextRoleBox"
-                                        x:Uid="SetupRegionContextRoleSelector"
-                                        HorizontalAlignment="Stretch"
-                                        SelectionChanged="OnInspectorSelectionChanged">
-                                        <ListViewItem x:Uid="SetupRegionRoleNone" />
-                                        <ListViewItem x:Uid="SetupRegionRoleSpeaker" />
-                                        <ListViewItem x:Uid="SetupRegionRoleScene" />
-                                        <ListViewItem x:Uid="SetupRegionRoleDialogue" />
-                                    </controls:SelectBox>
-                                    <Button
-                                        x:Uid="SetupTestOcrButton"
-                                        Click="OnTestOcrClick" />
-                                    <ProgressRing
-                                        Width="18" Height="18"
-                                        IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
-                                    <TextBlock
-                                        x:Name="OcrResultLabel"
-                                        x:Uid="SetupOcrTestResultLabel"
-                                        Style="{StaticResource CaptionTextStyle}"
-                                        Visibility="Collapsed" />
-                                    <TextBlock
-                                        x:Name="OcrResultText"
-                                        TextWrapping="Wrap"
-                                        Visibility="Collapsed" />
-                                    <InfoBar
-                                        x:Name="OcrInfoBar"
-                                        IsOpen="False"
-                                        IsClosable="True" />
-                                </StackPanel>
-                            </ScrollViewer>
+                            <StackPanel Spacing="{StaticResource SpaceM}">
+                                <TextBlock x:Uid="SetupInspectorHeader" FontWeight="SemiBold" />
+                                <TextBox x:Name="InspectorNameBox" x:Uid="SetupRegionNameBox" LostFocus="OnInspectorChanged" />
+                                <controls:SelectBox
+                                    x:Name="InspectorPriorityBox"
+                                    x:Uid="SetupRegionPriorityBox"
+                                    HorizontalAlignment="Stretch"
+                                    SelectionChanged="OnInspectorSelectionChanged">
+                                    <ListViewItem x:Uid="RegionPriorityHighest" />
+                                    <ListViewItem x:Uid="RegionPriorityHigh" />
+                                    <ListViewItem x:Uid="RegionPriorityNormal" />
+                                    <ListViewItem x:Uid="RegionPriorityLow" />
+                                </controls:SelectBox>
+                                <TextBlock
+                                    x:Uid="WorkbenchPriorityHint"
+                                    Style="{StaticResource CaptionTextStyle}"
+                                    TextWrapping="Wrap" />
+                                <controls:SelectBox
+                                    x:Name="InspectorContextRoleBox"
+                                    x:Uid="SetupRegionContextRoleSelector"
+                                    HorizontalAlignment="Stretch"
+                                    SelectionChanged="OnInspectorSelectionChanged">
+                                    <ListViewItem x:Uid="SetupRegionRoleNone" />
+                                    <ListViewItem x:Uid="SetupRegionRoleSpeaker" />
+                                    <ListViewItem x:Uid="SetupRegionRoleScene" />
+                                    <ListViewItem x:Uid="SetupRegionRoleDialogue" />
+                                </controls:SelectBox>
+                                <Button
+                                    x:Uid="SetupTestOcrButton"
+                                    Click="OnTestOcrClick" />
+                                <ProgressRing
+                                    Width="18" Height="18"
+                                    IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                                <TextBlock
+                                    x:Name="OcrResultLabel"
+                                    x:Uid="SetupOcrTestResultLabel"
+                                    Style="{StaticResource CaptionTextStyle}"
+                                    Visibility="Collapsed" />
+                                <TextBlock
+                                    x:Name="OcrResultText"
+                                    TextWrapping="Wrap"
+                                    Visibility="Collapsed" />
+                                <InfoBar
+                                    x:Name="OcrInfoBar"
+                                    IsOpen="False"
+                                    IsClosable="True" />
+                            </StackPanel>
                         </Border>
                     </Grid>
 

@@ -77,6 +77,38 @@ public sealed class ReadinessAndProbeRoutingTests
     }
 
     [Fact]
+    public async Task Translation_test_resolves_the_configured_provider_origin_before_reading_the_key()
+    {
+        var credentials = new EmptyCredentialStore();
+        var settings = new FakeSettingsService();
+        ApplicationSettings current = await settings.GetSettingsAsync(
+            TestContext.Current.CancellationToken);
+        await settings.UpdateAsync(
+            current with
+            {
+                ProviderEndpoints = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["llm.deepseek"] =
+                        "https://gateway.example.com/v1/chat/completions",
+                },
+                ProviderModels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["llm.deepseek"] = "vendor/deepseek-chat",
+                },
+            },
+            TestContext.Current.CancellationToken);
+        CatalogTranslationProbe probe = NewProbe(credentials, settings);
+
+        TranslationProbeResult result = await probe.TranslateAsync(
+            new TranslationProbeRequest(
+                "hello", "en", "zh-Hans", null, ProviderId: "llm.deepseek"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(TranslationProbe.CredentialMissingCode, result.ErrorCode);
+        Assert.Equal("gateway.example.com", credentials.LastBinding?.Host);
+    }
+
+    [Fact]
     public async Task Enabling_strict_offline_after_probe_creation_blocks_cloud_translation_test()
     {
         var credentials = new EmptyCredentialStore();
@@ -362,6 +394,7 @@ public sealed class ReadinessAndProbeRoutingTests
     private sealed class EmptyCredentialStore : IBoundCredentialStore
     {
         public int ReadCount { get; private set; }
+        public CredentialBinding? LastBinding { get; private set; }
 
         public ValueTask<string?> ReadAsync(
             string reference,
@@ -369,6 +402,7 @@ public sealed class ReadinessAndProbeRoutingTests
             CancellationToken cancellationToken = default)
         {
             ReadCount++;
+            LastBinding = binding;
             return ValueTask.FromResult<string?>(null);
         }
 

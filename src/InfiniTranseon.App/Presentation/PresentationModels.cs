@@ -367,8 +367,17 @@ public sealed record ProviderRow(
     public bool RequiresEndpoint { get; set; }
     public string? Endpoint { get; set; }
     public string? EndpointPlaceholder { get; set; }
+    public string? DefaultEndpoint { get; set; }
+    public string? Model { get; set; }
+    public string? DefaultModel { get; set; }
+    public bool CanOverrideEndpoint { get; set; }
+    public bool CanOverrideModel { get; set; }
+    public bool IsEndpointOverridden { get; set; }
+    public bool IsModelOverridden { get; set; }
     public IReadOnlyList<ProviderCredentialField> Credentials { get; set; } = [];
-    public bool CanConfigure => Credentials.Count > 0;
+    public bool CanConfigure =>
+        Credentials.Count > 0 || RequiresEndpoint || DefaultEndpoint is not null ||
+        DefaultModel is not null;
     public bool IsReady =>
         IsSelectable &&
         (!RequiresEndpoint || !string.IsNullOrWhiteSpace(Endpoint)) &&

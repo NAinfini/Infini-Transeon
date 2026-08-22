@@ -172,7 +172,8 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                     AppOcrBackend.Windows => OcrBackendPreference.Windows,
                     AppOcrBackend.Local => OcrBackendPreference.Local,
                     _ => OcrBackendPreference.Automatic,
-                }));
+                },
+                settings.EffectiveProviderModels));
     }
 
     public EngineRuntimeStatus Status =>
@@ -1311,7 +1312,10 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             previousSettings.OcrBackend != updatedSettings.OcrBackend ||
             !DictionaryEqual(
                 previousSettings.EffectiveProviderEndpoints,
-                updatedSettings.EffectiveProviderEndpoints);
+                updatedSettings.EffectiveProviderEndpoints) ||
+            !DictionaryEqual(
+                previousSettings.EffectiveProviderModels,
+                updatedSettings.EffectiveProviderModels);
     }
 
     private static bool DictionaryEqual(

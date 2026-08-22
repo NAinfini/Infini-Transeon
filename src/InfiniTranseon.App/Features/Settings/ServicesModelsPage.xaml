@@ -50,26 +50,6 @@ FORM: Global provider workspace in the approved native Fluent direction.
                             VerticalAlignment="Top" />
                     </Grid>
 
-                    <Grid
-                        ColumnSpacing="{StaticResource SpaceS}"
-                        Visibility="{x:Bind RequiresEndpoint}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox
-                            x:Uid="ProviderInlineEndpointBox"
-                            Text="{x:Bind Endpoint, Mode=TwoWay}"
-                            PlaceholderText="{x:Bind EndpointPlaceholder}"
-                            AutomationProperties.Name="{x:Bind Name}" />
-                        <Button
-                            x:Uid="ProviderSaveEndpointButton"
-                            Grid.Column="1"
-                            Tag="{x:Bind}"
-                            VerticalAlignment="Bottom"
-                            Click="OnSaveEndpointClick" />
-                    </Grid>
-
                     <StackPanel
                         Orientation="Horizontal"
                         Spacing="{StaticResource SpaceS}"

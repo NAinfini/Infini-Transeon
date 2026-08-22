@@ -315,6 +315,7 @@
   <data name="HotkeyAction_ToggleOverlay" xml:space="preserve"><value>显示或隐藏覆盖层</value></data>
   <data name="HotkeyAction_PauseAll" xml:space="preserve"><value>暂停或继续翻译</value></data>
   <data name="HotkeyAction_ManualOcr" xml:space="preserve"><value>立即识别当前文字</value></data>
+  <data name="HotkeyAction_CycleTranslationGroup" xml:space="preserve"><value>切换翻译器组</value></data>
   <data name="HotkeyAction_RetranslateCurrent" xml:space="preserve"><value>重新翻译当前文字</value></data>
   <data name="HotkeyAction_EmergencyStop" xml:space="preserve"><value>紧急停止运行时</value></data>
   <data name="HotkeyScope_AllRunningTargets" xml:space="preserve"><value>所有运行中的目标</value></data>
@@ -423,20 +424,28 @@
   <data name="SetupTargetLanguageBox.Header" xml:space="preserve"><value>目标语言</value></data>
   <data name="SetupTargetLanguageBox.PlaceholderText" xml:space="preserve"><value>搜索目标语言</value></data>
   <data name="SetupProviderSelector.Header" xml:space="preserve"><value>翻译通道</value></data>
-  <data name="SetupSecretHint.Text" xml:space="preserve"><value>配置该服务商要求的全部凭据。凭据仅存储在 Windows 凭据管理器中，不会写入档案或日志。</value></data>
-  <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>配置凭据</value></data>
+  <data name="SetupSecretHint.Text" xml:space="preserve"><value>配置该服务可用的设置和所需凭据。凭据仅存储在 Windows 凭据管理器中，不会写入档案或日志。</value></data>
+  <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>配置服务</value></data>
   <data name="ProviderCredentialsTitle" xml:space="preserve"><value>配置 {0}</value></data>
   <data name="ProviderCredentialsPrivacy" xml:space="preserve"><value>现有凭据不会显示。已配置字段留空即可保持不变。</value></data>
+  <data name="ProviderConfigurationPrivacy" xml:space="preserve"><value>有内置默认值时会在下方显示。现有凭据不会显示；已配置的凭据留空即可保持不变。</value></data>
   <data name="ProviderCredentialKeepPlaceholder" xml:space="preserve"><value>已配置——留空保持不变</value></data>
   <data name="ProviderCredentialRequiredPlaceholder" xml:space="preserve"><value>必填</value></data>
-  <data name="ProviderCredentialsSave" xml:space="preserve"><value>保存凭据</value></data>
+  <data name="ProviderCredentialsSave" xml:space="preserve"><value>保存</value></data>
   <data name="ProviderCredentialsCancel" xml:space="preserve"><value>取消</value></data>
-  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>请至少输入一个需要保存的值。</value></data>
+  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>请修改 URL 或模型，或输入至少一项凭据后再保存。</value></data>
   <data name="ProviderCredentialImportServiceAccount" xml:space="preserve"><value>选择服务账号 JSON…</value></data>
   <data name="ProviderCredentialServiceAccountTooLarge" xml:space="preserve"><value>服务账号文件超过 256 KB。</value></data>
   <data name="ProviderCredentialServiceAccountInvalid" xml:space="preserve"><value>这不是有效的 Google 服务账号 JSON 文件。</value></data>
   <data name="ProviderCredentialServiceAccountReady" xml:space="preserve"><value>验证完成，可以保存。</value></data>
   <data name="ProviderEndpointRequired" xml:space="preserve"><value>必须填写有效的 HTTPS 服务终结点。</value></data>
+  <data name="ProviderEndpointLabel" xml:space="preserve"><value>API 端点 URL</value></data>
+  <data name="ProviderEndpointCompatibilityHint" xml:space="preserve"><value>除非替代端点兼容该服务的请求、鉴权和响应格式，否则请保留默认值。更改主机后必须重新输入凭据。</value></data>
+  <data name="ProviderModelLabel" xml:space="preserve"><value>模型名称</value></data>
+  <data name="ProviderModelHint" xml:space="preserve"><value>请输入所选端点接受的准确模型 ID。使用第三方 Chat Completions 网关时，请配置“OpenAI 兼容”服务。</value></data>
+  <data name="ProviderRestoreDefaults" xml:space="preserve"><value>恢复内置默认值</value></data>
+  <data name="ProviderModelInvalid" xml:space="preserve"><value>请输入不超过 256 个字符的有效模型名称。</value></data>
+  <data name="ProviderCredentialReentryRequired" xml:space="preserve"><value>API 主机已更改。保存前请重新输入所有现有凭据，确保未经你确认时绝不会把凭据发送到新主机。</value></data>
   <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>区域名称</value></data>
   <data name="SetupRegionContextRoleSelector.Header" xml:space="preserve"><value>上下文角色</value></data>
   <data name="SetupRegionRoleNone.Content" xml:space="preserve"><value>无</value></data>
@@ -832,6 +841,7 @@
   <data name="ProviderDetailYoudao" xml:space="preserve"><value>文本翻译 v3 · 游戏领域 · 自动识别源语言</value></data>
   <data name="ProviderDetailGoogleCloud" xml:space="preserve"><value>Translation v3 · 服务账号 JSON · 项目 ID 从凭据中读取</value></data>
   <data name="ProviderDetailOpenAi" xml:space="preserve"><value>OpenAI 接入点 · 流式输出 · 密钥保存在 Windows 凭据管理器中</value></data>
+  <data name="ProviderDetailGrok" xml:space="preserve"><value>xAI API · OpenAI 兼容流式输出 · 已启用游戏上下文</value></data>
   <data name="ProviderDetailDeepSeek" xml:space="preserve"><value>OpenAI 兼容流式输出 · 已启用游戏上下文</value></data>
   <data name="ProviderDetailQwen" xml:space="preserve"><value>阿里云百炼 · OpenAI 兼容流式输出</value></data>
   <data name="ProviderDetailQianfan" xml:space="preserve"><value>文心一言 · OpenAI 兼容流式输出</value></data>
@@ -866,10 +876,6 @@
   <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>自定义 REST 适配器</value></data>
   <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>尚无自定义适配器</value></data>
   <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>内置提供商不足时，可导入版本化 REST 适配器定义。</value></data>
-  <data name="ProviderInlineEndpointBox.Header" xml:space="preserve"><value>端点</value></data>
-  <data name="ProviderSaveEndpointButton.Content" xml:space="preserve"><value>保存端点</value></data>
-  <data name="ProviderEndpointSavedTitle" xml:space="preserve"><value>端点已保存</value></data>
-  <data name="ProviderEndpointSaveFailedTitle" xml:space="preserve"><value>端点未保存</value></data>
   <data name="ProviderOtherHeader.Text" xml:space="preserve"><value>其他</value></data>
   <data name="ProvidersEmptyTitle" xml:space="preserve"><value>尚未配置任何提供商</value></data>
   <data name="ProvidersEmptyBody" xml:space="preserve"><value>配置云提供商的凭据、安装本地模型或导入 REST 适配器以开始使用。</value></data>

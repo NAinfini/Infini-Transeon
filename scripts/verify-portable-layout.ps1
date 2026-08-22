@@ -39,6 +39,30 @@ foreach ($relativePath in $required) {
     }
 }
 
+$allowedRootDlls = @($manifest.allowedRootDlls)
+if ($allowedRootDlls.Count -eq 0 -or
+    @($allowedRootDlls | Select-Object -Unique).Count -ne $allowedRootDlls.Count) {
+    throw 'Portable manifest allowedRootDlls must be a non-empty unique list.'
+}
+foreach ($fileName in $allowedRootDlls) {
+    if ([string]::IsNullOrWhiteSpace($fileName) -or
+        [IO.Path]::GetExtension($fileName) -ine '.dll' -or
+        [IO.Path]::GetFileName($fileName) -ne $fileName) {
+        throw "Portable allowed DLL '$fileName' is not a root DLL file name."
+    }
+}
+$actualDlls = @(Get-ChildItem -LiteralPath $publishPath -Recurse -File -Filter '*.dll' |
+    ForEach-Object { [IO.Path]::GetRelativePath($publishPath, $_.FullName).Replace('\', '/') })
+$unexpectedRootDlls = @($actualDlls | Where-Object { $allowedRootDlls -notcontains $_ })
+if ($unexpectedRootDlls.Count -gt 0) {
+    throw "Portable layout exposes unexpected DLLs: $($unexpectedRootDlls -join ', ')"
+}
+foreach ($fileName in $allowedRootDlls) {
+    if ($actualDlls -notcontains $fileName) {
+        throw "Portable layout is missing allowed native DLL '$fileName'."
+    }
+}
+
 $relativeFiles = @(Get-ChildItem -LiteralPath $publishPath -Recurse -File | ForEach-Object {
     [IO.Path]::GetRelativePath($publishPath, $_.FullName).Replace('\', '/')
 })
@@ -55,5 +79,6 @@ foreach ($pattern in @($manifest.excludedPatterns)) {
 [pscustomobject]@{
     FileCount = $relativeFiles.Count
     RequiredFileCount = $required.Count
+    DllCount = $actualDlls.Count
     PublishDirectory = $publishPath
 }

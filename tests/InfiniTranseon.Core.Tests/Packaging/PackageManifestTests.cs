@@ -122,6 +122,56 @@ public sealed class PackageManifestTests
     }
 
     [Fact]
+    public void ReleaseUsesTheSupportedSingleFileWinUiContractAndOnlyTwoLooseNativeLibraries()
+    {
+        string root = FindRepositoryRoot();
+        XDocument project = XDocument.Load(Path.Combine(
+            root,
+            "src",
+            "InfiniTranseon.App",
+            "InfiniTranseon.App.csproj"));
+
+        XElement singleFileProperties = Assert.Single(
+            project.Descendants("PropertyGroup"),
+            group => group.Element("PublishSingleFile") is not null);
+        Assert.Equal("'$(SelfContained)' == 'true'", singleFileProperties.Attribute("Condition")?.Value);
+        Assert.Equal("true", singleFileProperties.Element("PublishSingleFile")?.Value);
+        Assert.Equal("true", singleFileProperties.Element("EnableMsixTooling")?.Value);
+        Assert.Equal("true", singleFileProperties.Element("IncludeAllContentForSelfExtract")?.Value);
+        XElement looseOnnxTarget = Assert.Single(
+            project.Descendants("Target"),
+            target => target.Attribute("Name")?.Value == "PublishLooseOnnxRuntime");
+        XElement looseOnnxCopy = Assert.Single(looseOnnxTarget.Elements("Copy"));
+        Assert.Equal("$(TargetDir)onnxruntime.dll", looseOnnxCopy.Attribute("SourceFiles")?.Value);
+        Assert.Equal("$(PublishDir)onnxruntime.dll", looseOnnxCopy.Attribute("DestinationFiles")?.Value);
+
+        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(root, "packaging", "portable-manifest.json")));
+        string[] allowedLibraries = manifest.RootElement.GetProperty("allowedRootDlls")
+            .EnumerateArray()
+            .Select(item => item.GetString())
+            .OfType<string>()
+            .ToArray();
+        Assert.Equal(
+            ["InfiniTranseon.ModelRuntime.Native.dll", "onnxruntime.dll"],
+            allowedLibraries);
+        string verifier = File.ReadAllText(
+            Path.Combine(root, "scripts", "verify-portable-layout.ps1"));
+        Assert.Contains("$manifest.allowedRootDlls", verifier, StringComparison.Ordinal);
+        Assert.Contains("exposes unexpected DLLs", verifier, StringComparison.Ordinal);
+
+        string workflow = File.ReadAllText(
+            Path.Combine(root, ".github", "workflows", "build-release.yml"));
+        Assert.Contains("-p:PublishSingleFile=true", workflow, StringComparison.Ordinal);
+        Assert.Contains("-p:EnableMsixTooling=true", workflow, StringComparison.Ordinal);
+        Assert.Contains("-p:IncludeAllContentForSelfExtract=true", workflow, StringComparison.Ordinal);
+
+        string installer = File.ReadAllText(Path.Combine(root, "packaging", "installer.wxs"));
+        Assert.DoesNotContain("e_sqlite3.dll", installer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Microsoft.ui.xaml.dll", installer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void IdentityManifestAssetsExistAndAreStagedByTheReleaseScript()
     {
         string root = FindRepositoryRoot();
