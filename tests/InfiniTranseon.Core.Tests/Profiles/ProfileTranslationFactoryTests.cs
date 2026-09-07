@@ -8,6 +8,7 @@ public sealed class ProfileTranslationFactoryTests
     [Fact]
     public void CreatesStableOrderedChannelsFromEnabledProfileEntries()
     {
+        ProfileDocument profile = ProfileDocument.Create("Game", "ja", "zh-Hans");
         Guid firstId = Guid.NewGuid();
         Guid secondId = Guid.NewGuid();
         var region = ProfileRegion.Create("Dialogue", new NormalizedRect(0, 0, 1, 1)) with
@@ -17,6 +18,7 @@ public sealed class ProfileTranslationFactoryTests
                 new ProfileTranslationChannel
                 {
                     ChannelId = secondId,
+                    TranslationGroupId = profile.ActiveTranslationGroupId,
                     InitialProviderId = "second",
                     DisplayLabel = "Second",
                     DisplayOrder = 2,
@@ -28,6 +30,7 @@ public sealed class ProfileTranslationFactoryTests
                 new ProfileTranslationChannel
                 {
                     ChannelId = firstId,
+                    TranslationGroupId = profile.ActiveTranslationGroupId,
                     InitialProviderId = "first",
                     DisplayLabel = "First",
                     DisplayOrder = 1,
@@ -53,7 +56,7 @@ public sealed class ProfileTranslationFactoryTests
         };
 
         IReadOnlyList<TranslationChannelDefinition> channels =
-            ProfileTranslationFactory.CreateChannels(region);
+            ProfileTranslationFactory.CreateChannels(profile, region);
 
         Assert.Equal([firstId, secondId], channels.Select(item => item.Id.Value));
         Assert.Equal([1, 2], channels.Select(item => item.DisplaySlot.Order));

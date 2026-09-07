@@ -52,21 +52,6 @@ public static class ProfileTranslationFactory
             }).ToArray());
     }
 
-    // Compatibility seam for callers that have not yet adopted grouped profiles. It is deliberately
-    // limited to a synthetic single group and should not be used by the runtime.
-    public static IReadOnlyList<TranslationChannelDefinition> CreateChannels(ProfileRegion region)
-    {
-        ArgumentNullException.ThrowIfNull(region);
-        Guid groupId = region.TranslationChannels
-            .Select(channel => channel.TranslationGroupId)
-            .FirstOrDefault(id => id != Guid.Empty);
-        return CreateChannels(new ProfileDocument
-        {
-            TranslationGroups = [new ProfileTranslationGroup { TranslationGroupId = groupId }],
-            ActiveTranslationGroupId = groupId,
-        }, region);
-    }
-
     public static TranslationRunOptions CreateRunOptions(
         ProfileDocument profile,
         string? scene,

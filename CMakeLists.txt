@@ -13,7 +13,6 @@ if(MSVC)
 endif()
 
 option(INFINI_ENABLE_ADDRESS_SANITIZER "Enable AddressSanitizer for native test builds" OFF)
-option(INFINI_BUILD_SPIKES "Build development-only platform and capture spikes" OFF)
 option(
     INFINI_ENABLE_LOCAL_MODEL_RUNTIME
     "Build the optional CTranslate2/SentencePiece local translation runtime"
@@ -65,9 +64,6 @@ add_subdirectory(src/InfiniTranseon.Engine.Native)
 add_subdirectory(src/InfiniTranseon.EngineHost)
 if(INFINI_ENABLE_LOCAL_MODEL_RUNTIME)
     add_subdirectory(src/InfiniTranseon.ModelRuntime.Native)
-endif()
-if(INFINI_BUILD_SPIKES)
-    add_subdirectory(spikes/InfiniTranseon.CaptureSpike)
 endif()
 
 if(BUILD_TESTING)
