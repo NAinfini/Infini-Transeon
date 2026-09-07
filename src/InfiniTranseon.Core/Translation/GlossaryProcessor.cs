@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using InfiniTranseon.Contracts.Translation;
 
 namespace InfiniTranseon.Core.Translation;
@@ -10,6 +11,15 @@ public sealed record ProtectedGlossaryText(
 
 public static class GlossaryProcessor
 {
+    // Hash the exact ordered payload sent to translators. Delimiters inside terms cannot
+    // collide, and a changed glossary cannot reuse translations or manual corrections
+    // authored against a different set of terms.
+    public static string ComputeVersion(IReadOnlyList<GlossaryEntry> glossary)
+    {
+        ArgumentNullException.ThrowIfNull(glossary);
+        return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(glossary)));
+    }
+
     public static ProtectedGlossaryText Protect(
         string source,
         IReadOnlyList<GlossaryEntry> glossary)

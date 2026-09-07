@@ -83,6 +83,7 @@ public static class EngineRuntimeComposition
     // deployment decision documented here and pinned so the credential bindings stay stable.
     public const string OpenAiDefaultModel = "gpt-4o-mini";
     public const string GrokDefaultModel = "grok-4.6";
+    public const string OpenRouterDefaultModel = "openrouter/free";
     public const string DeepSeekDefaultModel = "deepseek-v4-flash";
     public const string QwenDefaultModel = "qwen3.7-plus";
     public const string QianfanDefaultModel = "ernie-5.0";
@@ -168,6 +169,10 @@ public static class EngineRuntimeComposition
     public static OpenAiCompatibleOptions GrokOptions { get; } =
         BuiltInProviderDefinitions.Grok(GrokDefaultModel, "llm.grok");
 
+    /// <summary>OpenRouter's OpenAI-compatible endpoint, defaulting to its dynamic free router.</summary>
+    public static OpenAiCompatibleOptions OpenRouterOptions { get; } =
+        BuiltInProviderDefinitions.OpenRouter(OpenRouterDefaultModel, "llm.openrouter");
+
     /// <summary>DeepSeek's official OpenAI-compatible endpoint.</summary>
     public static OpenAiCompatibleOptions DeepSeekOptions { get; } =
         BuiltInProviderDefinitions.DeepSeek(DeepSeekDefaultModel, "llm.deepseek");
@@ -248,20 +253,27 @@ public static class EngineRuntimeComposition
         IReadOnlyList<ProviderRegistration>? additionalRegistrations = null,
         bool strictOffline = false,
         IReadOnlyDictionary<string, string>? providerEndpoints = null,
-        IReadOnlyDictionary<string, string>? providerModels = null)
+        IReadOnlyDictionary<string, string>? providerModels = null,
+        IReadOnlyDictionary<string, ModelReasoningEffort>? providerReasoningEfforts = null,
+        IReadOnlyList<CustomOpenAiCompatibleDefinition>? customOpenAiProviders = null)
     {
         ArgumentNullException.ThrowIfNull(credentials);
         IReadOnlyDictionary<string, string> endpoints = providerEndpoints ??
             new Dictionary<string, string>(StringComparer.Ordinal);
         IReadOnlyDictionary<string, string> models = providerModels ??
             new Dictionary<string, string>(StringComparer.Ordinal);
+        IReadOnlyDictionary<string, ModelReasoningEffort> reasoningEfforts =
+            providerReasoningEfforts ??
+            new Dictionary<string, ModelReasoningEffort>(StringComparer.Ordinal);
         List<ProviderRegistration> registrations = strictOffline
             ? []
             : new List<ProviderRegistration>(
                 BuiltInProviderSpecs.CreateTranslationRegistrations(
                     credentials,
                     endpoints,
-                    models));
+                    models,
+                    reasoningEfforts,
+                    customOpenAiProviders));
         if (!strictOffline)
         {
             foreach (DeclarativeRestAdapterDefinition definition in customAdapters ?? [])
@@ -308,7 +320,9 @@ public static class EngineRuntimeComposition
         LocalModelManagementService? localModels = null,
         AppDataOptions? appData = null,
         OcrBackendPreference ocrBackend = OcrBackendPreference.Automatic,
-        IReadOnlyDictionary<string, string>? providerModels = null)
+        IReadOnlyDictionary<string, string>? providerModels = null,
+        IReadOnlyDictionary<string, ModelReasoningEffort>? providerReasoningEfforts = null,
+        IReadOnlyList<CustomOpenAiCompatibleDefinition>? customOpenAiProviders = null)
     {
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(credentials);
@@ -330,7 +344,9 @@ public static class EngineRuntimeComposition
                     local.Registrations,
                     strictOffline,
                     providerEndpoints,
-                    providerModels),
+                    providerModels,
+                    providerReasoningEfforts,
+                    customOpenAiProviders),
                 new ProviderServiceLimits());
             EngineRuntimeBackendFactory backendFactory = EngineRuntimeBackendAssembler.CreateFactory(
                 new EngineRuntimeBackendOptions(binding, providers, CommandTimeout, Stabilizer)

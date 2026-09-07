@@ -1,4 +1,5 @@
 using System.Globalization;
+using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Scheduling;
 
 namespace InfiniTranseon.Core.Settings;
@@ -97,6 +98,8 @@ public sealed record ApplicationSettings
         new Dictionary<string, string>(StringComparer.Ordinal);
     public IReadOnlyDictionary<string, string> ProviderModels { get; init; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, ModelReasoningEffort> ProviderReasoningEfforts { get; init; } =
+        new Dictionary<string, ModelReasoningEffort>(StringComparer.Ordinal);
     public bool ReducedMotion { get; init; }
     public bool CloseToTray { get; init; } = true;
     public bool CloseToTrayConfirmed { get; init; }
@@ -156,6 +159,7 @@ public sealed record ApplicationSettings
         }
         ArgumentNullException.ThrowIfNull(ProviderEndpoints);
         ArgumentNullException.ThrowIfNull(ProviderModels);
+        ArgumentNullException.ThrowIfNull(ProviderReasoningEfforts);
         ArgumentNullException.ThrowIfNull(PinnedProfileIds);
         if (PinnedProfileIds.Count > 256 ||
             PinnedProfileIds.Any(profileId => profileId == Guid.Empty) ||
@@ -163,7 +167,8 @@ public sealed record ApplicationSettings
         {
             throw new InvalidDataException("Pinned profile IDs are invalid.");
         }
-        if (ProviderEndpoints.Count > 32 || ProviderModels.Count > 32)
+        if (ProviderEndpoints.Count > 32 || ProviderModels.Count > 32 ||
+            ProviderReasoningEfforts.Count > 32)
         {
             throw new InvalidDataException("Too many provider overrides are configured.");
         }
@@ -193,6 +198,15 @@ public sealed record ApplicationSettings
             {
                 throw new InvalidDataException(
                     $"Provider model '{providerId}' is invalid.");
+            }
+        }
+        foreach ((string providerId, ModelReasoningEffort effort) in ProviderReasoningEfforts)
+        {
+            if (string.IsNullOrWhiteSpace(providerId) || providerId.Length > 128 ||
+                !Enum.IsDefined(effort))
+            {
+                throw new InvalidDataException(
+                    $"Provider reasoning effort '{providerId}' is invalid.");
             }
         }
         ArgumentNullException.ThrowIfNull(Performance);

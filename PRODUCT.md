@@ -43,10 +43,9 @@ The product name is Infini-Transeon. Product language is calm, direct, and techn
 
 ## Evidence on Hand
 
-- Product and immersion rules: `docs/product/2026-07-19-product-ux-architecture-review.md`
-- Approved redesign decisions: `docs/design/2026-07-24-redesign/00-decisions.md`
-- Page and workflow specifications: `docs/design/2026-07-24-redesign/05-page-specs.md`
-- Runtime architecture: `docs/superpowers/specs/2026-07-19-runtime-architecture-design.md`
+- Current product constraints: this document and `DESIGN.md`
+- Installation and usage: `README.md` and `README.zh-CN.md`
+- Customer-release checks and packaging: `RELEASING.md` and `.github/workflows/build-release.yml`
 - Existing WinUI implementation, tests, and resource dictionaries under `src/InfiniTranseon.App` and `tests/InfiniTranseon.App.Tests`
 
 No customer testimonials, usage benchmarks, commercial claims, or external brand assets have been supplied; future work must not fabricate them.

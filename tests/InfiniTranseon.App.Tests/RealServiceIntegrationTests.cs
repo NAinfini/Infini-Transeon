@@ -9,6 +9,7 @@ using InfiniTranseon.Core.Storage;
 using InfiniTranseon.Core.Translation;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
+using ModelReasoningEffort = InfiniTranseon.Contracts.Translation.ModelReasoningEffort;
 using ApplicationSettingsRepository = InfiniTranseon.Core.Settings.ApplicationSettingsRepository;
 
 namespace InfiniTranseon.App.Tests;
@@ -39,6 +40,44 @@ public sealed class RealServiceIntegrationTests
         new(Guid.Empty, name, "ja", "zh-Hans", Guid.Parse("11111111-1111-1111-1111-111111111111"),
             "ELDEN RING", "Window", "3840x2160 - 144dpi", provider,
             [new ProfileRegionDraft("Dialogue", RegionPriorityLevel.P0)]);
+
+    [Fact]
+    public async Task HistoryCorrectionsUseTheCurrentGlossaryContentAndExpireAfterAnEdit()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string root = NewTempRoot();
+        var options = new AppDataOptions(root);
+        try
+        {
+            var profiles = new ProfileRepository(options.DatabasePath);
+            ProfileDocument profile = ProfileDocumentData.WithGlossary(
+                ProfileDocument.Create("Game", "en", "zh-Hans"),
+                [new GlossaryEntry("Sword", "旧术语", "Profile", true, true, "")]);
+            await profiles.SaveAsync(profile, ct);
+            var history = new RealHistoryService(options, profiles,
+                new FakeSettingsService(), new FakeRuntimeControlService());
+            var item = new HistoryEvent("12:00:00", "Sword", "Dialogue", [], profile.ProfileId, Guid.NewGuid(), profile.Name);
+            await history.SaveCorrectionAsync(item, "手动纠正", ct);
+            var store = new CorrectionStore(options.DatabasePath);
+            CorrectionScope Scope(ProfileDocument document) => new(document.ProfileId, null,
+                document.SourceLanguage, document.TargetLanguage,
+                GlossaryProcessor.ComputeVersion(ProfileDocumentData.ReadTranslationGlossary(document)));
+
+            Assert.Equal("手动纠正", (await store.FindAsync(Scope(profile), item.SourceText, ct))?.Corrected);
+            var glossary = new RealGlossaryService(profiles);
+            glossary.SelectProfile(profile.ProfileId);
+            await glossary.AddOrUpdateAsync(
+                new GlossaryEntry("Sword", "新术语", "Profile", true, true, ""), "Sword", ct);
+            ProfileDocument changed = (await profiles.LoadAsync(profile.ProfileId, ct))!;
+            Assert.Null(await store.FindAsync(Scope(changed), item.SourceText, ct));
+            await history.SaveCorrectionAsync(item, "新纠正", ct);
+            Assert.Equal("新纠正", (await store.FindAsync(Scope(changed), item.SourceText, ct))?.Corrected);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 
     [Fact]
     public async Task History_reads_all_profiles_and_persists_exact_text_corrections()
@@ -115,7 +154,7 @@ public sealed class RealServiceIntegrationTests
                         null,
                         first.SourceLanguage,
                         first.TargetLanguage,
-                        "1"),
+                        GlossaryProcessor.ComputeVersion(ProfileDocumentData.ReadTranslationGlossary(first))),
                     selected.SourceText,
                     ct);
             Assert.Equal("corrected one", correction?.Corrected);
@@ -843,6 +882,14 @@ public sealed class RealServiceIntegrationTests
 
         public Task<ProviderRow> ImportRestAdapterAsync(
             Stream source,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderRow> AddOpenAiCompatibleProviderAsync(
+            string displayName,
+            Uri endpoint,
+            string model,
+            ModelReasoningEffort? reasoningEffort,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

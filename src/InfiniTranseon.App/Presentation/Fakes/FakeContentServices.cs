@@ -1,5 +1,6 @@
 using InfiniTranseon.App.Controls;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Runtime;
 
 namespace InfiniTranseon.App.Presentation.Fakes;
@@ -501,6 +502,15 @@ public sealed class FakeSettingsService : ISettingsService
         CancellationToken cancellationToken = default) =>
         Task.FromException<ProviderRow>(
             new NotSupportedException("Fake settings does not persist custom REST adapters."));
+
+    public Task<ProviderRow> AddOpenAiCompatibleProviderAsync(
+        string displayName,
+        Uri endpoint,
+        string model,
+        ModelReasoningEffort? reasoningEffort,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<ProviderRow>(
+            new NotSupportedException("Fake settings does not persist custom providers."));
 
     public Task RemoveCustomProviderAsync(
         string providerId,

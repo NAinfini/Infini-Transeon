@@ -203,6 +203,10 @@ public sealed class OnlineProviderService : IDisposable
         }
         switch (terminal)
         {
+            case ProviderDone when string.IsNullOrWhiteSpace(latestSnapshot):
+                yield return new ProviderFailed(
+                    terminalExecution, "provider.emptyOutput", false);
+                break;
             case ProviderDone done:
                 yield return new ProviderCompleted(
                     terminalExecution,

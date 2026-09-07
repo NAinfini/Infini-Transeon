@@ -20,7 +20,8 @@ public sealed record OpenAiCompatibleOptions(
     int MaximumSseEvents = 4096,
     int MaximumSseLineCharacters = 65_536,
     long MaximumResponseBytes = 4 * 1024 * 1024,
-    int MaximumRequestBytes = 1024 * 1024);
+    int MaximumRequestBytes = 1024 * 1024,
+    ModelReasoningEffort? ReasoningEffort = null);
 
 public sealed class OpenAiCompatibleProvider : ITranslationProvider
 {
@@ -49,6 +50,12 @@ public sealed class OpenAiCompatibleProvider : ITranslationProvider
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumSseLineCharacters, 256);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumResponseBytes, 1024);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumRequestBytes, 1024);
+        if (options.ReasoningEffort is { } reasoningEffort && !Enum.IsDefined(reasoningEffort))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "The model reasoning effort is unsupported.");
+        }
         _options = options;
         _httpClient = httpClient;
         _credentialStore = credentialStore;
@@ -233,6 +240,17 @@ public sealed class OpenAiCompatibleProvider : ITranslationProvider
             writer.WriteString("model", _options.Model);
             writer.WriteBoolean("stream", true);
             writer.WriteNumber("max_tokens", request.MaximumOutputTokens);
+            if (_options.ReasoningEffort is { } reasoningEffort)
+            {
+                writer.WriteString("reasoning_effort", reasoningEffort switch
+                {
+                    ModelReasoningEffort.Low => "low",
+                    ModelReasoningEffort.Medium => "medium",
+                    ModelReasoningEffort.High => "high",
+                    _ => throw new InvalidOperationException(
+                        "The configured model reasoning effort is unsupported."),
+                });
+            }
             writer.WriteStartArray("messages");
             writer.WriteStartObject();
             writer.WriteString("role", "system");
@@ -333,12 +351,30 @@ public sealed class OpenAiCompatibleProvider : ITranslationProvider
             JsonElement root = document.RootElement;
             string? content = null;
             if (root.TryGetProperty("choices", out JsonElement choices) &&
-                choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
-                choices[0].TryGetProperty("delta", out JsonElement delta) &&
-                delta.TryGetProperty("content", out JsonElement contentElement) &&
-                contentElement.ValueKind == JsonValueKind.String)
+                choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
             {
-                content = contentElement.GetString();
+                JsonElement choice = choices[0];
+                if (choice.TryGetProperty("delta", out JsonElement delta) &&
+                    delta.TryGetProperty("content", out JsonElement contentElement) &&
+                    contentElement.ValueKind == JsonValueKind.String)
+                {
+                    content = contentElement.GetString();
+                }
+                if (choice.TryGetProperty("finish_reason", out JsonElement finishReason) &&
+                    finishReason.ValueKind != JsonValueKind.Null)
+                {
+                    if (finishReason.ValueKind != JsonValueKind.String)
+                        return new ParseResult(null, null,
+                            new ProviderWireFailure("provider.malformedSse", false));
+                    string reason = finishReason.GetString()!;
+                    if (!string.IsNullOrEmpty(reason) && reason != "stop")
+                        return new ParseResult(null, null,
+                            new ProviderWireFailure(
+                                reason == "length"
+                                    ? "provider.openai.finish.length"
+                                    : "provider.openai.finish.unsupported",
+                                false));
+                }
             }
             ProviderUsage? usage = null;
             if (root.TryGetProperty("usage", out JsonElement usageElement) &&

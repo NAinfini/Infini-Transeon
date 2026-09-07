@@ -16,6 +16,7 @@ internal sealed record BuiltInProviderSpec(
         IBoundCredentialStore,
         IReadOnlyDictionary<string, string>,
         IReadOnlyDictionary<string, string>,
+        IReadOnlyDictionary<string, ModelReasoningEffort>,
         ProviderRegistration>? CreateTranslationRegistration,
     Func<
         IBoundCredentialStore,
@@ -234,6 +235,11 @@ internal static class BuiltInProviderSpecs
             "ProviderKindLlmCloud",
             "ProviderDetailGrok"),
         OpenAiCompatible(
+            EngineRuntimeComposition.OpenRouterOptions,
+            "OpenRouter",
+            "ProviderKindLlmCloud",
+            "ProviderDetailOpenRouter"),
+        OpenAiCompatible(
             EngineRuntimeComposition.DeepSeekOptions,
             "DeepSeek",
             "ProviderKindLlmCloudChina",
@@ -335,12 +341,16 @@ internal static class BuiltInProviderSpecs
     public static IReadOnlyList<ProviderRegistration> CreateTranslationRegistrations(
         IBoundCredentialStore credentials,
         IReadOnlyDictionary<string, string> providerEndpoints,
-        IReadOnlyDictionary<string, string> providerModels) =>
-        All.Where(spec => spec.CreateTranslationRegistration is not null)
+        IReadOnlyDictionary<string, string> providerModels,
+        IReadOnlyDictionary<string, ModelReasoningEffort> providerReasoningEfforts,
+        IReadOnlyList<CustomOpenAiCompatibleDefinition>? customOpenAiProviders = null) =>
+        All.Concat((customOpenAiProviders ?? []).Select(CreateCustomOpenAiCompatibleSpec))
+            .Where(spec => spec.CreateTranslationRegistration is not null)
             .Select(spec => spec.CreateTranslationRegistration!(
                 credentials,
                 providerEndpoints,
-                providerModels))
+                providerModels,
+                providerReasoningEfforts))
             .ToArray();
 
     public static IReadOnlyList<OcrProviderRegistration> CreateOcrRegistrations(
@@ -359,7 +369,7 @@ internal static class BuiltInProviderSpecs
         Func<IBoundCredentialStore, ITranslationProvider> createProvider) =>
         new(
             catalog,
-            (credentials, _, _) => new ProviderRegistration(
+            (credentials, _, _, _) => new ProviderRegistration(
                 ProviderDescriptor.Online(catalog.Id, kind, modelId),
                 () => createProvider(credentials)),
             CreateOcrRegistration: null);
@@ -397,7 +407,8 @@ internal static class BuiltInProviderSpecs
         OpenAiCompatibleOptions options,
         string displayName,
         string kindResourceKey,
-        string detailResourceKey)
+        string detailResourceKey,
+        bool isCustom = false)
     {
         CatalogProvider catalog = new(
                 options.ProviderId,
@@ -411,6 +422,8 @@ internal static class BuiltInProviderSpecs
             DefaultModel = options.Model,
             CanOverrideEndpoint = true,
             CanOverrideModel = true,
+            CanOverrideReasoningEffort = true,
+            IsCustom = isCustom,
         };
         CatalogCredential credential = AssertSingleCredential(catalog) with
         {
@@ -420,12 +433,13 @@ internal static class BuiltInProviderSpecs
         catalog = catalog with { Credentials = [credential] };
         return new BuiltInProviderSpec(
             catalog,
-            (credentials, endpoints, models) =>
+            (credentials, endpoints, models, reasoningEfforts) =>
             {
                 OpenAiCompatibleOptions configured = options with
                 {
                     Endpoint = catalog.ResolveEndpoint(endpoints),
                     Model = catalog.ResolveModel(models),
+                    ReasoningEffort = catalog.ResolveReasoningEffort(reasoningEfforts),
                 };
                 return new ProviderRegistration(
                     ProviderDescriptor.Online(
@@ -441,6 +455,26 @@ internal static class BuiltInProviderSpecs
                         credentials));
             },
             CreateOcrRegistration: null);
+    }
+
+    internal static BuiltInProviderSpec CreateCustomOpenAiCompatibleSpec(
+        CustomOpenAiCompatibleDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        var options = new OpenAiCompatibleOptions(
+            definition.Id,
+            definition.Endpoint,
+            definition.Model,
+            definition.CredentialReference,
+            ProxyPolicy.System,
+            IncludeGameContext: true,
+            IncludeRecentHistory: true);
+        return OpenAiCompatible(
+            options,
+            definition.DisplayName,
+            "ProviderKindLlmCustom",
+            "ProviderDetailCustomOpenAi",
+            isCustom: true);
     }
 
     private static BuiltInProviderSpec Anthropic()
@@ -467,7 +501,7 @@ internal static class BuiltInProviderSpecs
         catalog = catalog with { Credentials = [credential] };
         return new BuiltInProviderSpec(
             catalog,
-            (credentials, endpoints, models) =>
+            (credentials, endpoints, models, _) =>
             {
                 AnthropicProviderOptions configured = defaults with
                 {
@@ -506,7 +540,7 @@ internal static class BuiltInProviderSpecs
         };
         return new BuiltInProviderSpec(
             catalog,
-            (credentials, _, models) =>
+            (credentials, _, models, _) =>
             {
                 string model = catalog.ResolveModel(models);
                 GeminiProviderOptions configured = defaults with

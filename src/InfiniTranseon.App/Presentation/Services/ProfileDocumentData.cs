@@ -69,6 +69,11 @@ internal static class ProfileDocumentData
         return document with { ExtensionData = extension };
     }
 
+    public static Contracts.Translation.GlossaryEntry[] ReadTranslationGlossary(ProfileDocument document) =>
+        ReadGlossary(document)
+            .Select(entry => new Contracts.Translation.GlossaryEntry(entry.SourceTerm, entry.TargetTerm))
+            .ToArray();
+
     private static Dictionary<string, JsonElement> Clone(IReadOnlyDictionary<string, JsonElement> source) =>
         new(source, StringComparer.Ordinal);
 }

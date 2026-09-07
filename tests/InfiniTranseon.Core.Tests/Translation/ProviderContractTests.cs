@@ -94,6 +94,9 @@ public sealed class ProviderContractTests
     {
         OpenAiCompatibleOptions openAi = BuiltInProviderDefinitions.OpenAi("gpt-configured", "openai-key");
         OpenAiCompatibleOptions grok = BuiltInProviderDefinitions.Grok("grok-configured", "grok-key");
+        OpenAiCompatibleOptions openRouter = BuiltInProviderDefinitions.OpenRouter(
+            "openrouter/free",
+            "openrouter-key");
         OpenAiCompatibleOptions deepSeek = BuiltInProviderDefinitions.DeepSeek("deepseek-configured", "deepseek-key");
         OpenAiCompatibleOptions qwen = BuiltInProviderDefinitions.QwenModelStudio("qwen-configured", "qwen-key");
         OpenAiCompatibleOptions qianfan = BuiltInProviderDefinitions.BaiduQianfan("ernie-configured", "qianfan-key");
@@ -103,6 +106,10 @@ public sealed class ProviderContractTests
         Assert.Equal("https://api.x.ai/v1/chat/completions", grok.Endpoint.AbsoluteUri);
         Assert.Equal("grok-configured", grok.Model);
         Assert.Equal("grok-key", grok.CredentialReference);
+        Assert.Equal("llm.openrouter", openRouter.ProviderId);
+        Assert.Equal("https://openrouter.ai/api/v1/chat/completions", openRouter.Endpoint.AbsoluteUri);
+        Assert.Equal("openrouter/free", openRouter.Model);
+        Assert.Equal("openrouter-key", openRouter.CredentialReference);
         Assert.Equal("https://api.deepseek.com/chat/completions", deepSeek.Endpoint.AbsoluteUri);
         Assert.Equal("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
             qwen.Endpoint.AbsoluteUri);
@@ -327,7 +334,7 @@ public sealed class ProviderContractTests
         provider.Complete();
 
         IReadOnlyList<ProviderEvent> events = await running;
-        Assert.IsType<ProviderCompleted>(Assert.Single(events));
+        Assert.IsType<ProviderCompleted>(events[^1]);
         await Assert.ThrowsAsync<ObjectDisposedException>(() => CollectAsync(service.StreamAsync(
             "test.provider", CreateRequest(), TestContext.Current.CancellationToken)));
     }
@@ -687,6 +694,42 @@ public sealed class ProviderContractTests
         Assert.Contains("Game", requestBody, StringComparison.Ordinal);
         Assert.Contains("Description", requestBody, StringComparison.Ordinal);
         Assert.Contains("test-model", requestBody, StringComparison.Ordinal);
+        using JsonDocument requestJson = JsonDocument.Parse(requestBody!);
+        Assert.False(requestJson.RootElement.TryGetProperty("reasoning_effort", out _));
+    }
+
+    [Fact]
+    public async Task OpenAiCompatibleProviderSendsExplicitReasoningEffort()
+    {
+        string? requestBody = null;
+        var handler = new RecordingHandler(request =>
+        {
+            requestBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("data: [DONE]\n\n", Encoding.UTF8, "text/event-stream"),
+            };
+        });
+        var credentials = new BoundCredentialStore(new MemoryCredentialStore());
+        var options = new OpenAiCompatibleOptions(
+            "openai.reasoning",
+            new Uri("https://api.example.test/v1/chat/completions"),
+            "reasoning-model",
+            "key-ref",
+            ProxyPolicy.System,
+            IncludeGameContext: false,
+            IncludeRecentHistory: false,
+            ReasoningEffort: ModelReasoningEffort.High);
+        var provider = new OpenAiCompatibleProvider(options, new HttpClient(handler), credentials);
+        await credentials.WriteAsync(
+            "key-ref", "secret", provider.CreateCredentialBinding(), CancellationToken.None);
+
+        await CollectWireAsync(provider.StreamAsync(CreateRequest(), CancellationToken.None));
+
+        using JsonDocument requestJson = JsonDocument.Parse(requestBody!);
+        Assert.Equal(
+            "high",
+            requestJson.RootElement.GetProperty("reasoning_effort").GetString());
     }
 
     [Fact]
@@ -1221,7 +1264,8 @@ public sealed class ProviderContractTests
         {
             Started.TrySetResult();
             await _release.Task.WaitAsync(cancellationToken);
-            yield return new ProviderDone(0, ProviderUsage.None);
+            yield return new ProviderDelta(1, "completed");
+            yield return new ProviderDone(1, ProviderUsage.None);
         }
     }
 

@@ -63,6 +63,8 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
         }
 
         IReadOnlyList<DeclarativeRestAdapterDefinition> customDefinitions = _customAdapters.Load();
+        IReadOnlyList<CustomOpenAiCompatibleDefinition> customOpenAiProviders =
+            _customAdapters.LoadOpenAiCompatible();
         if (request.ProviderId.StartsWith(
                 EngineRuntimeComposition.LocalTranslationProviderIdPrefix,
                 StringComparison.Ordinal))
@@ -126,7 +128,9 @@ public sealed class CatalogTranslationProbe : ITranslationProbe
                 _credentials,
                 customDefinitions,
                 providerEndpoints: settings.EffectiveProviderEndpoints,
-                providerModels: settings.EffectiveProviderModels);
+                providerModels: settings.EffectiveProviderModels,
+                providerReasoningEfforts: settings.EffectiveProviderReasoningEfforts,
+                customOpenAiProviders: customOpenAiProviders);
         return await new TranslationProbe(registry, provider.Id)
             .TranslateAsync(request, cancellationToken)
             .ConfigureAwait(false);

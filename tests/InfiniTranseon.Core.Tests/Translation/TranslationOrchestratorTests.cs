@@ -1,5 +1,6 @@
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Contracts.Translation;
+using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Translation;
 
 namespace InfiniTranseon.Core.Tests.Translation;
@@ -258,6 +259,57 @@ public sealed class TranslationOrchestratorTests
         Assert.Equal(0m, hit.EstimatedCost);
         Assert.Null(hit.CostCurrency);
         Assert.False(hit.EstimateOnly);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GlossaryEditsInvalidateCachedTranslationsIncludingAfterReopen(bool persistent)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "InfiniTranseonTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            int calls = 0;
+            using OnlineProviderService providers = CreateProviders(new Dictionary<string, Func<TranslationRequest, ProviderWireEvent[]>>
+            {
+                ["cached"] = request =>
+                {
+                    calls++;
+                    return Success(request.Glossary.Count == 0 ? "unconstrained" : request.Glossary[0].Target);
+                },
+            });
+            var profile = ProfileDocument.Create("Game", "en", "zh-Hans");
+            TranslationRunOptions Options(string? term) => ProfileTranslationFactory.CreateRunOptions(
+                profile, null, null, [], [], TimeSpan.FromSeconds(2), 1000, 500,
+                term is null ? [] : [new GlossaryEntry("source", term)]);
+            TranslationMemory Memory() => new(new TranslationMemoryOptions(PersistentEnabled: persistent),
+                Path.Combine(directory, "memory.db"));
+            var runner = new TranslationChannelRunner(providers, memory: Memory());
+            TranslationChannelDefinition channel = CreateChannel("cached", 0) with
+            {
+                Cache = new CachePolicy(true, persistent, false),
+            };
+            await CollectAsync(runner.RunAsync(CreateSource(), channel, Options("旧术语"), TestContext.Current.CancellationToken));
+            if (persistent) runner = new TranslationChannelRunner(providers, memory: Memory());
+
+            var edited = await CollectAsync(runner.RunAsync(CreateSource(), channel, Options("新术语"), TestContext.Current.CancellationToken));
+            Assert.Equal("新术语", edited.Last().Text);
+            Assert.False(edited.Last().CacheHit);
+            Assert.Equal(2, calls);
+
+            var unchanged = await CollectAsync(runner.RunAsync(CreateSource(), channel, Options("新术语"), TestContext.Current.CancellationToken));
+            Assert.True(Assert.Single(unchanged).CacheHit);
+            Assert.Equal(2, calls);
+
+            var removed = await CollectAsync(runner.RunAsync(CreateSource(), channel, Options(null), TestContext.Current.CancellationToken));
+            Assert.Equal("unconstrained", removed.Last().Text);
+            Assert.Equal(3, calls);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

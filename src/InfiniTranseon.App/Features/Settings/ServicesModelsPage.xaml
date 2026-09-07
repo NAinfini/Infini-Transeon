@@ -93,12 +93,21 @@ FORM: Global provider workspace in the approved native Fluent direction.
             EmptyTitle="{x:Bind ProvidersEmptyTitle, Mode=OneTime}"
             EmptyBody="{x:Bind ProvidersEmptyBody, Mode=OneTime}">
             <controls:PageShell.HeaderCommands>
-                <Button
-                    x:Uid="AddRestAdapterButton"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Click="OnAddRestAdapterClick">
-                    <TextBlock x:Uid="AddRestAdapterButtonLabel" />
-                </Button>
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="{StaticResource SpaceS}">
+                    <Button
+                        x:Uid="AddThirdPartyApiButton"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="OnAddThirdPartyApiClick">
+                        <TextBlock x:Uid="AddThirdPartyApiButtonLabel" />
+                    </Button>
+                    <Button
+                        x:Uid="AddRestAdapterButton"
+                        Click="OnAddRestAdapterClick">
+                        <TextBlock x:Uid="AddRestAdapterButtonLabel" />
+                    </Button>
+                </StackPanel>
             </controls:PageShell.HeaderCommands>
             <controls:PageShell.PageContent>
                 <StackPanel Spacing="{StaticResource SpaceL}">

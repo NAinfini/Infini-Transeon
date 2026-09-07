@@ -65,9 +65,9 @@ public sealed class TranslationProbeTests
     public async Task AggregatesProviderDeltasOnSuccess()
     {
         var registry = Registry(new StubProvider(
-            new ProviderDelta(0, "Ni"),
-            new ProviderDelta(1, "hao"),
-            new ProviderDone(1, ProviderUsage.None)));
+            new ProviderDelta(1, "Ni"),
+            new ProviderDelta(2, "hao"),
+            new ProviderDone(2, ProviderUsage.None)));
         var probe = new TranslationProbe(registry, ProviderId);
 
         TranslationProbeResult result = await probe.TranslateAsync(
@@ -94,7 +94,7 @@ public sealed class TranslationProbeTests
     [Fact]
     public async Task ReportsNoOutputWhenStreamEndsWithoutDone()
     {
-        var registry = Registry(new StubProvider(new ProviderDelta(0, "partial")));
+        var registry = Registry(new StubProvider(new ProviderDelta(1, "partial")));
         var probe = new TranslationProbe(registry, ProviderId);
 
         TranslationProbeResult result = await probe.TranslateAsync(

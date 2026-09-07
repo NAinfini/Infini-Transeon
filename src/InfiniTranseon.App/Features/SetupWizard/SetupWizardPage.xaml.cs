@@ -34,6 +34,8 @@ namespace InfiniTranseon.App.Features.SetupWizard;
 /// </summary>
 public sealed partial class SetupWizardPage : Page
 {
+    private const double Step3StackThresholdEpx = 920;
+
     // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
     private static ResourceLoader Strings => Localization.AppStrings.Loader;
 
@@ -54,6 +56,7 @@ public sealed partial class SetupWizardPage : Page
     private bool _isSynchronizingLanguageText;
     private bool _isSynchronizingTargetSelection;
     private bool _updatingInspector;
+    private bool? _isStep3Stacked;
 
     public SetupWizardPage()
     {
@@ -72,6 +75,35 @@ public sealed partial class SetupWizardPage : Page
     }
 
     public SetupWizardViewModel ViewModel { get; }
+
+    private void OnStep3GridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool stacked = e.NewSize.Width < Step3StackThresholdEpx;
+        if (_isStep3Stacked == stacked)
+        {
+            return;
+        }
+
+        _isStep3Stacked = stacked;
+        Step3ListColumn.Width = stacked
+            ? new GridLength(1, GridUnitType.Star)
+            : new GridLength(260);
+        Step3CanvasColumn.Width = stacked
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        Step3InspectorColumn.Width = stacked ? new GridLength(0) : new GridLength(300);
+        Step3CanvasRow.Height = stacked ? GridLength.Auto : new GridLength(0);
+        Step3InspectorRow.Height = stacked ? GridLength.Auto : new GridLength(0);
+        Step3Grid.ColumnSpacing = stacked
+            ? 0
+            : (double)Application.Current.Resources["SpaceM"];
+
+        Grid.SetColumn(Step3CanvasPane, stacked ? 0 : 1);
+        Grid.SetRow(Step3CanvasPane, stacked ? 2 : 1);
+        Grid.SetColumn(Step3InspectorPane, stacked ? 0 : 2);
+        Grid.SetRow(Step3InspectorPane, stacked ? 3 : 1);
+        Grid.SetColumnSpan(SetupStep3Heading, stacked ? 1 : 3);
+    }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {

@@ -97,6 +97,24 @@ public sealed partial class ServicesModelsPage : Page
         }
     }
 
+    private async void OnAddThirdPartyApiClick(object sender, RoutedEventArgs e)
+    {
+        bool saved = await ThirdPartyApiDialog.ShowAsync(
+            XamlRoot,
+            _settings,
+            App.GetService<ISecretReferenceService>(),
+            _runtime);
+        await ViewModel.InitializeAsync();
+        RebuildGroups();
+        if (saved)
+        {
+            PageNoticeBar.Title = Strings.GetString("ThirdPartyApiAddedTitle");
+            PageNoticeBar.Message = Strings.GetString("ThirdPartyApiAddedMessage");
+            PageNoticeBar.Severity = InfoBarSeverity.Success;
+            PageNoticeBar.IsOpen = true;
+        }
+    }
+
     private async void OnRemoveCustomProviderClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: ProviderRow { IsCustom: true } provider })
@@ -105,10 +123,10 @@ public sealed partial class ServicesModelsPage : Page
         }
 
         bool confirmed = await _dialogs.ConfirmAsync(new ConfirmDialogOptions(
-            Strings.GetString("RemoveRestAdapterTitle"),
-            string.Format(Strings.GetString("RemoveRestAdapterBody"), provider.Name),
-            Strings.GetString("RemoveRestAdapterConfirm"),
-            Strings.GetString("RemoveRestAdapterCancel"),
+            Strings.GetString("RemoveCustomProviderTitle"),
+            string.Format(Strings.GetString("RemoveCustomProviderBody"), provider.Name),
+            Strings.GetString("RemoveCustomProviderConfirm"),
+            Strings.GetString("RemoveCustomProviderCancel"),
             IsDestructive: true));
         if (!confirmed)
         {
@@ -119,7 +137,7 @@ public sealed partial class ServicesModelsPage : Page
         if (!ViewModel.HasError)
         {
             RebuildGroups();
-            PageNoticeBar.Title = Strings.GetString("RestAdapterRemovedTitle");
+            PageNoticeBar.Title = Strings.GetString("CustomProviderRemovedTitle");
             PageNoticeBar.Message = provider.Name;
             PageNoticeBar.Severity = InfoBarSeverity.Success;
             PageNoticeBar.IsOpen = true;

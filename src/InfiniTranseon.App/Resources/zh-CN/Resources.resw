@@ -41,14 +41,16 @@
 
   <data name="AddRestAdapterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加 REST 适配器</value></data>
   <data name="AddRestAdapterButtonLabel.Text" xml:space="preserve"><value>导入 REST 适配器</value></data>
-  <data name="RemoveCustomProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>移除自定义 REST 适配器</value></data>
+  <data name="AddThirdPartyApiButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>添加第三方 API</value></data>
+  <data name="AddThirdPartyApiButtonLabel.Text" xml:space="preserve"><value>添加第三方 API</value></data>
+  <data name="RemoveCustomProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>移除自定义提供商</value></data>
   <data name="RestAdapterImportedTitle" xml:space="preserve"><value>REST 适配器已导入</value></data>
   <data name="RestAdapterImportedMessage" xml:space="preserve"><value>请先在下方配置凭据，再把它用于档案。</value></data>
-  <data name="RemoveRestAdapterTitle" xml:space="preserve"><value>移除 REST 适配器？</value></data>
-  <data name="RemoveRestAdapterBody" xml:space="preserve"><value>移除后，档案将无法再使用 {0}。已保存的凭据会保留在 Windows 凭据管理器中，直到你主动清除。</value></data>
-  <data name="RemoveRestAdapterConfirm" xml:space="preserve"><value>移除</value></data>
-  <data name="RemoveRestAdapterCancel" xml:space="preserve"><value>取消</value></data>
-  <data name="RestAdapterRemovedTitle" xml:space="preserve"><value>REST 适配器已移除</value></data>
+  <data name="RemoveCustomProviderTitle" xml:space="preserve"><value>移除自定义提供商？</value></data>
+  <data name="RemoveCustomProviderBody" xml:space="preserve"><value>移除后，档案将无法再使用 {0}。已保存的凭据会保留在 Windows 凭据管理器中，直到你主动清除。</value></data>
+  <data name="RemoveCustomProviderConfirm" xml:space="preserve"><value>移除</value></data>
+  <data name="RemoveCustomProviderCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="CustomProviderRemovedTitle" xml:space="preserve"><value>自定义提供商已移除</value></data>
   <data name="ConfigureProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>配置提供商</value></data>
   <data name="ConfigureProviderButtonLabel.Text" xml:space="preserve"><value>配置</value></data>
   <data name="InstallLocalModelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>下载并安装本地模型</value></data>
@@ -195,6 +197,15 @@
   <data name="WorkbenchCustomSeparatorBox.Header" xml:space="preserve"><value>自定义分隔符</value></data>
   <data name="WorkbenchLineAlignmentBox.Header" xml:space="preserve"><value>文字对齐</value></data>
   <data name="WorkbenchMaximumLinesBox.Header" xml:space="preserve"><value>最大 OCR 行数</value></data>
+  <data name="WorkbenchRegionXBox.Header" xml:space="preserve"><value>水平（0–1）</value></data>
+  <data name="WorkbenchRegionXBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>区域水平位置，单位为 0 到 1 的比例</value></data>
+  <data name="WorkbenchRegionYBox.Header" xml:space="preserve"><value>垂直（0–1）</value></data>
+  <data name="WorkbenchRegionYBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>区域垂直位置，单位为 0 到 1 的比例</value></data>
+  <data name="WorkbenchRegionWidthBox.Header" xml:space="preserve"><value>宽度（0–1）</value></data>
+  <data name="WorkbenchRegionWidthBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>区域宽度，单位为 0 到 1 的比例</value></data>
+  <data name="WorkbenchRegionHeightBox.Header" xml:space="preserve"><value>高度（0–1）</value></data>
+  <data name="WorkbenchRegionHeightBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>区域高度，单位为 0 到 1 的比例</value></data>
+  <data name="WorkbenchRegionBoundsHint.Text" xml:space="preserve"><value>数值是在所选捕获目标内的 0–1 比例。</value></data>
   <data name="WorkbenchOverlayModeBox.Header" xml:space="preserve"><value>覆盖层位置</value></data>
   <data name="OverlayOptionReplace.Content" xml:space="preserve"><value>原位覆盖原文</value></data>
   <data name="OverlayOptionTranslucent.Content" xml:space="preserve"><value>半透明或模糊面板</value></data>
@@ -428,12 +439,12 @@
   <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>配置服务</value></data>
   <data name="ProviderCredentialsTitle" xml:space="preserve"><value>配置 {0}</value></data>
   <data name="ProviderCredentialsPrivacy" xml:space="preserve"><value>现有凭据不会显示。已配置字段留空即可保持不变。</value></data>
-  <data name="ProviderConfigurationPrivacy" xml:space="preserve"><value>有内置默认值时会在下方显示。现有凭据不会显示；已配置的凭据留空即可保持不变。</value></data>
+  <data name="ProviderConfigurationPrivacy" xml:space="preserve"><value>服务商存在默认值时会在下方显示。现有凭据不会显示；已配置的凭据留空即可保持不变。</value></data>
   <data name="ProviderCredentialKeepPlaceholder" xml:space="preserve"><value>已配置——留空保持不变</value></data>
   <data name="ProviderCredentialRequiredPlaceholder" xml:space="preserve"><value>必填</value></data>
   <data name="ProviderCredentialsSave" xml:space="preserve"><value>保存</value></data>
   <data name="ProviderCredentialsCancel" xml:space="preserve"><value>取消</value></data>
-  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>请修改 URL 或模型，或输入至少一项凭据后再保存。</value></data>
+  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>请修改至少一项设置，或输入至少一项凭据后再保存。</value></data>
   <data name="ProviderCredentialImportServiceAccount" xml:space="preserve"><value>选择服务账号 JSON…</value></data>
   <data name="ProviderCredentialServiceAccountTooLarge" xml:space="preserve"><value>服务账号文件超过 256 KB。</value></data>
   <data name="ProviderCredentialServiceAccountInvalid" xml:space="preserve"><value>这不是有效的 Google 服务账号 JSON 文件。</value></data>
@@ -442,10 +453,31 @@
   <data name="ProviderEndpointLabel" xml:space="preserve"><value>API 端点 URL</value></data>
   <data name="ProviderEndpointCompatibilityHint" xml:space="preserve"><value>除非替代端点兼容该服务的请求、鉴权和响应格式，否则请保留默认值。更改主机后必须重新输入凭据。</value></data>
   <data name="ProviderModelLabel" xml:space="preserve"><value>模型名称</value></data>
-  <data name="ProviderModelHint" xml:space="preserve"><value>请输入所选端点接受的准确模型 ID。使用第三方 Chat Completions 网关时，请配置“OpenAI 兼容”服务。</value></data>
-  <data name="ProviderRestoreDefaults" xml:space="preserve"><value>恢复内置默认值</value></data>
+  <data name="ProviderModelHint" xml:space="preserve"><value>请输入所选端点接受的准确模型 ID。如需使用其他 Chat Completions 网关，请选择“添加第三方 API”。</value></data>
+  <data name="ProviderReasoningEffortLabel" xml:space="preserve"><value>模型推理强度</value></data>
+  <data name="ProviderReasoningEffortHint" xml:space="preserve"><value>选择“服务商默认”时不会发送推理强度参数。只有明确选择低、中或高时才会发送；不支持该参数的模型可能拒绝请求。</value></data>
+  <data name="ProviderReasoningDefault" xml:space="preserve"><value>服务商默认</value></data>
+  <data name="ProviderReasoningLow" xml:space="preserve"><value>低</value></data>
+  <data name="ProviderReasoningMedium" xml:space="preserve"><value>中</value></data>
+  <data name="ProviderReasoningHigh" xml:space="preserve"><value>高</value></data>
+  <data name="ProviderRestoreDefaults" xml:space="preserve"><value>恢复服务商默认值</value></data>
   <data name="ProviderModelInvalid" xml:space="preserve"><value>请输入不超过 256 个字符的有效模型名称。</value></data>
   <data name="ProviderCredentialReentryRequired" xml:space="preserve"><value>API 主机已更改。保存前请重新输入所有现有凭据，确保未经你确认时绝不会把凭据发送到新主机。</value></data>
+  <data name="ThirdPartyApiTitle" xml:space="preserve"><value>添加第三方 API</value></data>
+  <data name="ThirdPartyApiPrivacy" xml:space="preserve"><value>将创建 OpenAI 兼容的 Chat Completions 提供商。名称、URL、模型和强度保存在本机；API 密钥只写入 Windows 凭据管理器。</value></data>
+  <data name="ThirdPartyApiNameLabel" xml:space="preserve"><value>显示名称</value></data>
+  <data name="ThirdPartyApiNamePlaceholder" xml:space="preserve"><value>示例网关</value></data>
+  <data name="ThirdPartyApiEndpointLabel" xml:space="preserve"><value>HTTPS Chat Completions URL</value></data>
+  <data name="ThirdPartyApiEndpointPlaceholder" xml:space="preserve"><value>https://gateway.example.com/v1/chat/completions</value></data>
+  <data name="ThirdPartyApiModelPlaceholder" xml:space="preserve"><value>vendor/model-name</value></data>
+  <data name="ThirdPartyApiKeyLabel" xml:space="preserve"><value>API 密钥</value></data>
+  <data name="ThirdPartyApiAdd" xml:space="preserve"><value>添加提供商</value></data>
+  <data name="ThirdPartyApiCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="ThirdPartyApiNameInvalid" xml:space="preserve"><value>请输入不超过 80 个字符的显示名称。</value></data>
+  <data name="ThirdPartyApiEndpointInvalid" xml:space="preserve"><value>请输入安全的 HTTPS Chat Completions URL；不得包含凭据、查询参数或片段。</value></data>
+  <data name="ThirdPartyApiKeyRequired" xml:space="preserve"><value>请输入该端点要求的 API 密钥。</value></data>
+  <data name="ThirdPartyApiAddedTitle" xml:space="preserve"><value>第三方 API 已添加</value></data>
+  <data name="ThirdPartyApiAddedMessage" xml:space="preserve"><value>现在可以在翻译通道中选择该提供商。</value></data>
   <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>区域名称</value></data>
   <data name="SetupRegionContextRoleSelector.Header" xml:space="preserve"><value>上下文角色</value></data>
   <data name="SetupRegionRoleNone.Content" xml:space="preserve"><value>无</value></data>
@@ -473,7 +505,7 @@
   <data name="SetupTargetPreviewRefused" xml:space="preserve"><value>该窗口不会渲染静态帧 —— 独占全屏和部分 DirectX 游戏一律如此。请改为捕获它所在的显示器。</value></data>
   <data name="SetupTargetPreviewGone" xml:space="preserve"><value>该捕获目标已关闭或没有有效尺寸。请刷新列表后重新选择。</value></data>
   <data name="SetupTestTranslationButton.Content" xml:space="preserve"><value>测试翻译</value></data>
-  <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>将通过所选翻译服务商发送示例句子 “Hello, adventurer.”：</value></data>
+  <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>使用英语示例句 “Hello, adventurer.” 检查服务连通性；你的 OCR 源语言设置不会改变：</value></data>
   <data name="SetupTestTranslationErrorTitle.Title" xml:space="preserve"><value>翻译测试失败</value></data>
   <data name="SetupTestTranslationLatencyFormat" xml:space="preserve"><value>{0} 毫秒</value></data>
   <data name="SetupRegionListHeader.Text" xml:space="preserve"><value>区域</value></data>
@@ -651,6 +683,8 @@
   <data name="ProbeErrorProviderUnknown" xml:space="preserve"><value>该翻译服务商已不存在，请另选一个。</value></data>
   <data name="ProbeErrorProviderNotRegistered" xml:space="preserve"><value>服务商已配置，但引擎没有加载它。请附上下方代码反馈。</value></data>
   <data name="ProbeErrorNoOutput" xml:space="preserve"><value>服务商没有返回任何内容。</value></data>
+  <data name="ProbeErrorOutputTruncated" xml:space="preserve"><value>服务商在完成翻译前达到了输出上限。请缩短文本，或改用输出上限更高的模型。</value></data>
+  <data name="ProbeErrorUnsupportedFinish" xml:space="preserve"><value>服务商因本应用无法采用的原因停止，例如内容过滤、工具调用或拒绝响应。请修改输入或模型后重试。</value></data>
   <data name="ProbeErrorUnexpected" xml:space="preserve"><value>测试在到达服务商之前就失败了。</value></data>
   <data name="ProbeErrorCredentialMissing" xml:space="preserve"><value>尚未保存该服务商的密钥，请点「配置」填写。</value></data>
   <data name="ProbeErrorCredentialRebind" xml:space="preserve"><value>已保存的密钥绑定到了不同的端点，请重新输入以确认。</value></data>
@@ -842,6 +876,7 @@
   <data name="ProviderDetailGoogleCloud" xml:space="preserve"><value>Translation v3 · 服务账号 JSON · 项目 ID 从凭据中读取</value></data>
   <data name="ProviderDetailOpenAi" xml:space="preserve"><value>OpenAI 接入点 · 流式输出 · 密钥保存在 Windows 凭据管理器中</value></data>
   <data name="ProviderDetailGrok" xml:space="preserve"><value>xAI API · OpenAI 兼容流式输出 · 已启用游戏上下文</value></data>
+  <data name="ProviderDetailOpenRouter" xml:space="preserve"><value>默认使用免费模型路由 · 可填写任意 OpenRouter 模型 ID，包括 :free 变体 · 需要 API 密钥</value></data>
   <data name="ProviderDetailDeepSeek" xml:space="preserve"><value>OpenAI 兼容流式输出 · 已启用游戏上下文</value></data>
   <data name="ProviderDetailQwen" xml:space="preserve"><value>阿里云百炼 · OpenAI 兼容流式输出</value></data>
   <data name="ProviderDetailQianfan" xml:space="preserve"><value>文心一言 · OpenAI 兼容流式输出</value></data>
@@ -865,20 +900,22 @@
   <data name="ProviderDetailModelSummary" xml:space="preserve"><value>{0} · {1} · {2} · {3}</value></data>
   <!-- {0} HTTP method · {1} endpoint host -->
   <data name="ProviderDetailCustomRest" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="ProviderKindLlmCustom" xml:space="preserve"><value>LLM · 自定义 API</value></data>
+  <data name="ProviderDetailCustomOpenAi" xml:space="preserve"><value>OpenAI 兼容流式输出 · 自定义 URL 与模型 · API 密钥保存在 Windows 凭据管理器中</value></data>
   <data name="ProvidersTitle" xml:space="preserve"><value>提供商与模型</value></data>
-  <data name="ProvidersSubtitle" xml:space="preserve"><value>配置云翻译、云 OCR、本地模型与自定义 REST 适配器。</value></data>
+  <data name="ProvidersSubtitle" xml:space="preserve"><value>配置云翻译、云 OCR、本地模型与自定义提供商。</value></data>
   <data name="ProvidersOfflineModeBar.Title" xml:space="preserve"><value>严格离线模式已开启</value></data>
   <data name="ProvidersOfflineModeBar.Message" xml:space="preserve"><value>云提供商、模型下载与更新检查均已禁用。</value></data>
   <data name="ProviderSearchBox.PlaceholderText" xml:space="preserve"><value>搜索提供商与模型</value></data>
   <data name="ProviderCloudTranslationHeader.Text" xml:space="preserve"><value>云翻译</value></data>
   <data name="ProviderCloudOcrHeader.Text" xml:space="preserve"><value>云 OCR</value></data>
   <data name="ProviderLocalModelHeader.Text" xml:space="preserve"><value>本地模型</value></data>
-  <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>自定义 REST 适配器</value></data>
-  <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>尚无自定义适配器</value></data>
-  <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>内置提供商不足时，可导入版本化 REST 适配器定义。</value></data>
+  <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>自定义提供商</value></data>
+  <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>尚无自定义提供商</value></data>
+  <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>可添加 OpenAI 兼容 API，或为其他协议导入版本化 REST 适配器。</value></data>
   <data name="ProviderOtherHeader.Text" xml:space="preserve"><value>其他</value></data>
   <data name="ProvidersEmptyTitle" xml:space="preserve"><value>尚未配置任何提供商</value></data>
-  <data name="ProvidersEmptyBody" xml:space="preserve"><value>配置云提供商的凭据、安装本地模型或导入 REST 适配器以开始使用。</value></data>
+  <data name="ProvidersEmptyBody" xml:space="preserve"><value>配置云提供商、添加第三方 API、安装本地模型或导入 REST 适配器以开始使用。</value></data>
   <data name="ProvidersOfflineModeGoToSettingsButton.Content" xml:space="preserve"><value>打开隐私设置</value></data>
   <data name="ProvidersOfflineModeGoToSettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>打开隐私设置</value></data>
   <data name="SettingsSectionList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>设置分区</value></data>

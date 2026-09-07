@@ -22,9 +22,11 @@ public sealed record TranslationRunOptions(
     string TargetLanguage = "configured",
     string StyleVersion = "1",
     string PromptVersion = "1",
-    string GlossaryVersion = "1",
     string ProfilePolicyVersion = "1",
-    string? StylePrompt = null);
+    string? StylePrompt = null)
+{
+    public string GlossaryVersion => GlossaryProcessor.ComputeVersion(Glossary);
+}
 
 public sealed class TranslationChannelRunner
 {

@@ -400,15 +400,18 @@
                         x:Name="Step3Grid"
                         ColumnSpacing="{StaticResource SpaceM}"
                         RowSpacing="{StaticResource SpaceM}"
+                        SizeChanged="OnStep3GridSizeChanged"
                         Visibility="{x:Bind ViewModel.IsStep3, Mode=OneWay}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="260" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="300" />
+                            <ColumnDefinition x:Name="Step3ListColumn" Width="260" />
+                            <ColumnDefinition x:Name="Step3CanvasColumn" Width="*" />
+                            <ColumnDefinition x:Name="Step3InspectorColumn" Width="300" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
+                            <RowDefinition x:Name="Step3HeadingRow" Height="Auto" />
+                            <RowDefinition x:Name="Step3ListRow" Height="Auto" />
+                            <RowDefinition x:Name="Step3CanvasRow" Height="0" />
+                            <RowDefinition x:Name="Step3InspectorRow" Height="0" />
                         </Grid.RowDefinitions>
 
                         <TextBlock
@@ -417,7 +420,7 @@
                             x:Uid="SetupStep3Heading"
                             Style="{StaticResource SectionHeaderStyle}" />
 
-                        <StackPanel Grid.Row="1" Grid.Column="0" Spacing="{StaticResource SpaceS}">
+                        <StackPanel x:Name="Step3ListPane" Grid.Row="1" Grid.Column="0" Spacing="{StaticResource SpaceS}">
                             <TextBlock x:Name="SetupRegionListHeader" x:Uid="SetupRegionListHeader" FontWeight="SemiBold" />
                             <Grid ColumnSpacing="8" RowSpacing="8">
                                 <Grid.ColumnDefinitions>
@@ -460,7 +463,7 @@
                             </ListView>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="{StaticResource SpaceS}">
+                        <StackPanel x:Name="Step3CanvasPane" Grid.Row="1" Grid.Column="1" Spacing="{StaticResource SpaceS}">
                             <CommandBar Background="Transparent" DefaultLabelPosition="Right" HorizontalAlignment="Left">
                                 <AppBarToggleButton
                                     x:Name="DrawRegionButton"
@@ -480,6 +483,7 @@
                         </StackPanel>
 
                         <Border
+                            x:Name="Step3InspectorPane"
                             Grid.Row="1" Grid.Column="2"
                             Style="{StaticResource CardBorderStyle}"
                             Padding="{StaticResource InsetS}">
@@ -594,20 +598,20 @@
 
                         <TextBlock x:Uid="SetupOverlayPreviewHeader" FontWeight="SemiBold" />
                         <Border
-                            Background="{ThemeResource ThumbLetterboxBrush}"
+                            Background="{ThemeResource OverlayPreviewGameBrush}"
                             CornerRadius="{StaticResource CardCornerRadius}"
                             Padding="{StaticResource InsetM}"
                             MaxWidth="480"
                             HorizontalAlignment="Left">
                             <StackPanel Spacing="{StaticResource SpaceS}">
                                 <Border
-                                    Background="{ThemeResource SmokeFillColorDefaultBrush}"
+                                    Background="{ThemeResource OverlayPreviewPanelBrush}"
                                     CornerRadius="{StaticResource ControlCorner}"
                                     Padding="10,6"
                                     HorizontalAlignment="Left">
                                     <TextBlock
                                         x:Uid="SetupOverlayPreviewSampleText"
-                                        Foreground="White" />
+                                        Foreground="{ThemeResource OverlayPreviewTextBrush}" />
                                 </Border>
                             </StackPanel>
                         </Border>

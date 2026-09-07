@@ -89,10 +89,7 @@ ctest --test-dir artifacts/cmake/windows-x64 -C Release --output-on-failure
 持有已签名模型目录的用户可以跳过该命令，改用 `-CatalogPath` 参数。目录序号设为
 1 是有意为之：正式发布生成的目录具有更高序号，因此开发目录无法使正式目录回滚。
 
-发布打包和未签名构建的详细说明见
-[docs/release/github-release.md](docs/release/github-release.md)。硬件验收记录和剩余的
-手动检查见
-[docs/testing/hardware-acceptance-2026-07-23.md](docs/testing/hardware-acceptance-2026-07-23.md)。
+发布打包、签名要求和面向客户的验收清单见 [RELEASING.md](RELEASING.md)。
 
 ## 许可证
 

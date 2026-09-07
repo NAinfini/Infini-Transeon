@@ -138,7 +138,7 @@ jobs:
       - name: Generate and verify SBOM
         run: |
           dotnet tool restore
-          dotnet tool run dotnet-CycloneDX InfiniTranseon.sln -o artifacts/release/publish -fn sbom.json -F Json -dpr
+          dotnet tool run dotnet-CycloneDX InfiniTranseon.sln -o artifacts/release/publish -fn sbom.json -F Json -dpr -ilt
           ./scripts/verify-sbom-licenses.ps1 `
             -BomPath artifacts/release/publish/sbom.json `
             -ModelCatalogPath artifacts/release/publish/model-catalog.json `

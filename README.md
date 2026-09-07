@@ -99,10 +99,8 @@ out of version control. Anyone holding an already-signed catalog can skip it and
 pass `-CatalogPath` instead. Sequence 1 is deliberate: the catalog a release
 publishes carries a higher sequence, so a developer copy can never roll one back.
 
-Release packaging and unsigned-build details are documented in
-[docs/release/github-release.md](docs/release/github-release.md). Hardware
-acceptance evidence and outstanding manual checks are recorded in
-[docs/testing/hardware-acceptance-2026-07-23.md](docs/testing/hardware-acceptance-2026-07-23.md).
+Release packaging, signing requirements, and the customer-release acceptance
+checklist are documented in [RELEASING.md](RELEASING.md).
 
 ## License
 

@@ -142,7 +142,7 @@ public sealed class RealHistoryService : IHistoryService
                 RegionId: null,
                 profile.SourceLanguage,
                 profile.TargetLanguage,
-                GlossaryVersion: "1"),
+                GlossaryProcessor.ComputeVersion(ProfileDocumentData.ReadTranslationGlossary(profile))),
             historyEvent.SourceText,
             correctedText.Trim(),
             cancellationToken).ConfigureAwait(false);

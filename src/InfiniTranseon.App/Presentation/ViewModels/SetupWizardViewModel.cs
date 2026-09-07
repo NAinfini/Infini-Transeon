@@ -612,6 +612,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
         }
 
         const string sampleText = "Hello, adventurer.";
+        const string sampleSourceLanguage = "en";
         IsTranslationTestBusy = true;
         TranslationTestError = string.Empty;
         TranslationTestErrorDetail = string.Empty;
@@ -621,7 +622,7 @@ public sealed partial class SetupWizardViewModel : ObservableObject
             TranslationProbeResult result = await _translationProbe.TranslateAsync(
                 new TranslationProbeRequest(
                     sampleText,
-                    SourceLanguage,
+                    sampleSourceLanguage,
                     TargetLanguage,
                     Context: null,
                     ProviderId: SelectedProvider.Id),

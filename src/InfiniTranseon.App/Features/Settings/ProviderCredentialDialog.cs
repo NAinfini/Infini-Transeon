@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfiniTranseon.App.Presentation;
+using InfiniTranseon.Contracts.Translation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -96,7 +97,12 @@ internal static class ProviderCredentialDialog
             });
         }
 
-        if (provider.DefaultEndpoint is not null || provider.DefaultModel is not null)
+        ComboBox? reasoningEffortInput = provider.CanOverrideReasoningEffort
+            ? AddReasoningEffortInput(content, provider.ReasoningEffort)
+            : null;
+
+        if (provider.DefaultEndpoint is not null || provider.DefaultModel is not null ||
+            reasoningEffortInput is not null)
         {
             var restoreDefaults = new Button
             {
@@ -112,6 +118,8 @@ internal static class ProviderCredentialDialog
                     endpointInput.Text = provider.DefaultEndpoint;
                 if (modelInput is { IsReadOnly: false } && provider.DefaultModel is not null)
                     modelInput.Text = provider.DefaultModel;
+                if (reasoningEffortInput is not null)
+                    reasoningEffortInput.SelectedIndex = 0;
             };
             content.Children.Add(restoreDefaults);
         }
@@ -153,7 +161,8 @@ internal static class ProviderCredentialDialog
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
             IsPrimaryButtonEnabled =
-                fields.Count > 0 || endpointInput is not null || modelInput is not null,
+                fields.Count > 0 || endpointInput is not null || modelInput is not null ||
+                reasoningEffortInput is not null,
         };
         dialog.PrimaryButtonClick += async (_, args) =>
         {
@@ -203,8 +212,7 @@ internal static class ProviderCredentialDialog
                     StringComparer.Ordinal);
                 if (modelInput is not null)
                 {
-                    string model = modelInput.Text.Trim();
-                    if (model.Length is 0 or > 256 || model.Any(char.IsControl))
+                    if (!TryNormalizeModel(modelInput.Text, out string model))
                     {
                         args.Cancel = true;
                         error.Message = Strings.GetString("ProviderModelInvalid");
@@ -221,6 +229,19 @@ internal static class ProviderCredentialDialog
                     }
                 }
 
+                var reasoningEfforts = new Dictionary<string, ModelReasoningEffort>(
+                    current.EffectiveProviderReasoningEfforts,
+                    StringComparer.Ordinal);
+                if (reasoningEffortInput is not null)
+                {
+                    ModelReasoningEffort? reasoningEffort =
+                        GetSelectedReasoningEffort(reasoningEffortInput);
+                    if (reasoningEffort is null)
+                        reasoningEfforts.Remove(provider.Id);
+                    else
+                        reasoningEfforts[provider.Id] = reasoningEffort.Value;
+                }
+
                 bool endpointOriginChanged = configuredEndpoint is not null &&
                     provider.Endpoint is not null &&
                     !SameOrigin(new Uri(provider.Endpoint), configuredEndpoint);
@@ -235,7 +256,10 @@ internal static class ProviderCredentialDialog
 
                 bool settingsChanged =
                     !DictionaryEqual(current.EffectiveProviderEndpoints, endpoints) ||
-                    !DictionaryEqual(current.EffectiveProviderModels, models);
+                    !DictionaryEqual(current.EffectiveProviderModels, models) ||
+                    !DictionaryEqual(
+                        current.EffectiveProviderReasoningEfforts,
+                        reasoningEfforts);
                 if (!settingsChanged && changed.Length == 0)
                 {
                     args.Cancel = true;
@@ -250,6 +274,7 @@ internal static class ProviderCredentialDialog
                     {
                         ProviderEndpoints = endpoints,
                         ProviderModels = models,
+                        ProviderReasoningEfforts = reasoningEfforts,
                     };
                     await settings.UpdateAsync(current);
                 }
@@ -281,7 +306,7 @@ internal static class ProviderCredentialDialog
         return saved;
     }
 
-    private static bool TryNormalizeEndpoint(string text, out Uri endpoint)
+    internal static bool TryNormalizeEndpoint(string text, out Uri endpoint)
     {
         if (text.Length is 0 or > 2048 ||
             !Uri.TryCreate(text, UriKind.Absolute, out Uri? candidate) ||
@@ -299,6 +324,47 @@ internal static class ProviderCredentialDialog
         return true;
     }
 
+    internal static bool TryNormalizeModel(string text, out string model)
+    {
+        model = text.Trim();
+        return model.Length is > 0 and <= 256 && !model.Any(char.IsControl);
+    }
+
+    internal static ComboBox AddReasoningEffortInput(
+        StackPanel content,
+        ModelReasoningEffort? selected)
+    {
+        ReasoningEffortChoice[] choices =
+        [
+            new(Strings.GetString("ProviderReasoningDefault"), null),
+            new(Strings.GetString("ProviderReasoningLow"), ModelReasoningEffort.Low),
+            new(Strings.GetString("ProviderReasoningMedium"), ModelReasoningEffort.Medium),
+            new(Strings.GetString("ProviderReasoningHigh"), ModelReasoningEffort.High),
+        ];
+        var input = new ComboBox
+        {
+            Header = Strings.GetString("ProviderReasoningEffortLabel"),
+            ItemsSource = choices,
+            DisplayMemberPath = nameof(ReasoningEffortChoice.Label),
+            SelectedIndex = Array.FindIndex(choices, choice => choice.Value == selected),
+        };
+        if (input.SelectedIndex < 0) input.SelectedIndex = 0;
+        AutomationProperties.SetName(
+            input,
+            Strings.GetString("ProviderReasoningEffortLabel"));
+        content.Children.Add(input);
+        content.Children.Add(new TextBlock
+        {
+            Text = Strings.GetString("ProviderReasoningEffortHint"),
+            TextWrapping = TextWrapping.Wrap,
+            Style = Application.Current.Resources["CaptionTextStyle"] as Style,
+        });
+        return input;
+    }
+
+    internal static ModelReasoningEffort? GetSelectedReasoningEffort(ComboBox input) =>
+        (input.SelectedItem as ReasoningEffortChoice)?.Value;
+
     private static bool SameOrigin(Uri left, Uri right) =>
         string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(left.IdnHost, right.IdnHost, StringComparison.OrdinalIgnoreCase) &&
@@ -310,6 +376,13 @@ internal static class ProviderCredentialDialog
         left.Count == right.Count && left.All(pair =>
             right.TryGetValue(pair.Key, out string? value) &&
             string.Equals(pair.Value, value, StringComparison.Ordinal));
+
+    private static bool DictionaryEqual(
+        IReadOnlyDictionary<string, ModelReasoningEffort> left,
+        IReadOnlyDictionary<string, ModelReasoningEffort> right) =>
+        left.Count == right.Count && left.All(pair =>
+            right.TryGetValue(pair.Key, out ModelReasoningEffort value) &&
+            pair.Value == value);
 
     private static void AddServiceAccountPicker(
         Panel content,
@@ -390,4 +463,8 @@ internal static class ProviderCredentialDialog
             if (PasswordInput is not null) PasswordInput.Password = string.Empty;
         }
     }
+
+    private sealed record ReasoningEffortChoice(
+        string Label,
+        ModelReasoningEffort? Value);
 }

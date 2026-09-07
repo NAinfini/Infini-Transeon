@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Privacy;
@@ -12,6 +13,10 @@ namespace InfiniTranseon.Core.Translation.Rest;
 
 public sealed class DeclarativeRestProvider : ITranslationProvider
 {
+    private static readonly Regex Placeholder = new(
+        "\\{\\{(?<name>[a-zA-Z][a-zA-Z0-9:.-]*)\\}\\}",
+        RegexOptions.CultureInvariant);
+
     private readonly DeclarativeRestAdapterDefinition _definition;
     private readonly HttpClient _httpClient;
     private readonly IBoundCredentialStore _credentialStore;
@@ -229,16 +234,7 @@ public sealed class DeclarativeRestProvider : ITranslationProvider
             : _definition.BodyFormat == RestBodyFormat.JsonUtf8
                 ? JsonEncodedText.Encode(value).ToString()
                 : Uri.EscapeDataString(value);
-        string sourceLanguage = MapLanguageCode(request.SourceLanguage);
-        string targetLanguage = MapLanguageCode(request.TargetLanguage);
-        string result = template
-            .Replace("{{sourceText}}", Encode(request.SourceText), StringComparison.Ordinal)
-            .Replace("{{sourceLanguage}}", Encode(sourceLanguage), StringComparison.Ordinal)
-            .Replace("{{targetLanguage}}", Encode(targetLanguage), StringComparison.Ordinal)
-            .Replace("{{gameName}}", Encode(request.Context.GameName ?? string.Empty), StringComparison.Ordinal)
-            .Replace("{{gameDescription}}", Encode(request.Context.GameDescription ?? string.Empty), StringComparison.Ordinal)
-            .Replace("{{context}}", Encode(BuildContext(request.Context)), StringComparison.Ordinal)
-            .Replace("{{glossary}}", Encode(BuildGlossary(request.Glossary)), StringComparison.Ordinal);
+        var credentials = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (string reference in _definition.CredentialReferences)
         {
             string? secret = await _credentialStore.ReadAsync(
@@ -250,12 +246,23 @@ public sealed class DeclarativeRestProvider : ITranslationProvider
             {
                 throw new CredentialMissingException(reference);
             }
-            result = result.Replace(
-                "{{credential:" + reference + "}}",
-                rawValues ? secret : Encode(secret),
-                StringComparison.Ordinal);
+            credentials.Add(reference, secret);
         }
-        return result;
+
+        return Placeholder.Replace(template, match => Encode(match.Groups["name"].Value switch
+        {
+            "sourceText" => request.SourceText,
+            "sourceLanguage" => MapLanguageCode(request.SourceLanguage),
+            "targetLanguage" => MapLanguageCode(request.TargetLanguage),
+            "gameName" => request.Context.GameName ?? string.Empty,
+            "gameDescription" => request.Context.GameDescription ?? string.Empty,
+            "context" => BuildContext(request.Context),
+            "glossary" => BuildGlossary(request.Glossary),
+            string name when name.StartsWith("credential:", StringComparison.Ordinal) =>
+                credentials[name["credential:".Length..]],
+            string name => throw new InvalidOperationException(
+                $"Template variable '{name}' passed validation but cannot be expanded."),
+        }));
     }
 
     private string MapLanguageCode(string language)

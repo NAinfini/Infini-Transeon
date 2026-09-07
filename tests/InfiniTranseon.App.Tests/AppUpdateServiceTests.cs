@@ -2,6 +2,7 @@ using System.Text;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Updates;
 
 namespace InfiniTranseon.App.Tests;
@@ -18,7 +19,7 @@ public sealed class AppUpdateServiceTests
         Assert.Equal("release-2026-b", trustRoot.Current.KeyId);
         Assert.Equal(32, trustRoot.Current.KeyBytes.Length);
         Assert.Contains(trustRoot.Current.KeyBytes.ToArray(), value => value != 0);
-        Assert.Equal(new Version(0, 1, 0), ReleaseUpdateComposition.CurrentApplicationVersion());
+        Assert.Equal(new Version(0, 2, 0), ReleaseUpdateComposition.CurrentApplicationVersion());
     }
 
     [Fact]
@@ -242,6 +243,14 @@ public sealed class AppUpdateServiceTests
 
         public Task<ProviderRow> ImportRestAdapterAsync(
             Stream source,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException<ProviderRow>(new NotSupportedException());
+
+        public Task<ProviderRow> AddOpenAiCompatibleProviderAsync(
+            string displayName,
+            Uri endpoint,
+            string model,
+            ModelReasoningEffort? reasoningEffort,
             CancellationToken cancellationToken = default) =>
             Task.FromException<ProviderRow>(new NotSupportedException());
 

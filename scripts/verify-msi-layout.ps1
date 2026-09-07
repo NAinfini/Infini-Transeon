@@ -49,9 +49,46 @@ try {
         throw "MSI is missing required payload files: $($missing -join ', ')"
     }
 
+    $majorUpgrade = $document.SelectSingleNode("//*[local-name()='MajorUpgrade']")
+    if ($null -eq $majorUpgrade -or
+        [string]::IsNullOrWhiteSpace($majorUpgrade.GetAttribute('DowngradeErrorMessage'))) {
+        throw 'MSI must block downgrades.'
+    }
+
+    # WiX 5 decompilation can reconstruct a different MajorUpgrade.Schedule from the
+    # compiled action order. Read the actual MSI table before asserting rollback safety.
+    $installer = $database = $view = $null
+    try {
+        $installer = New-Object -ComObject WindowsInstaller.Installer
+        $database = $installer.OpenDatabase($msiFullPath, 0)
+        $view = $database.OpenView('SELECT `Action`, `Sequence` FROM `InstallExecuteSequence`')
+        $view.Execute()
+        $sequences = @{}
+        while ($record = $view.Fetch()) {
+            $sequences[$record.StringData(1)] = $record.IntegerData(2)
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($record)
+        }
+        $view.Close()
+        if (-not $sequences.ContainsKey('RemoveExistingProducts') -or
+            -not $sequences.ContainsKey('InstallInitialize') -or
+            -not $sequences.ContainsKey('InstallFiles') -or
+            $sequences.RemoveExistingProducts -le $sequences.InstallInitialize -or
+            $sequences.RemoveExistingProducts -ge $sequences.InstallFiles) {
+            throw 'MSI must remove the previous version inside the rollback transaction before installing new files.'
+        }
+    }
+    finally {
+        foreach ($comObject in @($view, $database, $installer)) {
+            if ($null -ne $comObject) {
+                [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($comObject)
+            }
+        }
+    }
+
     [pscustomobject]@{
         FileCount = $fileNames.Count
         RequiredFileCount = $requiredFiles.Count
+        UpgradeRollbackEnabled = $true
         MsiPath = $msiFullPath
     }
 }

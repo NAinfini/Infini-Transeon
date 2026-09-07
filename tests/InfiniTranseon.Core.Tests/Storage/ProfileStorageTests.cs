@@ -2,6 +2,7 @@ using InfiniTranseon.Core.Profiles;
 using InfiniTranseon.Core.Settings;
 using InfiniTranseon.Core.Scheduling;
 using InfiniTranseon.Core.Storage;
+using InfiniTranseon.Contracts.Translation;
 
 namespace InfiniTranseon.Core.Tests.Storage;
 
@@ -57,6 +58,10 @@ public sealed class ProfileStorageTests
             {
                 ["llm.deepseek"] = "vendor/deepseek-chat",
             },
+            ProviderReasoningEfforts = new Dictionary<string, ModelReasoningEffort>(StringComparer.Ordinal)
+            {
+                ["llm.deepseek"] = ModelReasoningEffort.High,
+            },
             ReducedMotion = true,
             CloseToTray = false,
             CloseToTrayConfirmed = true,
@@ -87,6 +92,9 @@ public sealed class ProfileStorageTests
             "https://gateway.example.com/v1/chat/completions",
             loaded.ProviderEndpoints["llm.deepseek"]);
         Assert.Equal("vendor/deepseek-chat", loaded.ProviderModels["llm.deepseek"]);
+        Assert.Equal(
+            ModelReasoningEffort.High,
+            loaded.ProviderReasoningEfforts["llm.deepseek"]);
         Assert.True(loaded.ReducedMotion);
         Assert.False(loaded.CloseToTray);
         Assert.True(loaded.CloseToTrayConfirmed);
@@ -235,6 +243,24 @@ public sealed class ProfileStorageTests
                 () => repository.SaveAsync(settings, TestContext.Current.CancellationToken)
                     .GetAwaiter().GetResult());
         }
+    }
+
+    [Fact]
+    public void InvalidProviderReasoningEffortIsRejectedBeforeDatabaseWrite()
+    {
+        using TempDatabase database = new();
+        var repository = new ApplicationSettingsRepository(database.Path);
+        var settings = new ApplicationSettings
+        {
+            ProviderReasoningEfforts = new Dictionary<string, ModelReasoningEffort>(StringComparer.Ordinal)
+            {
+                ["llm.deepseek"] = (ModelReasoningEffort)999,
+            },
+        };
+
+        Assert.Throws<InvalidDataException>(
+            () => repository.SaveAsync(settings, TestContext.Current.CancellationToken)
+                .GetAwaiter().GetResult());
     }
 
     private sealed class TempDatabase : IDisposable

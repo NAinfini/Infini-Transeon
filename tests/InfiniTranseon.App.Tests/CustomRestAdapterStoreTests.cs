@@ -73,6 +73,83 @@ public sealed class CustomRestAdapterStoreTests
         }
     }
 
+    [Fact]
+    public void Add_load_catalog_and_remove_openai_compatible_provider_round_trip()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "InfiniTranseon.Tests",
+            Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(root, "rest-adapters.json");
+        try
+        {
+            var store = new CustomRestAdapterStore(path);
+
+            CustomOpenAiCompatibleDefinition added = store.AddOpenAiCompatible(
+                "Example Gateway",
+                new Uri("https://gateway.example.test/v1/chat/completions"),
+                "vendor/model");
+
+            Assert.StartsWith(CustomOpenAiCompatibleDefinition.ProviderIdPrefix, added.Id);
+            CustomOpenAiCompatibleDefinition loaded = Assert.Single(
+                store.LoadOpenAiCompatible());
+            Assert.Equal(added, loaded);
+            CatalogProvider catalog = Assert.Single(store.GetCatalogProviders());
+            Assert.True(catalog.IsCustom);
+            Assert.Equal("ProviderKindLlmCustom", catalog.KindResourceKey);
+            Assert.Equal(added.Endpoint, catalog.DefaultEndpoint);
+            Assert.Equal(added.Model, catalog.DefaultModel);
+            Assert.Equal(added.CredentialReference, Assert.Single(catalog.Credentials).Reference);
+            Assert.DoesNotContain("apiKey", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
+
+            store.Remove(added.Id);
+            Assert.Empty(store.LoadOpenAiCompatible());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Existing_adapter_store_without_openai_provider_list_remains_readable()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "InfiniTranseon.Tests",
+            Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(root, "rest-adapters.json");
+        try
+        {
+            Directory.CreateDirectory(root);
+            DeclarativeRestAdapterDefinition definition = CreateDefinition("custom.legacy");
+            string adapterJson = JsonSerializer.Serialize(definition, JsonOptions);
+            using JsonDocument adapterDocument = JsonDocument.Parse(adapterJson);
+            File.WriteAllText(
+                path,
+                $$"""
+                {
+                  "schemaVersion": 1,
+                  "adapters": [{{adapterDocument.RootElement.GetRawText()}}]
+                }
+                """);
+            var store = new CustomRestAdapterStore(path);
+
+            Assert.Equal("custom.legacy", Assert.Single(store.Load()).Id);
+            Assert.Empty(store.LoadOpenAiCompatible());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static DeclarativeRestAdapterDefinition CreateDefinition(string id) =>
         new(
             schemaVersion: 1,

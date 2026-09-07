@@ -41,14 +41,16 @@
 
   <data name="AddRestAdapterButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add REST adapter</value></data>
   <data name="AddRestAdapterButtonLabel.Text" xml:space="preserve"><value>Import REST adapter</value></data>
-  <data name="RemoveCustomProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Remove custom REST adapter</value></data>
+  <data name="AddThirdPartyApiButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Add third-party API</value></data>
+  <data name="AddThirdPartyApiButtonLabel.Text" xml:space="preserve"><value>Add third-party API</value></data>
+  <data name="RemoveCustomProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Remove custom provider</value></data>
   <data name="RestAdapterImportedTitle" xml:space="preserve"><value>REST adapter imported</value></data>
   <data name="RestAdapterImportedMessage" xml:space="preserve"><value>Configure its credentials below before using it in a profile.</value></data>
-  <data name="RemoveRestAdapterTitle" xml:space="preserve"><value>Remove REST adapter?</value></data>
-  <data name="RemoveRestAdapterBody" xml:space="preserve"><value>{0} will no longer be available to profiles. Stored credentials are left in Windows Credential Manager until you clear them.</value></data>
-  <data name="RemoveRestAdapterConfirm" xml:space="preserve"><value>Remove</value></data>
-  <data name="RemoveRestAdapterCancel" xml:space="preserve"><value>Cancel</value></data>
-  <data name="RestAdapterRemovedTitle" xml:space="preserve"><value>REST adapter removed</value></data>
+  <data name="RemoveCustomProviderTitle" xml:space="preserve"><value>Remove custom provider?</value></data>
+  <data name="RemoveCustomProviderBody" xml:space="preserve"><value>{0} will no longer be available to profiles. Stored credentials are left in Windows Credential Manager until you clear them.</value></data>
+  <data name="RemoveCustomProviderConfirm" xml:space="preserve"><value>Remove</value></data>
+  <data name="RemoveCustomProviderCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="CustomProviderRemovedTitle" xml:space="preserve"><value>Custom provider removed</value></data>
   <data name="ConfigureProviderButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Configure provider</value></data>
   <data name="ConfigureProviderButtonLabel.Text" xml:space="preserve"><value>Configure</value></data>
   <data name="InstallLocalModelButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Download and install local model</value></data>
@@ -184,6 +186,15 @@
   <data name="WorkbenchCustomSeparatorBox.Header" xml:space="preserve"><value>Custom separator</value></data>
   <data name="WorkbenchLineAlignmentBox.Header" xml:space="preserve"><value>Text alignment</value></data>
   <data name="WorkbenchMaximumLinesBox.Header" xml:space="preserve"><value>Maximum OCR lines</value></data>
+  <data name="WorkbenchRegionXBox.Header" xml:space="preserve"><value>Horizontal (0–1)</value></data>
+  <data name="WorkbenchRegionXBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Region horizontal position as a 0 to 1 ratio</value></data>
+  <data name="WorkbenchRegionYBox.Header" xml:space="preserve"><value>Vertical (0–1)</value></data>
+  <data name="WorkbenchRegionYBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Region vertical position as a 0 to 1 ratio</value></data>
+  <data name="WorkbenchRegionWidthBox.Header" xml:space="preserve"><value>Width (0–1)</value></data>
+  <data name="WorkbenchRegionWidthBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Region width as a 0 to 1 ratio</value></data>
+  <data name="WorkbenchRegionHeightBox.Header" xml:space="preserve"><value>Height (0–1)</value></data>
+  <data name="WorkbenchRegionHeightBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Region height as a 0 to 1 ratio</value></data>
+  <data name="WorkbenchRegionBoundsHint.Text" xml:space="preserve"><value>Values are 0–1 ratios within the selected capture target.</value></data>
   <data name="WorkbenchOverlayModeBox.Header" xml:space="preserve"><value>Overlay placement</value></data>
   <data name="OverlayOptionReplace.Content" xml:space="preserve"><value>Replace original text in place</value></data>
   <data name="OverlayOptionTranslucent.Content" xml:space="preserve"><value>Translucent or blurred panel</value></data>
@@ -428,12 +439,12 @@
   <data name="SetupConfigureProviderButton.Content" xml:space="preserve"><value>Configure service</value></data>
   <data name="ProviderCredentialsTitle" xml:space="preserve"><value>Configure {0}</value></data>
   <data name="ProviderCredentialsPrivacy" xml:space="preserve"><value>Existing credentials are never displayed. Leave a configured field blank to keep it unchanged.</value></data>
-  <data name="ProviderConfigurationPrivacy" xml:space="preserve"><value>Built-in defaults are shown when available. Existing credentials are never displayed; leave a configured credential blank to keep it unchanged.</value></data>
+  <data name="ProviderConfigurationPrivacy" xml:space="preserve"><value>Provider defaults are shown when available. Existing credentials are never displayed; leave a configured credential blank to keep it unchanged.</value></data>
   <data name="ProviderCredentialKeepPlaceholder" xml:space="preserve"><value>Configured — leave blank to keep</value></data>
   <data name="ProviderCredentialRequiredPlaceholder" xml:space="preserve"><value>Required</value></data>
   <data name="ProviderCredentialsSave" xml:space="preserve"><value>Save</value></data>
   <data name="ProviderCredentialsCancel" xml:space="preserve"><value>Cancel</value></data>
-  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>Change the URL or model, or enter a credential to save.</value></data>
+  <data name="ProviderCredentialsNoChanges" xml:space="preserve"><value>Change a setting or enter a credential to save.</value></data>
   <data name="ProviderCredentialImportServiceAccount" xml:space="preserve"><value>Choose service-account JSON…</value></data>
   <data name="ProviderCredentialServiceAccountTooLarge" xml:space="preserve"><value>The service-account file exceeds 256 KB.</value></data>
   <data name="ProviderCredentialServiceAccountInvalid" xml:space="preserve"><value>This is not a valid Google service-account JSON file.</value></data>
@@ -442,10 +453,31 @@
   <data name="ProviderEndpointLabel" xml:space="preserve"><value>API endpoint URL</value></data>
   <data name="ProviderEndpointCompatibilityHint" xml:space="preserve"><value>Keep the default unless the replacement supports this provider's request, authentication, and response format. Changing the host requires re-entering its credentials.</value></data>
   <data name="ProviderModelLabel" xml:space="preserve"><value>Model name</value></data>
-  <data name="ProviderModelHint" xml:space="preserve"><value>Enter the exact model ID accepted by this endpoint. For a third-party Chat Completions gateway, configure OpenAI compatible.</value></data>
-  <data name="ProviderRestoreDefaults" xml:space="preserve"><value>Restore built-in defaults</value></data>
+  <data name="ProviderModelHint" xml:space="preserve"><value>Enter the exact model ID accepted by this endpoint. Use Add third-party API for another Chat Completions gateway.</value></data>
+  <data name="ProviderReasoningEffortLabel" xml:space="preserve"><value>Model reasoning strength</value></data>
+  <data name="ProviderReasoningEffortHint" xml:space="preserve"><value>Provider default sends no reasoning-strength parameter. Low, medium, and high are sent only when explicitly selected; unsupported models may reject them.</value></data>
+  <data name="ProviderReasoningDefault" xml:space="preserve"><value>Provider default</value></data>
+  <data name="ProviderReasoningLow" xml:space="preserve"><value>Low</value></data>
+  <data name="ProviderReasoningMedium" xml:space="preserve"><value>Medium</value></data>
+  <data name="ProviderReasoningHigh" xml:space="preserve"><value>High</value></data>
+  <data name="ProviderRestoreDefaults" xml:space="preserve"><value>Restore provider defaults</value></data>
   <data name="ProviderModelInvalid" xml:space="preserve"><value>Enter a valid model name of up to 256 characters.</value></data>
   <data name="ProviderCredentialReentryRequired" xml:space="preserve"><value>The API host changed. Re-enter every existing credential before saving so it is never sent to a new host without your confirmation.</value></data>
+  <data name="ThirdPartyApiTitle" xml:space="preserve"><value>Add third-party API</value></data>
+  <data name="ThirdPartyApiPrivacy" xml:space="preserve"><value>Creates an OpenAI-compatible Chat Completions provider. The name, URL, model, and strength are saved locally; the API key is stored only in Windows Credential Manager.</value></data>
+  <data name="ThirdPartyApiNameLabel" xml:space="preserve"><value>Display name</value></data>
+  <data name="ThirdPartyApiNamePlaceholder" xml:space="preserve"><value>Example Gateway</value></data>
+  <data name="ThirdPartyApiEndpointLabel" xml:space="preserve"><value>HTTPS Chat Completions URL</value></data>
+  <data name="ThirdPartyApiEndpointPlaceholder" xml:space="preserve"><value>https://gateway.example.com/v1/chat/completions</value></data>
+  <data name="ThirdPartyApiModelPlaceholder" xml:space="preserve"><value>vendor/model-name</value></data>
+  <data name="ThirdPartyApiKeyLabel" xml:space="preserve"><value>API key</value></data>
+  <data name="ThirdPartyApiAdd" xml:space="preserve"><value>Add provider</value></data>
+  <data name="ThirdPartyApiCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="ThirdPartyApiNameInvalid" xml:space="preserve"><value>Enter a display name of up to 80 characters.</value></data>
+  <data name="ThirdPartyApiEndpointInvalid" xml:space="preserve"><value>Enter a safe HTTPS Chat Completions URL without credentials, a query, or a fragment.</value></data>
+  <data name="ThirdPartyApiKeyRequired" xml:space="preserve"><value>Enter the API key required by this endpoint.</value></data>
+  <data name="ThirdPartyApiAddedTitle" xml:space="preserve"><value>Third-party API added</value></data>
+  <data name="ThirdPartyApiAddedMessage" xml:space="preserve"><value>The provider is ready to select in a translation channel.</value></data>
   <data name="SetupRegionNameBox.Header" xml:space="preserve"><value>Region name</value></data>
   <data name="SetupRegionContextRoleSelector.Header" xml:space="preserve"><value>Context role</value></data>
   <data name="SetupRegionRoleNone.Content" xml:space="preserve"><value>None</value></data>
@@ -473,7 +505,7 @@
   <data name="SetupTargetPreviewRefused" xml:space="preserve"><value>This window will not render a still frame — fullscreen-exclusive and some DirectX games never do. Capture the monitor it runs on instead.</value></data>
   <data name="SetupTargetPreviewGone" xml:space="preserve"><value>This capture target has closed or reports no size. Refresh the list and pick it again.</value></data>
   <data name="SetupTestTranslationButton.Content" xml:space="preserve"><value>Test translation</value></data>
-  <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>Sends the sample sentence "Hello, adventurer." through the selected translator:</value></data>
+  <data name="SetupTestTranslationSampleLabel.Text" xml:space="preserve"><value>Checks service connectivity with the English sample “Hello, adventurer.” Your OCR source language stays unchanged:</value></data>
   <data name="SetupTestTranslationErrorTitle.Title" xml:space="preserve"><value>Translation test failed</value></data>
   <data name="SetupTestTranslationLatencyFormat" xml:space="preserve"><value>{0} ms</value></data>
   <data name="SetupRegionListHeader.Text" xml:space="preserve"><value>Regions</value></data>
@@ -651,6 +683,8 @@
   <data name="ProbeErrorProviderUnknown" xml:space="preserve"><value>That translator no longer exists. Pick another one.</value></data>
   <data name="ProbeErrorProviderNotRegistered" xml:space="preserve"><value>The translator is configured but the engine did not load it. Report this with the code below.</value></data>
   <data name="ProbeErrorNoOutput" xml:space="preserve"><value>The translator returned nothing at all.</value></data>
+  <data name="ProbeErrorOutputTruncated" xml:space="preserve"><value>The translator hit its output limit before finishing. Try shorter text or a model with a larger output limit.</value></data>
+  <data name="ProbeErrorUnsupportedFinish" xml:space="preserve"><value>The translator stopped for a reason this app cannot use, such as content filtering, tool use, or refusal. Change the input or model and try again.</value></data>
   <data name="ProbeErrorUnexpected" xml:space="preserve"><value>The test failed before it reached the translator.</value></data>
   <data name="ProbeErrorCredentialMissing" xml:space="preserve"><value>No key is stored for this translator yet. Use "Configure" to enter it.</value></data>
   <data name="ProbeErrorCredentialRebind" xml:space="preserve"><value>The stored key was bound to a different endpoint. Re-enter it to confirm.</value></data>
@@ -842,6 +876,7 @@
   <data name="ProviderDetailGoogleCloud" xml:space="preserve"><value>Translation v3 · service-account JSON · project ID read from the credential</value></data>
   <data name="ProviderDetailOpenAi" xml:space="preserve"><value>OpenAI endpoint · streaming · key in Windows Credential Manager</value></data>
   <data name="ProviderDetailGrok" xml:space="preserve"><value>xAI API · OpenAI-compatible streaming · game context enabled</value></data>
+  <data name="ProviderDetailOpenRouter" xml:space="preserve"><value>Free Models Router by default · enter any OpenRouter model ID, including :free variants · API key required</value></data>
   <data name="ProviderDetailDeepSeek" xml:space="preserve"><value>OpenAI-compatible streaming · game context enabled</value></data>
   <data name="ProviderDetailQwen" xml:space="preserve"><value>Alibaba Model Studio · OpenAI-compatible streaming</value></data>
   <data name="ProviderDetailQianfan" xml:space="preserve"><value>ERNIE · OpenAI-compatible streaming</value></data>
@@ -865,20 +900,22 @@
   <data name="ProviderDetailModelSummary" xml:space="preserve"><value>{0} · {1} · {2} · {3}</value></data>
   <!-- {0} HTTP method · {1} endpoint host -->
   <data name="ProviderDetailCustomRest" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="ProviderKindLlmCustom" xml:space="preserve"><value>LLM · custom API</value></data>
+  <data name="ProviderDetailCustomOpenAi" xml:space="preserve"><value>OpenAI-compatible streaming · custom URL and model · API key in Windows Credential Manager</value></data>
   <data name="ProvidersTitle" xml:space="preserve"><value>Providers &amp; models</value></data>
-  <data name="ProvidersSubtitle" xml:space="preserve"><value>Configure cloud translation, cloud OCR, local models, and custom REST adapters.</value></data>
+  <data name="ProvidersSubtitle" xml:space="preserve"><value>Configure cloud translation, cloud OCR, local models, and custom providers.</value></data>
   <data name="ProvidersOfflineModeBar.Title" xml:space="preserve"><value>Strict offline mode is active</value></data>
   <data name="ProvidersOfflineModeBar.Message" xml:space="preserve"><value>Cloud providers, model downloads, and update checks are disabled.</value></data>
   <data name="ProviderSearchBox.PlaceholderText" xml:space="preserve"><value>Search providers and models</value></data>
   <data name="ProviderCloudTranslationHeader.Text" xml:space="preserve"><value>Cloud translation</value></data>
   <data name="ProviderCloudOcrHeader.Text" xml:space="preserve"><value>Cloud OCR</value></data>
   <data name="ProviderLocalModelHeader.Text" xml:space="preserve"><value>Local models</value></data>
-  <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>Custom REST adapters</value></data>
-  <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>No custom adapters</value></data>
-  <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>Import a versioned REST adapter definition when a built-in provider is not enough.</value></data>
+  <data name="ProviderCustomHeader.Text" xml:space="preserve"><value>Custom providers</value></data>
+  <data name="CustomProviderEmptyState.Title" xml:space="preserve"><value>No custom providers</value></data>
+  <data name="CustomProviderEmptyState.Body" xml:space="preserve"><value>Add an OpenAI-compatible API, or import a versioned REST adapter for another protocol.</value></data>
   <data name="ProviderOtherHeader.Text" xml:space="preserve"><value>Other</value></data>
   <data name="ProvidersEmptyTitle" xml:space="preserve"><value>No providers configured</value></data>
-  <data name="ProvidersEmptyBody" xml:space="preserve"><value>Configure a cloud provider's credentials, install a local model, or import a REST adapter to get started.</value></data>
+  <data name="ProvidersEmptyBody" xml:space="preserve"><value>Configure a cloud provider, add a third-party API, install a local model, or import a REST adapter to get started.</value></data>
   <data name="ProvidersOfflineModeGoToSettingsButton.Content" xml:space="preserve"><value>Open privacy settings</value></data>
   <data name="ProvidersOfflineModeGoToSettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Open privacy settings</value></data>
   <data name="SettingsSearchBox.PlaceholderText" xml:space="preserve"><value>Search settings</value></data>

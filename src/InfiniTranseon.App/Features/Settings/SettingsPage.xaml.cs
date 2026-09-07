@@ -17,12 +17,15 @@ namespace InfiniTranseon.App.Features.Settings;
 
 public sealed partial class SettingsPage : Page
 {
+    private const double SettingsWorkspaceStackThresholdEpx = 900;
+
     // Resolved per lookup so a UI language change takes effect without restarting; see AppStrings.
     private static ResourceLoader Strings => Localization.AppStrings.Loader;
     private bool _loading;
     private IReadOnlyList<ProfileTargetDirectoryEntry> _targetDirectory = [];
     private bool _targetDirectoryAvailable;
     private string? _pendingSection;
+    private bool? _isWorkspaceStacked;
 
     public SettingsPage()
     {
@@ -37,6 +40,35 @@ public sealed partial class SettingsPage : Page
     public SettingsViewModel ViewModel { get; }
     public string SettingsTitle => Resource("SettingsTitle.Text");
     public string SettingsSubtitle => Resource("SettingsSubtitle.Text");
+
+    private void OnSettingsWorkspaceSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool stacked = e.NewSize.Width < SettingsWorkspaceStackThresholdEpx;
+        if (_isWorkspaceStacked == stacked)
+        {
+            return;
+        }
+
+        _isWorkspaceStacked = stacked;
+        SettingsNavColumn.Width = stacked
+            ? new GridLength(1, GridUnitType.Star)
+            : GridLength.Auto;
+        SettingsContentColumn.Width = stacked
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+        SettingsContentRow.Height = stacked ? GridLength.Auto : new GridLength(0);
+        SettingsWorkspaceGrid.ColumnSpacing = stacked
+            ? 0
+            : (double)Application.Current.Resources["SpaceXL"];
+        SettingsWorkspaceGrid.RowSpacing = stacked
+            ? (double)Application.Current.Resources["SpaceL"]
+            : 0;
+        SettingsSectionList.Width = stacked
+            ? double.NaN
+            : (double)Application.Current.Resources["PaneWidthWorkspaceNav"];
+        Grid.SetColumn(SettingsContent, stacked ? 0 : 1);
+        Grid.SetRow(SettingsContent, stacked ? 1 : 0);
+    }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {

@@ -596,6 +596,7 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
 {
     private readonly ISettingsService _settingsService;
     private readonly LocalModelManagementService? _localModels;
+    private readonly IRuntimeControlService? _runtime;
     private CancellationTokenSource? _modelOperationCancellation;
 
     public ServicesModelsViewModel(ISettingsService settingsService)
@@ -606,18 +607,31 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
 
     public ServicesModelsViewModel(
         ISettingsService settingsService,
-        LocalModelManagementService localModels)
+        IRuntimeControlService runtime)
+    {
+        ArgumentNullException.ThrowIfNull(settingsService);
+        ArgumentNullException.ThrowIfNull(runtime);
+        _settingsService = settingsService;
+        _runtime = runtime;
+    }
+
+    public ServicesModelsViewModel(
+        ISettingsService settingsService,
+        LocalModelManagementService localModels,
+        IRuntimeControlService runtime)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(localModels);
+        ArgumentNullException.ThrowIfNull(runtime);
         _settingsService = settingsService;
         _localModels = localModels;
+        _runtime = runtime;
     }
 
     public ObservableCollection<ProviderRow> Providers { get; } = [];
 
     // The grouped sections a provider card renders under (spec 5.9). Order matches the page's
-    // visual grouping: cloud translation, cloud OCR, local models, then custom REST adapters, with
+    // visual grouping: cloud translation, cloud OCR, local models, then custom providers, with
     // a trailing Other bucket so a row that matches none of the known shapes is still shown instead
     // of silently dropped.
     public enum ProviderGroup
@@ -686,6 +700,8 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
             await _settingsService
                 .ImportRestAdapterAsync(source, cancellationToken)
                 .ConfigureAwait(true);
+            if (_runtime is not null)
+                await _runtime.ApplySettingsAsync(cancellationToken).ConfigureAwait(true);
             await ReloadAsync(cancellationToken).ConfigureAwait(true);
         });
 
@@ -697,6 +713,8 @@ public sealed partial class ServicesModelsViewModel : PageViewModelBase
             await _settingsService
                 .RemoveCustomProviderAsync(providerId, cancellationToken)
                 .ConfigureAwait(true);
+            if (_runtime is not null)
+                await _runtime.ApplySettingsAsync(cancellationToken).ConfigureAwait(true);
             await ReloadAsync(cancellationToken).ConfigureAwait(true);
         });
 

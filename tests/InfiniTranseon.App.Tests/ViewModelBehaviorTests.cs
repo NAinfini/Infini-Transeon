@@ -5,6 +5,7 @@ using InfiniTranseon.App.Presentation.ViewModels;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
 using Microsoft.Extensions.DependencyInjection;
+using ModelReasoningEffort = InfiniTranseon.Contracts.Translation.ModelReasoningEffort;
 
 namespace InfiniTranseon.App.Tests;
 
@@ -224,6 +225,22 @@ public sealed class ViewModelBehaviorTests
         Assert.False(viewModel.IsLoading);
         Assert.True(viewModel.HasError);
         Assert.NotEmpty(viewModel.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task ServicesModels_custom_provider_removal_applies_runtime_settings()
+    {
+        var settings = new RecordingCustomSettingsService();
+        var runtime = new FakeRuntimeControlService();
+        var viewModel = new ServicesModelsViewModel(settings, runtime);
+
+        await viewModel.RemoveCustomProviderAsync(
+            "llm.custom.test",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("llm.custom.test", settings.RemovedProviderId);
+        Assert.Equal(1, runtime.SettingsApplyCount);
+        Assert.False(viewModel.HasError);
     }
 
     [Fact]
@@ -726,6 +743,48 @@ public sealed class ViewModelBehaviorTests
             Task.CompletedTask;
         public Task RequestManualOcrAsync(CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class RecordingCustomSettingsService : ISettingsService
+    {
+        public string? RemovedProviderId { get; private set; }
+
+        public Task<ApplicationSettings> GetSettingsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ApplicationSettings(
+                UiThemePreference.System,
+                StrictOffline: false,
+                HistoryRetention.Off,
+                "en-US"));
+
+        public Task UpdateAsync(
+            ApplicationSettings settings,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ProviderRow>> GetProvidersAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProviderRow>>([]);
+
+        public Task<ProviderRow> ImportRestAdapterAsync(
+            Stream source,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException<ProviderRow>(new NotSupportedException());
+
+        public Task<ProviderRow> AddOpenAiCompatibleProviderAsync(
+            string displayName,
+            Uri endpoint,
+            string model,
+            ModelReasoningEffort? reasoningEffort,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException<ProviderRow>(new NotSupportedException());
+
+        public Task RemoveCustomProviderAsync(
+            string providerId,
+            CancellationToken cancellationToken = default)
+        {
+            RemovedProviderId = providerId;
+            return Task.CompletedTask;
+        }
     }
 
     private static CaptureProbeTarget CaptureTarget(string name) => new(

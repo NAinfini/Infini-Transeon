@@ -33,11 +33,18 @@ FORM: Global settings workspace in the approved native Fluent direction.
                     Glyph="&#xE721;"
                     Visibility="Collapsed" />
 
-                <Grid ColumnSpacing="{StaticResource SpaceXL}">
+                <Grid
+                    x:Name="SettingsWorkspaceGrid"
+                    ColumnSpacing="{StaticResource SpaceXL}"
+                    SizeChanged="OnSettingsWorkspaceSizeChanged">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="SettingsNavColumn" Width="Auto" />
+                        <ColumnDefinition x:Name="SettingsContentColumn" Width="*" />
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition x:Name="SettingsNavRow" Height="Auto" />
+                        <RowDefinition x:Name="SettingsContentRow" Height="0" />
+                    </Grid.RowDefinitions>
 
                     <ListView
                         x:Name="SettingsSectionList"
@@ -60,6 +67,7 @@ FORM: Global settings workspace in the approved native Fluent direction.
                     </ListView>
 
                     <StackPanel
+                        x:Name="SettingsContent"
                         Grid.Column="1"
                         Spacing="{StaticResource SpaceXL}"
                         MaxWidth="{StaticResource FormMaxWidth}"
@@ -120,50 +128,34 @@ FORM: Global settings workspace in the approved native Fluent direction.
                         <StackPanel x:Name="HotkeysPanel" Spacing="{StaticResource SpaceS}" Visibility="Collapsed">
                             <TextBlock x:Uid="HotkeysHeader" Style="{StaticResource SectionHeaderStyle}" />
                             <InfoBar x:Name="HotkeyStatusBar" IsOpen="False" IsClosable="True" Severity="Warning" />
-                            <Grid ColumnSpacing="{StaticResource SpaceM}" Padding="{StaticResource InsetS}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="140" />
-                                    <ColumnDefinition Width="170" />
-                                    <ColumnDefinition Width="140" />
-                                    <ColumnDefinition Width="70" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Uid="HotkeyColumnAction" Style="{StaticResource CaptionTextStyle}" FontWeight="{StaticResource FontWeightStrong}" />
-                                <TextBlock Grid.Column="1" x:Uid="HotkeyColumnGesture" Style="{StaticResource CaptionTextStyle}" FontWeight="{StaticResource FontWeightStrong}" />
-                                <TextBlock Grid.Column="2" x:Uid="HotkeyColumnScope" Style="{StaticResource CaptionTextStyle}" FontWeight="{StaticResource FontWeightStrong}" />
-                                <TextBlock Grid.Column="3" x:Uid="HotkeyColumnStatus" Style="{StaticResource CaptionTextStyle}" FontWeight="{StaticResource FontWeightStrong}" />
-                                <TextBlock Grid.Column="4" x:Uid="HotkeyColumnEnabled" Style="{StaticResource CaptionTextStyle}" FontWeight="{StaticResource FontWeightStrong}" />
-                            </Grid>
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Hotkeys}">
+                            <ItemsRepeater x:Name="HotkeyRows" ItemsSource="{x:Bind ViewModel.Hotkeys}">
                                 <ItemsRepeater.Layout><StackLayout Spacing="{StaticResource SpaceS}" /></ItemsRepeater.Layout>
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="data:HotkeyEditorRow">
                                         <Border Style="{StaticResource SettingRowStyle}">
-                                            <Grid ColumnSpacing="{StaticResource SpaceM}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="140" />
-                                                    <ColumnDefinition Width="170" />
-                                                    <ColumnDefinition Width="140" />
-                                                    <ColumnDefinition Width="70" />
-                                                </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="{StaticResource SpaceM}">
                                                 <TextBlock
                                                     Text="{x:Bind ActionText, Mode=OneWay}"
                                                     Style="{StaticResource BodyTextStyle}"
-                                                    VerticalAlignment="Center" />
-                                                <Button
-                                                    Grid.Column="1"
-                                                    Content="{x:Bind Gesture, Mode=OneWay}"
-                                                    Tag="{x:Bind}"
-                                                    FontFamily="{StaticResource FontMono}"
-                                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                                    Click="OnEditHotkeyClick" />
-                                                <StackPanel Grid.Column="2" Spacing="{StaticResource SpaceXS}">
+                                                    FontWeight="{StaticResource FontWeightStrong}"
+                                                    TextWrapping="Wrap" />
+                                                <StackPanel Spacing="{StaticResource SpaceXS}">
+                                                    <TextBlock x:Uid="HotkeyColumnGesture" Style="{StaticResource CaptionTextStyle}" />
+                                                    <Button
+                                                        Content="{x:Bind Gesture, Mode=OneWay}"
+                                                        Tag="{x:Bind}"
+                                                        FontFamily="{StaticResource FontMono}"
+                                                        HorizontalAlignment="Left"
+                                                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                                        Click="OnEditHotkeyClick" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="{StaticResource SpaceXS}">
+                                                    <TextBlock x:Uid="HotkeyColumnScope" Style="{StaticResource CaptionTextStyle}" />
                                                     <controls:SelectBox
                                                         x:Uid="HotkeyScopeSelector"
                                                         Tag="{x:Bind}"
-                                                        MinWidth="150"
-                                                        VerticalAlignment="Center"
+                                                        MinWidth="0"
+                                                        HorizontalAlignment="Stretch"
                                                         IsEnabled="{x:Bind CanChangeScope, Mode=OneWay}"
                                                         Loaded="OnHotkeyScopeLoaded"
                                                         SelectionChanged="OnHotkeyScopeChanged">
@@ -174,25 +166,30 @@ FORM: Global settings workspace in the approved native Fluent direction.
                                                     <Button
                                                         x:Uid="HotkeySpecificTargetsButton"
                                                         Tag="{x:Bind}"
+                                                        HorizontalAlignment="Left"
                                                         IsEnabled="{x:Bind CanChooseSpecificTargets, Mode=OneWay}"
                                                         Click="OnSelectSpecificTargetsClick" />
                                                 </StackPanel>
-                                                <TextBlock
-                                                    Grid.Column="3"
-                                                    Text="{x:Bind StatusText, Mode=OneWay}"
-                                                    Style="{StaticResource CaptionTextStyle}"
-                                                    VerticalAlignment="Center"
-                                                    TextWrapping="Wrap" />
-                                                <ToggleSwitch
-                                                    x:Uid="HotkeyEnabledToggle"
-                                                    Grid.Column="4"
-                                                    IsOn="{x:Bind Enabled, Mode=OneWay}"
-                                                    Tag="{x:Bind}"
-                                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                                    MinWidth="0"
-                                                    AutomationProperties.Name="{x:Bind ActionText, Mode=OneWay}"
-                                                    Toggled="OnHotkeyEnabledToggled" />
-                                            </Grid>
+                                                <StackPanel Spacing="{StaticResource SpaceXS}">
+                                                    <TextBlock x:Uid="HotkeyColumnStatus" Style="{StaticResource CaptionTextStyle}" />
+                                                    <TextBlock
+                                                        Text="{x:Bind StatusText, Mode=OneWay}"
+                                                        Style="{StaticResource CaptionTextStyle}"
+                                                        TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="{StaticResource SpaceXS}">
+                                                    <TextBlock x:Uid="HotkeyColumnEnabled" Style="{StaticResource CaptionTextStyle}" />
+                                                    <ToggleSwitch
+                                                        x:Uid="HotkeyEnabledToggle"
+                                                        IsOn="{x:Bind Enabled, Mode=OneWay}"
+                                                        Tag="{x:Bind}"
+                                                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                                        MinWidth="0"
+                                                        HorizontalAlignment="Left"
+                                                        AutomationProperties.Name="{x:Bind ActionText, Mode=OneWay}"
+                                                        Toggled="OnHotkeyEnabledToggled" />
+                                                </StackPanel>
+                                            </StackPanel>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsRepeater.ItemTemplate>

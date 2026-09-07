@@ -1,4 +1,5 @@
 using InfiniTranseon.App.Controls;
+using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Core.Privacy;
 
 namespace InfiniTranseon.App.Presentation.Services;
@@ -58,6 +59,8 @@ public sealed record CatalogProvider(
 
     public bool CanOverrideModel { get; init; }
 
+    public bool CanOverrideReasoningEffort { get; init; }
+
     public CatalogProvider(
         string id,
         string displayName,
@@ -112,6 +115,18 @@ public sealed record CatalogProvider(
             throw new InvalidDataException($"Provider '{Id}' requires a valid model name.");
         }
         return model;
+    }
+
+    public ModelReasoningEffort? ResolveReasoningEffort(
+        IReadOnlyDictionary<string, ModelReasoningEffort> providerReasoningEfforts)
+    {
+        ArgumentNullException.ThrowIfNull(providerReasoningEfforts);
+        if (!providerReasoningEfforts.TryGetValue(Id, out ModelReasoningEffort effort))
+            return null;
+        if (!Enum.IsDefined(effort))
+            throw new InvalidDataException(
+                $"Provider '{Id}' has an invalid model reasoning effort.");
+        return effort;
     }
 }
 

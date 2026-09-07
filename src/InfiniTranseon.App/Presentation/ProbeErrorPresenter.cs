@@ -27,7 +27,11 @@ public static class ProbeErrorPresenter
             "translation.probe.providerNotSelected" => "ProbeErrorProviderNotSelected",
             "translation.probe.providerUnknown" => "ProbeErrorProviderUnknown",
             "translation.probe.providerNotRegistered" => "ProbeErrorProviderNotRegistered",
-            "translation.probe.noOutput" => "ProbeErrorNoOutput",
+            "translation.probe.noOutput" or "provider.emptyOutput" => "ProbeErrorNoOutput",
+            "provider.openai.finish.length" or "provider.anthropic.finish.maxTokens" =>
+                "ProbeErrorOutputTruncated",
+            "provider.openai.finish.unsupported" or "provider.anthropic.finish.unsupported" =>
+                "ProbeErrorUnsupportedFinish",
             UnexpectedExceptionCode => "ProbeErrorUnexpected",
             "translation.probe.credentialMissing" or "provider.credentialMissing" =>
                 "ProbeErrorCredentialMissing",

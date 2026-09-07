@@ -323,37 +323,45 @@
                                     </Grid.RowDefinitions>
                                     <NumberBox
                                         x:Name="RegionXBox"
-                                        Header="X"
+                                        x:Uid="WorkbenchRegionXBox"
                                         Minimum="0"
                                         Maximum="1"
                                         SmallChange="0.01"
+                                        SpinButtonPlacementMode="Compact"
                                         ValueChanged="OnBoundsNumberChanged" />
                                     <NumberBox
                                         x:Name="RegionYBox"
+                                        x:Uid="WorkbenchRegionYBox"
                                         Grid.Column="1"
-                                        Header="Y"
                                         Minimum="0"
                                         Maximum="1"
                                         SmallChange="0.01"
+                                        SpinButtonPlacementMode="Compact"
                                         ValueChanged="OnBoundsNumberChanged" />
                                     <NumberBox
                                         x:Name="RegionWidthBox"
+                                        x:Uid="WorkbenchRegionWidthBox"
                                         Grid.Row="1"
-                                        Header="W"
                                         Minimum="0.01"
                                         Maximum="1"
                                         SmallChange="0.01"
+                                        SpinButtonPlacementMode="Compact"
                                         ValueChanged="OnBoundsNumberChanged" />
                                     <NumberBox
                                         x:Name="RegionHeightBox"
+                                        x:Uid="WorkbenchRegionHeightBox"
                                         Grid.Row="1"
                                         Grid.Column="1"
-                                        Header="H"
                                         Minimum="0.01"
                                         Maximum="1"
                                         SmallChange="0.01"
+                                        SpinButtonPlacementMode="Compact"
                                         ValueChanged="OnBoundsNumberChanged" />
                                 </Grid>
+                                <TextBlock
+                                    x:Uid="WorkbenchRegionBoundsHint"
+                                    Style="{StaticResource CaptionTextStyle}"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
                         </Expander>
                     </StackPanel>

@@ -6,6 +6,7 @@ using CoreHotkeyTargetReference = InfiniTranseon.Core.Settings.HotkeyTargetRefer
 using CoreOcrBackend = InfiniTranseon.Core.Settings.OcrBackendPreference;
 using CorePerformancePreset = InfiniTranseon.Core.Scheduling.PerformancePreset;
 using CoreThemePreference = InfiniTranseon.Core.Settings.ThemePreference;
+using InfiniTranseon.Contracts.Translation;
 using LocalModelRuntimeAvailability =
     InfiniTranseon.Core.Translation.Local.LocalModelRuntimeAvailability;
 
@@ -126,7 +127,10 @@ public sealed class RealSettingsService : ISettingsService
             core.CloseToTrayConfirmed,
             [.. core.PinnedProfileIds],
             FromCoreOcrBackend(core.OcrBackend),
-            new Dictionary<string, string>(core.ProviderModels, StringComparer.Ordinal));
+            new Dictionary<string, string>(core.ProviderModels, StringComparer.Ordinal),
+            new Dictionary<string, ModelReasoningEffort>(
+                core.ProviderReasoningEfforts,
+                StringComparer.Ordinal));
     }
 
     public async Task UpdateAsync(ApplicationSettings settings, CancellationToken cancellationToken = default)
@@ -147,6 +151,9 @@ public sealed class RealSettingsService : ISettingsService
                     StringComparer.Ordinal),
                 ProviderModels = new Dictionary<string, string>(
                     settings.EffectiveProviderModels,
+                    StringComparer.Ordinal),
+                ProviderReasoningEfforts = new Dictionary<string, ModelReasoningEffort>(
+                    settings.EffectiveProviderReasoningEfforts,
                     StringComparer.Ordinal),
                 ReducedMotion = settings.ReducedMotion,
                 CloseToTray = settings.CloseToTray,
@@ -237,6 +244,11 @@ public sealed class RealSettingsService : ISettingsService
                     settings.EffectiveProviderEndpoints.ContainsKey(provider.Id),
                 IsModelOverridden =
                     settings.EffectiveProviderModels.ContainsKey(provider.Id),
+                ReasoningEffort = provider.ResolveReasoningEffort(
+                    settings.EffectiveProviderReasoningEfforts),
+                CanOverrideReasoningEffort = provider.CanOverrideReasoningEffort,
+                IsReasoningEffortOverridden =
+                    settings.EffectiveProviderReasoningEfforts.ContainsKey(provider.Id),
                 Credentials = credentialFields,
             });
         }
@@ -271,7 +283,54 @@ public sealed class RealSettingsService : ISettingsService
         return Task.FromResult(ToDisconnectedRow(provider));
     }
 
-    public Task RemoveCustomProviderAsync(
+    public async Task<ProviderRow> AddOpenAiCompatibleProviderAsync(
+        string displayName,
+        Uri endpoint,
+        string model,
+        ModelReasoningEffort? reasoningEffort,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (reasoningEffort is { } configuredEffort && !Enum.IsDefined(configuredEffort))
+            throw new ArgumentOutOfRangeException(nameof(reasoningEffort));
+        CustomRestAdapterStore store = _customAdapters ??
+            throw new InvalidOperationException(
+                "Custom providers are unavailable in this composition.");
+        CustomOpenAiCompatibleDefinition definition =
+            store.AddOpenAiCompatible(displayName, endpoint, model);
+        try
+        {
+            if (reasoningEffort is not null)
+            {
+                CoreSettings current = await _coreRepository.LoadAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var efforts = new Dictionary<string, ModelReasoningEffort>(
+                    current.ProviderReasoningEfforts,
+                    StringComparer.Ordinal)
+                {
+                    [definition.Id] = reasoningEffort.Value,
+                };
+                await _coreRepository.SaveAsync(
+                    current with { ProviderReasoningEfforts = efforts },
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            store.Remove(definition.Id);
+            throw;
+        }
+
+        CatalogProvider provider = BuiltInProviderSpecs
+            .CreateCustomOpenAiCompatibleSpec(definition)
+            .Catalog;
+        ProviderRow row = ToDisconnectedRow(provider);
+        row.ReasoningEffort = reasoningEffort;
+        row.IsReasoningEffortOverridden = reasoningEffort is not null;
+        return row;
+    }
+
+    public async Task RemoveCustomProviderAsync(
         string providerId,
         CancellationToken cancellationToken = default)
     {
@@ -280,7 +339,32 @@ public sealed class RealSettingsService : ISettingsService
             throw new InvalidOperationException(
                 "Custom REST adapters are unavailable in this composition.");
         store.Remove(providerId);
-        return Task.CompletedTask;
+
+        CoreSettings current = await _coreRepository.LoadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var endpoints = new Dictionary<string, string>(
+            current.ProviderEndpoints,
+            StringComparer.Ordinal);
+        var models = new Dictionary<string, string>(
+            current.ProviderModels,
+            StringComparer.Ordinal);
+        var reasoningEfforts = new Dictionary<string, ModelReasoningEffort>(
+            current.ProviderReasoningEfforts,
+            StringComparer.Ordinal);
+        bool settingsChanged = endpoints.Remove(providerId);
+        settingsChanged |= models.Remove(providerId);
+        settingsChanged |= reasoningEfforts.Remove(providerId);
+        if (settingsChanged)
+        {
+            await _coreRepository.SaveAsync(
+                current with
+                {
+                    ProviderEndpoints = endpoints,
+                    ProviderModels = models,
+                    ProviderReasoningEfforts = reasoningEfforts,
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private IReadOnlyList<CatalogProvider> CurrentProviders()
@@ -317,6 +401,14 @@ public sealed class RealSettingsService : ISettingsService
             IsSelectable = provider.IsSelectable,
             IsTranslationProvider = true,
             IsCustom = provider.IsCustom,
+            Endpoint = provider.DefaultEndpoint?.AbsoluteUri,
+            EndpointPlaceholder = provider.EndpointPlaceholder ?? provider.DefaultEndpoint?.AbsoluteUri,
+            DefaultEndpoint = provider.DefaultEndpoint?.AbsoluteUri,
+            Model = provider.DefaultModel,
+            DefaultModel = provider.DefaultModel,
+            CanOverrideEndpoint = provider.CanOverrideEndpoint,
+            CanOverrideModel = provider.CanOverrideModel,
+            CanOverrideReasoningEffort = provider.CanOverrideReasoningEffort,
             Credentials = provider.Credentials
                 .Select(credential => new ProviderCredentialField(
                     credential.Reference,

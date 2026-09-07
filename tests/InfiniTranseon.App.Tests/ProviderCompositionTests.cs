@@ -2,6 +2,7 @@ using System.Xml.Linq;
 using InfiniTranseon.App.Presentation;
 using InfiniTranseon.App.Presentation.Services;
 using InfiniTranseon.Core.Privacy;
+using ModelReasoningEffort = InfiniTranseon.Contracts.Translation.ModelReasoningEffort;
 
 namespace InfiniTranseon.App.Tests;
 
@@ -47,7 +48,7 @@ public sealed class ProviderCompositionTests
                 provider.Capability == CatalogProviderCapability.Translation)
             .ToArray();
 
-        Assert.Equal(16, choices.Length);
+        Assert.Equal(17, choices.Length);
         Assert.Contains(choices, provider => provider.DisplayName == "DeepL");
         Assert.Contains(choices, provider => provider.DisplayName == "DeepL API Free");
         Assert.Contains(choices, provider => provider.DisplayName == "Baidu Translate");
@@ -55,6 +56,7 @@ public sealed class ProviderCompositionTests
         Assert.Contains(choices, provider => provider.DisplayName == "Azure AI Translator");
         Assert.Contains(choices, provider => provider.DisplayName == "OpenAI compatible");
         Assert.Contains(choices, provider => provider.DisplayName == "xAI Grok");
+        Assert.Contains(choices, provider => provider.DisplayName == "OpenRouter");
         Assert.Contains(choices, provider => provider.DisplayName == "DeepSeek");
         Assert.Contains(choices, provider => provider.DisplayName == "Qwen / Model Studio");
         Assert.Contains(choices, provider => provider.DisplayName == "Baidu Qianfan");
@@ -84,6 +86,7 @@ public sealed class ProviderCompositionTests
         Assert.Contains("translation.google-cloud", ids);
         Assert.Contains("llm.openai", ids);
         Assert.Contains("llm.grok", ids);
+        Assert.Contains("llm.openrouter", ids);
         Assert.Contains("llm.deepseek", ids);
         Assert.Contains("llm.qwen-model-studio", ids);
         Assert.Contains("llm.baidu-qianfan", ids);
@@ -92,6 +95,9 @@ public sealed class ProviderCompositionTests
         Assert.Equal(
             EngineRuntimeComposition.GrokDefaultModel,
             registry.Descriptors.Single(descriptor => descriptor.Id == "llm.grok").ModelId);
+        Assert.Equal(
+            EngineRuntimeComposition.OpenRouterDefaultModel,
+            registry.Descriptors.Single(descriptor => descriptor.Id == "llm.openrouter").ModelId);
         Assert.All(ids, id => Assert.Contains(
             ProviderCatalog.Default,
             provider => provider.Id == id));
@@ -114,6 +120,7 @@ public sealed class ProviderCompositionTests
 
         Assert.True(deepSeek.CanOverrideEndpoint);
         Assert.True(deepSeek.CanOverrideModel);
+        Assert.True(deepSeek.CanOverrideReasoningEffort);
         Assert.Equal(EngineRuntimeComposition.DeepSeekOptions.Endpoint, deepSeek.DefaultEndpoint);
         Assert.Equal(EngineRuntimeComposition.DeepSeekDefaultModel, deepSeek.DefaultModel);
         Assert.Equal(new Uri(endpoints[deepSeek.Id]), deepSeek.ResolveEndpoint(endpoints));
@@ -133,13 +140,42 @@ public sealed class ProviderCompositionTests
     }
 
     [Fact]
+    public void OpenRouterDefaultsToFreeRouterAndAcceptsSpecificFreeModelSlugs()
+    {
+        CatalogProvider openRouter = Assert.Single(
+            ProviderCatalog.Default,
+            provider => provider.Id == "llm.openrouter");
+        const string freeModel = "vendor/model:free";
+        var models = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [openRouter.Id] = freeModel,
+        };
+
+        Assert.Equal(
+            new Uri("https://openrouter.ai/api/v1/chat/completions"),
+            openRouter.DefaultEndpoint);
+        Assert.Equal("openrouter/free", openRouter.DefaultModel);
+        Assert.True(openRouter.CanOverrideEndpoint);
+        Assert.True(openRouter.CanOverrideModel);
+        Assert.Equal(freeModel, openRouter.ResolveModel(models));
+
+        Core.Translation.ProviderRegistry registry =
+            EngineRuntimeComposition.BuildProviderRegistry(
+                new EmptyCredentialStore(),
+                providerModels: models);
+        Assert.Equal(
+            freeModel,
+            registry.Descriptors.Single(descriptor => descriptor.Id == openRouter.Id).ModelId);
+    }
+
+    [Fact]
     public void EveryCloudLlmShowsItsDefaultModelAndOnlyCompatibleProtocolsExposeEndpointOverride()
     {
         CatalogProvider[] llms = ProviderCatalog.Default
             .Where(provider => provider.Id.StartsWith("llm.", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(7, llms.Length);
+        Assert.Equal(8, llms.Length);
         Assert.All(llms, provider =>
         {
             Assert.False(string.IsNullOrWhiteSpace(provider.DefaultModel));
@@ -181,6 +217,11 @@ public sealed class ProviderCompositionTests
                     {
                         ["llm.deepseek"] = "vendor/deepseek-chat",
                     },
+                    ProviderReasoningEfforts =
+                        new Dictionary<string, ModelReasoningEffort>(StringComparer.Ordinal)
+                        {
+                            ["llm.deepseek"] = ModelReasoningEffort.High,
+                        },
                 },
                 TestContext.Current.CancellationToken);
             var secretStore = new BoundCredentialStore(new MemoryCredentialStore());
@@ -207,7 +248,105 @@ public sealed class ProviderCompositionTests
             Assert.Equal(EngineRuntimeComposition.DeepSeekDefaultModel, deepSeek.DefaultModel);
             Assert.True(deepSeek.IsEndpointOverridden);
             Assert.True(deepSeek.IsModelOverridden);
+            Assert.Equal(ModelReasoningEffort.High, deepSeek.ReasoningEffort);
+            Assert.True(deepSeek.IsReasoningEffortOverridden);
+            Assert.True(deepSeek.CanOverrideReasoningEffort);
             Assert.True(deepSeek.CanConfigure);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task User_can_add_multiple_openai_compatible_providers_to_catalog_and_runtime()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "infini-custom-provider-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string providerStorePath = Path.Combine(root, "providers.json");
+            var store = new CustomRestAdapterStore(providerStorePath);
+            var repository = new Core.Settings.ApplicationSettingsRepository(
+                Path.Combine(root, "settings.db"));
+            var credentialStore = new BoundCredentialStore(new MemoryCredentialStore());
+            var secrets = new RealSecretReferenceService(
+                credentialStore,
+                repository,
+                () => ProviderCatalog.Default.Concat(store.GetCatalogProviders()).ToArray());
+            var settings = new RealSettingsService(
+                repository,
+                secrets,
+                TestResourceText.Lookup,
+                store);
+
+            ProviderRow first = await settings.AddOpenAiCompatibleProviderAsync(
+                "First Gateway",
+                new Uri("https://first.example.test/v1/chat/completions"),
+                "vendor/first",
+                ModelReasoningEffort.Medium,
+                TestContext.Current.CancellationToken);
+            ProviderRow second = await settings.AddOpenAiCompatibleProviderAsync(
+                "Second Gateway",
+                new Uri("https://second.example.test/v1/chat/completions"),
+                "vendor/second",
+                reasoningEffort: null,
+                TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(first.Id, second.Id);
+            ProviderRow configured = Assert.Single(
+                await settings.GetProvidersAsync(TestContext.Current.CancellationToken),
+                provider => provider.Id == first.Id);
+            Assert.Equal(ModelReasoningEffort.Medium, configured.ReasoningEffort);
+            Assert.True(configured.IsCustom);
+            Assert.Equal("vendor/first", configured.Model);
+            Assert.Equal($"{first.Id}.api-key", Assert.Single(configured.Credentials).ReferenceId);
+            Assert.Equal("first.example.test", new Uri(configured.Endpoint!).Host);
+            await secrets.SetSecretAsync(
+                first.Id,
+                Assert.Single(configured.Credentials).ReferenceId,
+                "test-secret",
+                TestContext.Current.CancellationToken);
+            Assert.True(await secrets.HasSecretAsync(
+                first.Id,
+                TestContext.Current.CancellationToken));
+            Assert.DoesNotContain(
+                "test-secret",
+                File.ReadAllText(providerStorePath),
+                StringComparison.Ordinal);
+
+            Core.Translation.ProviderRegistry registry =
+                EngineRuntimeComposition.BuildProviderRegistry(
+                    credentialStore,
+                    providerReasoningEfforts:
+                        (await settings.GetSettingsAsync(TestContext.Current.CancellationToken))
+                        .EffectiveProviderReasoningEfforts,
+                    customOpenAiProviders: store.LoadOpenAiCompatible());
+            Assert.Contains(registry.Descriptors, descriptor =>
+                descriptor.Id == first.Id && descriptor.ModelId == "vendor/first");
+            Assert.Contains(registry.Descriptors, descriptor =>
+                descriptor.Id == second.Id && descriptor.ModelId == "vendor/second");
+            Assert.IsType<Core.Translation.OpenAiCompatibleProvider>(
+                registry.Descriptors
+                    .Select(descriptor => registry.TryGet(
+                        descriptor.Id,
+                        out Core.Translation.ProviderRegistration? registration)
+                        ? registration
+                        : null)
+                    .Single(registration => registration?.Descriptor.Id == first.Id)!
+                    .Factory());
+
+            await settings.RemoveCustomProviderAsync(
+                first.Id,
+                TestContext.Current.CancellationToken);
+            Assert.DoesNotContain(
+                first.Id,
+                (await settings.GetSettingsAsync(TestContext.Current.CancellationToken))
+                .EffectiveProviderReasoningEfforts.Keys);
         }
         finally
         {

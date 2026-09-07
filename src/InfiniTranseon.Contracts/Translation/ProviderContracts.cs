@@ -9,6 +9,13 @@ public enum ProviderKind
     CloudOcr,
 }
 
+public enum ModelReasoningEffort
+{
+    Low,
+    Medium,
+    High,
+}
+
 public sealed record TranslationContext(
     string? GameName,
     string? GameDescription,

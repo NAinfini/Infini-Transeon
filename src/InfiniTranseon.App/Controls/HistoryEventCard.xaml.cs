@@ -81,7 +81,6 @@ public sealed partial class HistoryEventCard : UserControl
         }
         try
         {
-            await _history.SaveCorrectionAsync(Item, corrected);
             if (addToGlossary)
             {
                 _glossary.SelectProfile(Item.ProfileId);
@@ -95,6 +94,8 @@ public sealed partial class HistoryEventCard : UserControl
                         Notes: Strings.GetString("HistoryCorrectionGlossaryNote")),
                     replacingSourceTerm: Item.SourceText);
             }
+            // Corrections belong to the resulting glossary, including a term added here.
+            await _history.SaveCorrectionAsync(Item, corrected);
             CorrectionPanel.Visibility = Visibility.Collapsed;
             ShowStatus(
                 InfoBarSeverity.Success,

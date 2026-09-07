@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using InfiniTranseon.Contracts.Probes;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Contracts.Translation;
@@ -93,25 +92,26 @@ public sealed class TranslationProbe : ITranslationProbe
             return Failure(request, ProviderNotRegisteredCode, start);
         }
 
-        ITranslationProvider provider = registration.Factory();
         TranslationRequest translationRequest = BuildRequest(request);
-        var builder = new StringBuilder();
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(_timeout);
-        await foreach (ProviderWireEvent wireEvent in provider.StreamAsync(
-                           translationRequest, timeoutSource.Token).ConfigureAwait(false))
+        using var providers = new OnlineProviderService(
+            _registry,
+            new ProviderServiceLimits(MaximumConcurrentCalls: 1));
+        await foreach (ProviderEvent providerEvent in providers.StreamAsync(
+                           _providerId, translationRequest, cancellationToken).ConfigureAwait(false))
         {
-            switch (wireEvent)
+            switch (providerEvent)
             {
-                case ProviderDelta delta:
-                    builder.Append(delta.Text);
-                    break;
-                case ProviderDone:
+                case ProviderCompleted completed:
                     return new TranslationProbeResult(
-                        _providerId, builder.ToString(), Stopwatch.GetElapsedTime(start), null);
-                case ProviderWireFailure failure:
-                    return Failure(request, failure.ErrorCode, start);
-                case ProviderWireCancelled cancelled:
+                        _providerId, completed.FinalText, Stopwatch.GetElapsedTime(start), null);
+                case ProviderFailed failure:
+                    return Failure(
+                        request,
+                        failure.ErrorCode is "provider.missingTerminal" or "provider.emptyOutput"
+                            ? NoOutputCode
+                            : failure.ErrorCode,
+                        start);
+                case ProviderCancelled cancelled:
                     return Failure(request, cancelled.ReasonCode, start);
             }
         }

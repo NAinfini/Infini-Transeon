@@ -82,6 +82,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
     private ProfileDocument? _activeProfile;
     private RuntimeProfileBinding? _activeBinding;
     private ApplicationSettings? _activeApplicationSettings;
+    private HashSet<string> _activeCustomProviderIds = new(StringComparer.OrdinalIgnoreCase);
     private EngineRuntimeStatusChange? _lastChange;
     private readonly HashSet<Guid> _pausedProfileTargets = [];
     private readonly HashSet<Guid> _hiddenProfileTargets = [];
@@ -173,7 +174,9 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                     AppOcrBackend.Local => OcrBackendPreference.Local,
                     _ => OcrBackendPreference.Automatic,
                 },
-                settings.EffectiveProviderModels));
+                settings.EffectiveProviderModels,
+                settings.EffectiveProviderReasoningEfforts,
+                _customRestAdapters?.LoadOpenAiCompatible()));
     }
 
     public EngineRuntimeStatus Status =>
@@ -286,6 +289,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             _activeProfile = profile;
             _activeBinding = binding;
             _activeApplicationSettings = applicationSettings;
+            _activeCustomProviderIds = CurrentCustomProviderIds();
             try
             {
                 await engine.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -792,7 +796,8 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             _activeProfile,
             updated,
             _activeApplicationSettings,
-            applicationSettings);
+            applicationSettings,
+            !_activeCustomProviderIds.SetEquals(CurrentCustomProviderIds()));
         if (!requiresRebuild &&
             _engine is IHotConfigurableEngineRuntime hot &&
             TryCreateHotBinding(updated, _activeBinding, out RuntimeProfileBinding? binding))
@@ -804,6 +809,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 _activeProfile = updated;
                 _activeBinding = binding;
                 _activeApplicationSettings = applicationSettings;
+                _activeCustomProviderIds = CurrentCustomProviderIds();
                 _statusLog?.Record(new StatusEvent(
                     DateTimeOffset.UtcNow,
                     "runtime.configuration",
@@ -849,6 +855,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _activeProfile = updated;
         _activeBinding = restartedBinding;
         _activeApplicationSettings = applicationSettings;
+        _activeCustomProviderIds = CurrentCustomProviderIds();
         try
         {
             await restarted.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -1018,6 +1025,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         _activeProfile = null;
         _activeBinding = null;
         _activeApplicationSettings = null;
+        _activeCustomProviderIds.Clear();
         _isPaused = false;
         _isOverlayVisible = true;
         if (!preserveControlState)
@@ -1292,9 +1300,10 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         ProfileDocument previousProfile,
         ProfileDocument updatedProfile,
         ApplicationSettings? previousSettings,
-        ApplicationSettings updatedSettings)
+        ApplicationSettings updatedSettings,
+        bool customProviderCatalogChanged = false)
     {
-        if (previousSettings is null ||
+        if (previousSettings is null || customProviderCatalogChanged ||
             previousProfile.StrictOffline != updatedProfile.StrictOffline ||
             previousProfile.History != updatedProfile.History ||
             EngineRuntimeComposition.UsesPersistentTranslationMemory(previousProfile) !=
@@ -1315,8 +1324,18 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
                 updatedSettings.EffectiveProviderEndpoints) ||
             !DictionaryEqual(
                 previousSettings.EffectiveProviderModels,
-                updatedSettings.EffectiveProviderModels);
+                updatedSettings.EffectiveProviderModels) ||
+            !DictionaryEqual(
+                previousSettings.EffectiveProviderReasoningEfforts,
+                updatedSettings.EffectiveProviderReasoningEfforts);
     }
+
+    private HashSet<string> CurrentCustomProviderIds() =>
+        _customRestAdapters is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : _customRestAdapters.GetCatalogProviders()
+                .Select(provider => provider.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static bool DictionaryEqual(
         IReadOnlyDictionary<string, string> left,
@@ -1324,6 +1343,13 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         left.Count == right.Count && left.All(pair =>
             right.TryGetValue(pair.Key, out string? value) &&
             string.Equals(pair.Value, value, StringComparison.Ordinal));
+
+    private static bool DictionaryEqual(
+        IReadOnlyDictionary<string, Contracts.Translation.ModelReasoningEffort> left,
+        IReadOnlyDictionary<string, Contracts.Translation.ModelReasoningEffort> right) =>
+        left.Count == right.Count && left.All(pair =>
+            right.TryGetValue(pair.Key, out Contracts.Translation.ModelReasoningEffort value) &&
+            pair.Value == value);
 
     private async Task<RuntimeProfileBinding> ResolveBindingAsync(
         ProfileDocument profile,
@@ -1338,10 +1364,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
         CaptureProbeResult probe = await _captureProbe
             .ProbeAsync(new CaptureProbeRequest(NameFilter: null), cancellationToken)
             .ConfigureAwait(false);
-        Contracts.Translation.GlossaryEntry[] glossary = ProfileDocumentData
-            .ReadGlossary(profile)
-            .Select(entry => new Contracts.Translation.GlossaryEntry(entry.SourceTerm, entry.TargetTerm))
-            .ToArray();
+        Contracts.Translation.GlossaryEntry[] glossary = ProfileDocumentData.ReadTranslationGlossary(profile);
         var runOptions = ProfileTranslationFactory.CreateRunOptions(
             profile,
             scene: null,
@@ -1405,12 +1428,7 @@ public sealed class RealRuntimeControlService : IRuntimeControlService, IAsyncDi
             return false;
         }
 
-        Contracts.Translation.GlossaryEntry[] glossary = ProfileDocumentData
-            .ReadGlossary(profile)
-            .Select(entry => new Contracts.Translation.GlossaryEntry(
-                entry.SourceTerm,
-                entry.TargetTerm))
-            .ToArray();
+        Contracts.Translation.GlossaryEntry[] glossary = ProfileDocumentData.ReadTranslationGlossary(profile);
         TranslationRunOptions runOptions =
             ProfileTranslationFactory.CreateRunOptions(
                 profile,

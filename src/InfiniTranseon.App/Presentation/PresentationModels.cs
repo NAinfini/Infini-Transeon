@@ -1,5 +1,6 @@
 ﻿using InfiniTranseon.App.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
+using InfiniTranseon.Contracts.Translation;
 using InfiniTranseon.Contracts.Runtime;
 using InfiniTranseon.Core.Profiles;
 
@@ -374,10 +375,13 @@ public sealed record ProviderRow(
     public bool CanOverrideModel { get; set; }
     public bool IsEndpointOverridden { get; set; }
     public bool IsModelOverridden { get; set; }
+    public ModelReasoningEffort? ReasoningEffort { get; set; }
+    public bool CanOverrideReasoningEffort { get; set; }
+    public bool IsReasoningEffortOverridden { get; set; }
     public IReadOnlyList<ProviderCredentialField> Credentials { get; set; } = [];
     public bool CanConfigure =>
         Credentials.Count > 0 || RequiresEndpoint || DefaultEndpoint is not null ||
-        DefaultModel is not null;
+        DefaultModel is not null || CanOverrideReasoningEffort;
     public bool IsReady =>
         IsSelectable &&
         (!RequiresEndpoint || !string.IsNullOrWhiteSpace(Endpoint)) &&

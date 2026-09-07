@@ -1,4 +1,5 @@
 using InfiniTranseon.Contracts.Runtime;
+using InfiniTranseon.Contracts.Translation;
 
 namespace InfiniTranseon.App.Presentation;
 
@@ -44,7 +45,8 @@ public sealed record ApplicationSettings(
     bool CloseToTrayConfirmed = false,
     IReadOnlyList<Guid>? PinnedProfileIds = null,
     AppOcrBackend OcrBackend = AppOcrBackend.Automatic,
-    IReadOnlyDictionary<string, string>? ProviderModels = null)
+    IReadOnlyDictionary<string, string>? ProviderModels = null,
+    IReadOnlyDictionary<string, ModelReasoningEffort>? ProviderReasoningEfforts = null)
 {
     public IReadOnlyList<AppHotkeyBinding> EffectiveHotkeys =>
         Hotkeys ?? HotkeyDefaults.Create();
@@ -54,6 +56,10 @@ public sealed record ApplicationSettings(
 
     public IReadOnlyDictionary<string, string> EffectiveProviderModels =>
         ProviderModels ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, ModelReasoningEffort> EffectiveProviderReasoningEfforts =>
+        ProviderReasoningEfforts ??
+        new Dictionary<string, ModelReasoningEffort>(StringComparer.Ordinal);
 
     public IReadOnlyList<Guid> EffectivePinnedProfileIds => PinnedProfileIds ?? [];
 }
@@ -335,6 +341,13 @@ public interface ISettingsService
 
     Task<ProviderRow> ImportRestAdapterAsync(
         Stream source,
+        CancellationToken cancellationToken = default);
+
+    Task<ProviderRow> AddOpenAiCompatibleProviderAsync(
+        string displayName,
+        Uri endpoint,
+        string model,
+        ModelReasoningEffort? reasoningEffort,
         CancellationToken cancellationToken = default);
 
     Task RemoveCustomProviderAsync(

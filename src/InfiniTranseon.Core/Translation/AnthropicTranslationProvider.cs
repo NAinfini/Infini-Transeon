@@ -269,6 +269,23 @@ public sealed class AnthropicTranslationProvider : ITranslationProvider
                 deltaUsage.TryGetProperty("output_tokens", out JsonElement outputElement) &&
                 outputElement.TryGetInt64(out long outputValue))
                 output = outputValue;
+            if (type == "message_delta" &&
+                root.TryGetProperty("delta", out JsonElement messageDelta) &&
+                messageDelta.TryGetProperty("stop_reason", out JsonElement stopReason) &&
+                stopReason.ValueKind != JsonValueKind.Null)
+            {
+                if (stopReason.ValueKind != JsonValueKind.String)
+                    return new ParseResult(null, null, null, false,
+                        new ProviderWireFailure("provider.malformedSse", false));
+                string reason = stopReason.GetString()!;
+                if (!string.IsNullOrEmpty(reason) && reason is not "end_turn" and not "stop_sequence")
+                    return new ParseResult(null, null, null, false,
+                        new ProviderWireFailure(
+                            reason is "max_tokens" or "model_context_window_exceeded"
+                                ? "provider.anthropic.finish.maxTokens"
+                                : "provider.anthropic.finish.unsupported",
+                            false));
+            }
             return new ParseResult(text, input, output, type == "message_stop", null);
         }
         catch (JsonException)

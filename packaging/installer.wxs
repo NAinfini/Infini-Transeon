@@ -9,6 +9,11 @@
       Compressed="yes">
     <SummaryInformation Description="Infini-Transeon Windows game translation overlay" />
     <MediaTemplate EmbedCab="yes" />
+    <!-- Keep removal of the previous version inside the install transaction so a
+         failed upgrade restores the working application. -->
+    <MajorUpgrade
+        Schedule="afterInstallInitialize"
+        DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
     <Property Id="WINDOWSBUILDNUMBER" Secure="yes">
       <RegistrySearch
